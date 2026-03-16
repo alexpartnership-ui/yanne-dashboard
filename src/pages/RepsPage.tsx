@@ -3,9 +3,10 @@ import { StatCard } from '../components/StatCard'
 import { Spinner } from '../components/Spinner'
 
 export function RepsPage() {
-  const { data: reps, loading } = useReps()
+  const { data: reps, loading, error } = useReps()
 
   if (loading) return <Spinner />
+  if (error) return <p className="text-sm text-red-600">Error: {error}</p>
 
   return (
     <div>

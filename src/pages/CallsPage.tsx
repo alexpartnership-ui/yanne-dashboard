@@ -42,7 +42,7 @@ const columns = [
 
 export function CallsPage() {
   const [filters, setFilters] = useState<CallFilters>({})
-  const { data, loading } = useCallLogs(filters)
+  const { data, loading, error } = useCallLogs(filters)
   const navigate = useNavigate()
 
   return (
@@ -51,6 +51,8 @@ export function CallsPage() {
         <h2 className="text-lg font-semibold text-zinc-900">Scored Calls</h2>
         <FilterBar filters={filters} onChange={setFilters} />
       </div>
+
+      {error && <p className="mb-4 text-sm text-red-600">Error: {error}</p>}
 
       {loading ? (
         <Spinner />
