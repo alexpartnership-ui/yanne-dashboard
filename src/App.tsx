@@ -6,6 +6,7 @@ import { CallsPage } from './pages/CallsPage'
 import { CallDetailPage } from './pages/CallDetailPage'
 import { RepsPage } from './pages/RepsPage'
 import { DealsPage } from './pages/DealsPage'
+import { ChatPage } from './pages/ChatPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/calls/:id" element={<CallDetailPage />} />
           <Route path="/reps" element={<RepsPage />} />
           <Route path="/deals" element={<DealsPage />} />
+          <Route path="/chat" element={<ChatPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/calls" replace />} />
