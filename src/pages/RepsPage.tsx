@@ -1,28 +1,13 @@
 import { useReps } from '../hooks/useReps'
 import { useRepCallHistory } from '../hooks/useRepCallHistory'
-import { ScoreBar } from '../components/ScoreBar'
+import { ScoreRing } from '../components/ScoreRing'
 import { Sparkline } from '../components/Sparkline'
 import { Spinner } from '../components/Spinner'
+import { repBorderClass } from '../lib/repColors'
 import type { RepPerformance } from '../types/database'
 
-const REP_ORDER = ['Jake', 'Stanley', 'Thomas', 'Tahawar']
-
-const REP_COLORS: Record<string, string> = {
-  Jake: 'border-l-blue-500',
-  Stanley: 'border-l-violet-500',
-  Thomas: 'border-l-amber-500',
-  Tahawar: 'border-l-emerald-500',
-}
-
-function sortReps(reps: RepPerformance[]): RepPerformance[] {
-  return [...reps].sort((a, b) => {
-    const ai = REP_ORDER.indexOf(a.rep)
-    const bi = REP_ORDER.indexOf(b.rep)
-    if (ai === -1 && bi === -1) return b.total_scored_calls - a.total_scored_calls
-    if (ai === -1) return 1
-    if (bi === -1) return -1
-    return ai - bi
-  })
+function sortByVolume(reps: RepPerformance[]): RepPerformance[] {
+  return [...reps].sort((a, b) => b.total_scored_calls - a.total_scored_calls)
 }
 
 export function RepsPage() {
@@ -32,15 +17,15 @@ export function RepsPage() {
   if (loading) return <Spinner />
   if (error) return <p className="text-sm text-red-600">Error: {error}</p>
 
-  const sorted = sortReps(reps)
+  const sorted = sortByVolume(reps)
 
   return (
     <div>
-      <h2 className="mb-6 text-lg font-semibold text-zinc-900">Rep Performance</h2>
+      <h2 className="mb-6 text-lg font-semibold text-yanne">Rep Performance</h2>
 
       <div className="space-y-4">
         {sorted.map(rep => {
-          const borderColor = REP_COLORS[rep.rep] ?? 'border-l-zinc-400'
+          const borderColor = repBorderClass(rep.rep)
           const callHistory = history[rep.rep] ?? []
 
           return (
@@ -61,19 +46,25 @@ export function RepsPage() {
                 </div>
               </div>
 
-              {/* Scores + Sparklines */}
+              {/* Scores with rings + sparklines */}
               <div className="grid grid-cols-3 gap-6 px-6 pb-4">
-                <div>
-                  <ScoreBar label="Call 1" score={rep.call_1_rolling_avg} trend={rep.call_1_trend} />
-                  <Sparkline data={callHistory} callType="Call 1" />
+                <div className="flex items-start gap-4">
+                  <ScoreRing label="Call 1" score={rep.call_1_rolling_avg} trend={rep.call_1_trend} />
+                  <div className="flex-1 pt-2">
+                    <Sparkline data={callHistory} callType="Call 1" />
+                  </div>
                 </div>
-                <div>
-                  <ScoreBar label="Call 2" score={rep.call_2_rolling_avg} trend={rep.call_2_trend} />
-                  <Sparkline data={callHistory} callType="Call 2" />
+                <div className="flex items-start gap-4">
+                  <ScoreRing label="Call 2" score={rep.call_2_rolling_avg} trend={rep.call_2_trend} />
+                  <div className="flex-1 pt-2">
+                    <Sparkline data={callHistory} callType="Call 2" />
+                  </div>
                 </div>
-                <div>
-                  <ScoreBar label="Call 3" score={rep.call_3_rolling_avg} trend={rep.call_3_trend} />
-                  <Sparkline data={callHistory} callType="Call 3" />
+                <div className="flex items-start gap-4">
+                  <ScoreRing label="Call 3" score={rep.call_3_rolling_avg} trend={rep.call_3_trend} />
+                  <div className="flex-1 pt-2">
+                    <Sparkline data={callHistory} callType="Call 3" />
+                  </div>
                 </div>
               </div>
 
@@ -81,18 +72,18 @@ export function RepsPage() {
               <div className="border-t border-zinc-100 px-6 py-4 flex gap-8 items-start">
                 <div className="flex gap-8 text-sm shrink-0">
                   <div>
-                    <span className="text-xs text-zinc-400 uppercase tracking-wider block mb-0.5">Strongest</span>
+                    <span className="text-[11px] text-zinc-400 uppercase tracking-wider block mb-0.5">Strongest</span>
                     <span className="font-medium text-zinc-800">{rep.strongest_category ?? '—'}</span>
                   </div>
                   <div>
-                    <span className="text-xs text-zinc-400 uppercase tracking-wider block mb-0.5">Weakest</span>
+                    <span className="text-[11px] text-zinc-400 uppercase tracking-wider block mb-0.5">Weakest</span>
                     <span className="font-medium text-zinc-800">{rep.weakest_category ?? '—'}</span>
                   </div>
                 </div>
 
                 {rep.current_coaching_focus && (
-                  <div className="flex-1 rounded-md border-l-4 border-l-yellow-400 bg-yellow-50 px-4 py-2">
-                    <span className="text-xs text-yellow-700 uppercase tracking-wider font-medium block mb-0.5">Coaching Focus</span>
+                  <div className="flex-1 rounded-lg border-l-4 border-l-yellow-400 bg-yellow-50 px-4 py-2.5">
+                    <span className="text-[10px] text-yellow-700 uppercase tracking-wider font-semibold block mb-0.5">Coaching Focus</span>
                     <p className="text-sm text-yellow-900 leading-relaxed">{rep.current_coaching_focus}</p>
                   </div>
                 )}

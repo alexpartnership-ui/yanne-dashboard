@@ -20,12 +20,19 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50">
+    <div className="flex min-h-screen items-center justify-center bg-yanne-bg">
       <div className="w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold text-zinc-900">Yanne Capital</h1>
-        <p className="mt-1 text-sm text-zinc-500">Sales Intelligence Dashboard</p>
+        <div className="flex items-center gap-2.5 mb-6">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-yanne font-bold text-white text-sm">
+            YC
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-zinc-900 leading-tight">Yanne Capital</h1>
+            <p className="text-xs text-zinc-500">Sales Intelligence Dashboard</p>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-zinc-700">Password</label>
             <input
@@ -33,7 +40,7 @@ export function LoginPage() {
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-yanne focus:outline-none"
               autoFocus
             />
           </div>
@@ -42,7 +49,7 @@ export function LoginPage() {
 
           <button
             type="submit"
-            className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
+            className="w-full rounded-lg bg-yanne px-4 py-2 text-sm font-medium text-white hover:bg-yanne/90 transition-colors"
           >
             Sign in
           </button>

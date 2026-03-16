@@ -13,9 +13,10 @@ interface DataTableProps<T> {
   data: T[]
   columns: ColumnDef<T, any>[]
   onRowClick?: (row: T) => void
+  striped?: boolean
 }
 
-export function DataTable<T>({ data, columns, onRowClick }: DataTableProps<T>) {
+export function DataTable<T>({ data, columns, onRowClick, striped }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
 
   const table = useReactTable({
@@ -30,13 +31,13 @@ export function DataTable<T>({ data, columns, onRowClick }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-zinc-200">
-        <thead className="bg-zinc-50">
+        <thead className="bg-zinc-50/80">
           {table.getHeaderGroups().map(hg => (
             <tr key={hg.id}>
               {hg.headers.map(header => (
                 <th
                   key={header.id}
-                  className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 select-none cursor-pointer"
+                  className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500 select-none cursor-pointer"
                   onClick={header.column.getToggleSortingHandler()}
                 >
                   <div className="flex items-center gap-1">
@@ -49,14 +50,16 @@ export function DataTable<T>({ data, columns, onRowClick }: DataTableProps<T>) {
           ))}
         </thead>
         <tbody className="divide-y divide-zinc-100">
-          {table.getRowModel().rows.map(row => (
+          {table.getRowModel().rows.map((row, i) => (
             <tr
               key={row.id}
-              className={onRowClick ? 'cursor-pointer hover:bg-zinc-50 transition-colors' : ''}
+              className={`${onRowClick ? 'cursor-pointer' : ''} hover:bg-yanne-light/10 transition-colors ${
+                striped && i % 2 === 1 ? 'bg-zinc-50/50' : ''
+              }`}
               onClick={() => onRowClick?.(row.original)}
             >
               {row.getVisibleCells().map(cell => (
-                <td key={cell.id} className="whitespace-nowrap px-4 py-3 text-sm text-zinc-900">
+                <td key={cell.id} className="whitespace-nowrap px-4 py-3 text-sm text-zinc-800">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
@@ -64,7 +67,7 @@ export function DataTable<T>({ data, columns, onRowClick }: DataTableProps<T>) {
           ))}
           {table.getRowModel().rows.length === 0 && (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-zinc-400">
+              <td colSpan={columns.length} className="px-4 py-12 text-center text-sm text-zinc-400">
                 No data
               </td>
             </tr>

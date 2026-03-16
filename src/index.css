@@ -1,1 +1,23 @@
 @import "tailwindcss";
+
+@theme {
+  --color-yanne: #1A3C34;
+  --color-yanne-light: #A8C4BB;
+  --color-yanne-bg: #FAFAFA;
+}
+
+body {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tooltip */
+.tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.tooltip-wrap:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
