@@ -3,24 +3,19 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export function LoginPage() {
-  const { session, login } = useAuth()
-  const [email, setEmail] = useState('')
+  const { authed, login } = useAuth()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
 
-  if (session) return <Navigate to="/calls" replace />
+  if (authed) return <Navigate to="/calls" replace />
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
-    setSubmitting(true)
     try {
-      await login(email, password)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setSubmitting(false)
+      login('', password)
+    } catch {
+      setError('Invalid password')
     }
   }
 
@@ -32,16 +27,6 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-700">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
-            />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-zinc-700">Password</label>
             <input
               type="password"
@@ -49,6 +34,7 @@ export function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm focus:border-zinc-500 focus:outline-none"
+              autoFocus
             />
           </div>
 
@@ -56,10 +42,9 @@ export function LoginPage() {
 
           <button
             type="submit"
-            disabled={submitting}
-            className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors"
           >
-            {submitting ? 'Signing in...' : 'Sign in'}
+            Sign in
           </button>
         </form>
       </div>

@@ -1,32 +1,33 @@
-import { useEffect, useState } from 'react'
-import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { useCallback, useSyncExternalStore } from 'react'
+
+const STORAGE_KEY = 'yanne_authed'
+const VALID_PASSWORD = 'REDACTED_PASSWORD'
+
+const listeners = new Set<() => void>()
+function subscribe(cb: () => void) {
+  listeners.add(cb)
+  return () => listeners.delete(cb)
+}
+function getSnapshot() {
+  return localStorage.getItem(STORAGE_KEY) === 'true'
+}
+function notify() {
+  listeners.forEach(cb => cb())
+}
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const authed = useSyncExternalStore(subscribe, getSnapshot)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => setSession(session)
-    )
-
-    return () => subscription.unsubscribe()
+  const login = useCallback((_email: string, password: string) => {
+    if (password !== VALID_PASSWORD) throw new Error('Invalid password')
+    localStorage.setItem(STORAGE_KEY, 'true')
+    notify()
   }, [])
 
-  async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
-  }
+  const logout = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY)
+    notify()
+  }, [])
 
-  async function logout() {
-    await supabase.auth.signOut()
-  }
-
-  return { session, loading, login, logout }
+  return { authed, loading: false, login, logout }
 }
