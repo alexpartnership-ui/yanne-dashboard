@@ -16,6 +16,8 @@ import { CopyLibraryPage } from './pages/CopyLibraryPage'
 import { SetterPerformancePage } from './pages/SetterPerformancePage'
 import { LeadQualityPage } from './pages/LeadQualityPage'
 import { ClientOverviewPage } from './pages/ClientOverviewPage'
+import { OnboardingTrackerPage } from './pages/OnboardingTrackerPage'
+import { CampaignDashboardsPage } from './pages/CampaignDashboardsPage'
 
 export default function App() {
   return (
@@ -33,8 +35,8 @@ export default function App() {
 
           {/* Clients */}
           <Route path="/clients/overview" element={<ClientOverviewPage />} />
-          <Route path="/clients/campaigns" element={<PlaceholderPage title="Campaign Dashboards" source="Monday.com" previews={['Campaign timeline', 'Deliverables tracker', 'Client satisfaction scores']} />} />
-          <Route path="/clients/onboarding" element={<PlaceholderPage title="Onboarding Tracker" source="Monday.com" previews={['Onboarding pipeline', 'Task completion rates', 'Time-to-launch metrics']} />} />
+          <Route path="/clients/campaigns" element={<CampaignDashboardsPage />} />
+          <Route path="/clients/onboarding" element={<OnboardingTrackerPage />} />
           <Route path="/clients/deals" element={<PlaceholderPage title="Client Deal Pipeline" source="Airtable" previews={['Deal stages', 'Expected close dates', 'Deal values']} />} />
           <Route path="/clients/reporting" element={<ReportingPage />} />
 

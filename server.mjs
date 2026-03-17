@@ -11,6 +11,8 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KE
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
 const EMAILBISON_KEY = process.env.EMAILBISON_API_KEY
 const AIRTABLE_KEY = process.env.AIRTABLE_API_KEY
+const MONDAY_KEY = process.env.MONDAY_API_KEY
+const HUBSPOT_KEY = process.env.HUBSPOT_API_KEY
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
@@ -22,6 +24,8 @@ if (!ANTHROPIC_KEY) {
 }
 if (!EMAILBISON_KEY) console.warn('Missing EMAILBISON_API_KEY — outbound pages will not work')
 if (!AIRTABLE_KEY) console.warn('Missing AIRTABLE_API_KEY — client pages will not work')
+if (!MONDAY_KEY) console.warn('Missing MONDAY_API_KEY — client project pages will not work')
+if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages will not work')
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
 
@@ -183,6 +187,132 @@ app.get('/api/airtable/meetings', async (req, res) => {
     params['sort[0][field]'] = 'Start Time'
     params['sort[0][direction]'] = 'desc'
     const { data, error } = await airtableFetch('appzvZe6ctSCK79zj', 'tblsRnOQbDiAa64nD', params)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Monday.com helper ──────────────────────────────────
+
+async function mondayQuery(query, variables = {}) {
+  const res = await fetch('https://api.monday.com/v2', {
+    method: 'POST',
+    headers: {
+      Authorization: MONDAY_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query, variables }),
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  const json = await res.json()
+  if (json.errors) return { error: JSON.stringify(json.errors), data: null }
+  return { data: json.data, error: null }
+}
+
+// ─── HubSpot helper ─────────────────────────────────────
+
+const HUBSPOT_BASE = 'https://api.hubapi.com'
+
+async function hubspotFetch(endpoint) {
+  const res = await fetch(`${HUBSPOT_BASE}${endpoint}`, {
+    headers: { Authorization: `Bearer ${HUBSPOT_KEY}` },
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  return { data: await res.json(), error: null }
+}
+
+// ─── Monday.com API routes ──────────────────────────────
+
+// All client project portfolio boards
+const PROJECT_PORTFOLIO_IDS = [5090688381, 5090690637, 5090697102, 5090697393, 5090697433, 5090697490, 5090697501]
+const PROJECT_TASK_IDS = [5090688377, 5090690633, 5090697103, 5090697391, 5090697431, 5090697473, 5090697495]
+
+app.get('/api/monday/projects', async (_req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) {
+        id name
+        items_page(limit: 5) {
+          items {
+            id name
+            column_values { id title text value }
+          }
+        }
+      }
+    }`)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Task boards for onboarding tracking
+app.get('/api/monday/tasks/:boardId', async (req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${req.params.boardId}]) {
+        id name
+        groups { id title }
+        items_page(limit: 100) {
+          items {
+            id name group { id title }
+            column_values { id title text value }
+          }
+        }
+      }
+    }`)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// All project tasks for onboarding overview
+app.get('/api/monday/onboarding', async (_req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${PROJECT_TASK_IDS.join(',')}]) {
+        id name
+        groups { id title }
+        items_page(limit: 50) {
+          items {
+            id name group { id title }
+            column_values(ids: ["status", "person", "timeline", "numbers"]) { id title text value }
+          }
+        }
+      }
+    }`)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── HubSpot API routes ─────────────────────────────────
+
+app.get('/api/hubspot/deals', async (_req, res) => {
+  if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
+  try {
+    const { data, error } = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate')
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/hubspot/pipeline', async (_req, res) => {
+  if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
+  try {
+    const { data, error } = await hubspotFetch('/crm/v3/pipelines/deals')
     if (error) return res.status(500).json({ error })
     res.json(data)
   } catch (err) {
