@@ -30,20 +30,22 @@ export function useDashboardStats() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       const floor = thirtyDaysAgo.toISOString()
 
-      const [callsRes, dealsRes] = await Promise.all([
+      const ACTIVE_STAGES = ['appointmentscheduled', 'qualifiedtobuy', 'presentationscheduled', 'decisionmakerboughtin', '1066193534', 'closedwon']
+
+      const [callsRes, hubspotRes] = await Promise.all([
         supabase
           .from('call_logs')
           .select('rep, date, score_percentage, grade, coaching_priority')
           .gte('scored_at', floor)
           .order('scored_at', { ascending: false }),
-        supabase
-          .from('deals_with_calls')
-          .select('deal_id, deal_status')
-          .eq('deal_status', 'active'),
+        globalThis.fetch('/api/hubspot/deals').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
 
       const calls = (callsRes.data ?? []) as DashboardRow[]
-      const activeDeals = (dealsRes.data ?? []).length
+      const hubspotDeals = hubspotRes?.results || []
+      const activeDeals = hubspotDeals.filter((d: { properties: Record<string, string> }) =>
+        ACTIVE_STAGES.includes(d.properties?.dealstage || '')
+      ).length
 
       // Grade distribution
       const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 }

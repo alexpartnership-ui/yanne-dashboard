@@ -176,6 +176,7 @@ export function AcquisitionDashboard() {
                 <th className="text-left pb-2">Rep</th>
                 <th className="text-right pb-2">Scheduled</th>
                 <th className="text-right pb-2">Completed</th>
+                <th className="text-right pb-2">Show Rate</th>
                 <th className="text-right pb-2">Progressed</th>
                 <th className="text-right pb-2">Avg Score</th>
               </tr>
@@ -186,11 +187,13 @@ export function AcquisitionDashboard() {
                   .sort((a, b) => b[1].totalCompleted - a[1].totalCompleted)
                   .map(([rep, s]) => {
                     const scoreData = data.repQuickStats.find(r => r.rep === rep)
+                    const showRate = s.totalScheduled > 0 ? Math.round((s.totalCompleted / s.totalScheduled) * 100) : 0
                     return (
                       <tr key={rep}>
                         <td className="py-2 text-sm font-medium text-zinc-800">{rep}</td>
                         <td className="py-2 text-sm text-zinc-600 text-right">{s.totalScheduled}</td>
                         <td className="py-2 text-sm font-semibold text-zinc-900 text-right">{s.totalCompleted}</td>
+                        <td className={`py-2 text-sm font-semibold text-right ${showRate >= 80 ? 'text-emerald-600' : showRate >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{showRate}%</td>
                         <td className="py-2 text-sm text-emerald-600 text-right">{s.totalProgressed}</td>
                         <td className="py-2 text-sm font-semibold text-right">
                           {scoreData ? (
@@ -208,6 +211,7 @@ export function AcquisitionDashboard() {
                     <td className="py-2 text-sm font-medium text-zinc-800">{r.rep}</td>
                     <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
                     <td className="py-2 text-sm text-zinc-600 text-right">{r.calls}</td>
+                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
                     <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
                     <td className="py-2 text-sm font-semibold text-right">
                       <span className={r.avg >= 70 ? 'text-emerald-600' : r.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
