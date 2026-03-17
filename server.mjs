@@ -550,54 +550,59 @@ const SETTER_SHEET = '1Pt6P0BWtBuxlO7YSojy35WRgYaHPnanrLSY8M5eOEpw'
 app.get('/api/setter-checkins', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30
-    const url = `https://docs.google.com/spreadsheets/d/${SETTER_SHEET}/gviz/tq?tqx=out:json`
+    // Use CSV export to get raw text values (gviz drops text cells as null)
+    const url = `https://docs.google.com/spreadsheets/d/${SETTER_SHEET}/export?format=csv&gid=1687379033`
     const r = await fetch(url)
     if (!r.ok) return res.status(500).json({ error: 'Failed to fetch setter sheet' })
-    const text = await r.text()
-    const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
-    const gviz = JSON.parse(jsonStr)
-    const gRows = gviz.table?.rows || []
+    const csvText = await r.text()
 
+    // Parse CSV
+    const lines = csvText.split('\n')
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const checkins = []
 
-    for (const gr of gRows) {
-      const cells = gr.c || []
-      const name = cells[2]?.v || ''
-      const dateVal = cells[3]?.v || ''
-      const campaignReport = cells[4]?.v || ''
-      const followupsRaw = cells[5]?.v
-      const bookingsRaw = cells[6]?.v
-      const notes = cells[7]?.v || ''
+    for (let i = 1; i < lines.length; i++) {
+      // Simple CSV parse (handle quoted fields with commas/newlines)
+      const row = []
+      let current = ''
+      let inQuotes = false
+      for (const ch of lines[i]) {
+        if (ch === '"') { inQuotes = !inQuotes; continue }
+        if (ch === ',' && !inQuotes) { row.push(current); current = ''; continue }
+        current += ch
+      }
+      row.push(current)
 
-      // Parse date
+      if (row.length < 7) continue
+      const name = (row[2] || '').trim()
+      const dateStr = (row[3] || '').trim()
+      const campaignReport = row[4] || ''
+      const followupsRaw = row[5] || ''
+      const bookingsRaw = row[6] || ''
+
+      // Parse date (M/D/YYYY)
       let date = null
-      const gvizMatch = String(dateVal).match(/Date\((\d+),(\d+),(\d+)\)/)
-      if (gvizMatch) {
-        date = new Date(parseInt(gvizMatch[1]), parseInt(gvizMatch[2]), parseInt(gvizMatch[3]))
-      } else if (typeof dateVal === 'string' && dateVal.includes('/')) {
-        const parts = dateVal.split('/')
-        if (parts.length === 3) date = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]))
+      if (dateStr) {
+        const parts = dateStr.split('/')
+        if (parts.length === 3) {
+          date = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]))
+        }
       }
       if (!date || isNaN(date.getTime()) || date < cutoff) continue
 
-      // Parse bookings (handle "Total Number of bookings: N" pattern)
+      // Parse bookings — handle "Total Number of bookings: N" and plain numbers
       let bookings = 0
-      if (typeof bookingsRaw === 'number') {
-        bookings = bookingsRaw
-      } else if (typeof bookingsRaw === 'string') {
-        const numMatch = bookingsRaw.match(/(\d+)\s*$/) || bookingsRaw.match(/bookings:\s*(\d+)/i)
-        if (numMatch) bookings = parseInt(numMatch[1])
-        else bookings = parseInt(bookingsRaw) || 0
-      }
+      const bookingsMatch = bookingsRaw.match(/bookings:\s*(\d+)/i) || bookingsRaw.match(/^(\d+)$/)
+      if (bookingsMatch) bookings = parseInt(bookingsMatch[1])
+      else bookings = parseInt(bookingsRaw) || 0
 
-      // Parse followups
-      let followups = 0
-      if (typeof followupsRaw === 'number') {
-        followups = followupsRaw
-      } else if (typeof followupsRaw === 'string') {
-        followups = parseInt(followupsRaw) || 0
+      // Parse followups — could be a number or text with numbers
+      let followups = parseInt(followupsRaw) || 0
+      if (followups === 0 && followupsRaw.includes('-')) {
+        // Sum numbers from "Campaign - N\nCampaign - M" format
+        const fuMatches = followupsRaw.matchAll(/[-–]\s*(\d+)/g)
+        for (const m of fuMatches) followups += parseInt(m[1])
       }
 
       // Parse reply count from campaign report
@@ -611,7 +616,7 @@ app.get('/api/setter-checkins', async (req, res) => {
         bookings,
         followups,
         totalReplies,
-        notes: notes.slice(0, 200),
+        notes: '',
       })
     }
 

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, Legend, AreaChart, Area } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, Legend, ComposedChart, Area } from 'recharts'
 import { useSlackEmailReports } from '../hooks/useSlackEmailReports'
 import { useBisonCampaigns, type BisonCampaign } from '../hooks/useBisonCampaigns'
 import { MetricCard } from '../components/MetricCard'
@@ -120,16 +120,17 @@ export function EmailIntelligencePage() {
               <div className="h-56">
                 {lineData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={lineData}>
+                    <ComposedChart data={lineData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
+                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
                       <Tooltip />
                       <Legend />
-                      <Area type="monotone" dataKey="Emails Sent" stroke="#1A3C34" fill="#1A3C34" fillOpacity={0.1} strokeWidth={2} />
-                      <Area type="monotone" dataKey="Replies" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} strokeWidth={2} />
-                      <Area type="monotone" dataKey="Interested" stroke="#22C55E" fill="#22C55E" fillOpacity={0.1} strokeWidth={2} />
-                    </AreaChart>
+                      <Area yAxisId="left" type="monotone" dataKey="Emails Sent" stroke="#1A3C34" fill="#1A3C34" fillOpacity={0.08} strokeWidth={2} />
+                      <Line yAxisId="right" type="monotone" dataKey="Replies" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="Interested" stroke="#22C55E" strokeWidth={2} dot={{ r: 3 }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 ) : <p className="text-xs text-zinc-400 text-center pt-20">No data for this period</p>}
               </div>
