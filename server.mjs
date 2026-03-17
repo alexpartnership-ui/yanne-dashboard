@@ -300,12 +300,47 @@ app.get('/api/monday/onboarding', async (_req, res) => {
 
 // ─── HubSpot API routes ─────────────────────────────────
 
+const HUBSPOT_STAGE_MAP = {
+  // Sales Pipeline (default)
+  appointmentscheduled: 'Meeting Qualified',
+  qualifiedtobuy: 'NDA',
+  presentationscheduled: '1st Closing Call',
+  decisionmakerboughtin: '2nd Closing Call',
+  '1066193534': '3rd Call / Contract',
+  closedwon: 'Closed Won',
+  closedlost: 'Closed Lost',
+  contractsent: 'Long Term Lead',
+  '1066871403': 'Disqualified',
+  // Master Project Tracker
+  '1068620433': 'Appointment Scheduled',
+  '1068620434': 'Qualified To Buy',
+  '1068620435': 'Presentation Scheduled',
+  '1068620436': 'Decision Maker Bought-In',
+  '1068620437': 'Contract Sent',
+  '1068620438': 'Closed Won',
+  '1068620439': 'Closed Lost',
+  // Master Fulfillment
+  '1081726001': 'New Clients',
+  '1081726002': 'In Onboarding',
+  '1081726003': 'Live (Pre-Campaign)',
+  '1081726004': 'Active Campaign',
+  '1081726005': 'Campaign Complete',
+}
+
 app.get('/api/hubspot/deals', async (_req, res) => {
   if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
   try {
-    const { data, error } = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate')
+    const { data, error } = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate')
     if (error) return res.status(500).json({ error })
-    res.json(data)
+    // Enrich with stage names
+    const results = (data.results || []).map(d => ({
+      ...d,
+      properties: {
+        ...d.properties,
+        stageName: HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage || 'Unknown',
+      },
+    }))
+    res.json({ ...data, results })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

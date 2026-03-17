@@ -5,22 +5,14 @@ export interface HubSpotDeal {
   name: string
   stage: string
   stageName: string
+  pipeline: string
   amount: number | null
   closeDate: string | null
   createDate: string | null
+  lastModified: string | null
 }
 
-const STAGE_NAMES: Record<string, string> = {
-  appointmentscheduled: 'Meeting Qualified',
-  qualifiedtobuy: 'NDA',
-  presentationscheduled: '1st Closing Call',
-  decisionmakerboughtin: '2nd Closing Call',
-  '1066193534': '3rd Call / Contract',
-  closedwon: 'Closed Won',
-  closedlost: 'Closed Lost',
-  contractsent: 'Long Term Lead',
-  '1066871403': 'Disqualified',
-}
+// Stage names now come enriched from server
 
 interface HubSpotResult {
   deals: HubSpotDeal[]
@@ -53,10 +45,12 @@ export function useHubSpotDeals() {
           id: r.id,
           name: r.properties.dealname || '',
           stage: r.properties.dealstage || '',
-          stageName: STAGE_NAMES[r.properties.dealstage || ''] || r.properties.dealstage || '',
+          stageName: r.properties.stageName || r.properties.dealstage || '',
+          pipeline: r.properties.pipeline || 'default',
           amount: r.properties.amount ? parseFloat(r.properties.amount) : null,
           closeDate: r.properties.closedate || null,
           createDate: r.properties.createdate || null,
+          lastModified: r.properties.hs_lastmodifieddate || null,
         }))
 
         const stageBreakdown: Record<string, number> = {}
