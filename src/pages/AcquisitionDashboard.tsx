@@ -63,7 +63,9 @@ export function AcquisitionDashboard() {
     for (const d of checkins.byDate) {
       dateRepsMap[d.date] = {}
       for (const rep of reps) {
-        dateRepsMap[d.date][rep] = d.reps[rep] ?? null
+        const val = d.reps[rep]
+        // null if rep didn't report, null if 0 (likely OOO), keep actual numbers
+        dateRepsMap[d.date][rep] = (val != null && val > 0) ? val : null
       }
     }
 
@@ -164,7 +166,7 @@ export function AcquisitionDashboard() {
                 {allReps.map(rep => (
                   <Line
                     key={rep}
-                    type="monotone"
+                    type="linear"
                     dataKey={rep}
                     stroke={REP_HEX[rep] ?? '#a1a1aa'}
                     strokeWidth={2}
