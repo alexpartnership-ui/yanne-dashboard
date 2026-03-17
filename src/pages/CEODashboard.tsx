@@ -1,125 +1,362 @@
-import { useCEOStats } from '../hooks/useCEOStats'
+import { useState } from 'react'
+import { useCEOScorecard, type CEOScorecardData } from '../hooks/useCEOScorecard'
 import { Spinner } from '../components/Spinner'
 
-function scoreColor(score: number): string {
-  if (score >= 70) return 'text-emerald-600'
-  if (score >= 55) return 'text-amber-600'
-  return 'text-red-600'
+// ─── Status dot ─────────────────────────────────────────
+
+function StatusDot({ status }: { status: 'green' | 'red' | 'yellow' }) {
+  const colors = { green: 'bg-emerald-500', red: 'bg-red-500', yellow: 'bg-amber-400' }
+  return <div className={`h-2.5 w-2.5 rounded-full ${colors[status]}`} />
 }
 
-export function CEODashboard() {
-  const { data, loading } = useCEOStats()
+function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
+  if (trend === 'up') return <span className="text-emerald-500 text-xs font-bold">{'\u2191'}</span>
+  if (trend === 'down') return <span className="text-red-500 text-xs font-bold">{'\u2193'}</span>
+  return <span className="text-zinc-400 text-xs">{'\u2192'}</span>
+}
 
-  if (loading) return <Spinner />
-  if (!data) return <p className="text-sm text-zinc-400">No data available</p>
+// ─── Department Card ────────────────────────────────────
+
+interface DeptCardProps {
+  icon: string
+  title: string
+  owner: string
+  accent: string
+  metrics: CEOScorecardData['outbound']
+  children?: React.ReactNode
+  defaultOpen?: boolean
+}
+
+function DeptCard({ icon, title, owner, accent, metrics, children, defaultOpen = true }: DeptCardProps) {
+  const [open, setOpen] = useState(defaultOpen)
+  const greens = metrics.filter(m => m.status === 'green').length
+  const total = metrics.length
 
   return (
-    <div>
-      <h2 className="mb-6 text-2xl font-bold text-zinc-900">Growth Scorecard</h2>
-
-      <div className="grid grid-cols-2 gap-4">
-        {/* Top Left: LIVE — Sales Performance */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <h3 className="text-sm font-semibold text-zinc-700">Sales Performance (7d)</h3>
+    <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-5 py-4 hover:bg-zinc-50 transition-colors"
+        style={{ borderLeft: `4px solid ${accent}` }}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-lg">{icon}</span>
+          <div className="text-left">
+            <h3 className="text-sm font-bold text-zinc-900">{title}</h3>
+            <span className="text-[10px] text-zinc-400">Owner: {owner}</span>
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-400">{greens}/{total} on target</span>
+          <svg className={`w-4 h-4 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </div>
+      </button>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-[36px] font-bold text-zinc-900 leading-tight">{data.callsThisWeek}</div>
-              <div className="text-xs text-zinc-500">Calls this week</div>
-            </div>
-            <div>
-              <div className={`text-[36px] font-bold leading-tight ${scoreColor(data.avgScore)}`}>{data.avgScore}%</div>
-              <div className="text-xs text-zinc-500">Avg score</div>
-            </div>
-            <div>
-              {data.bestRep ? (
-                <>
-                  <div className="text-lg font-bold text-zinc-900">{data.bestRep.name}</div>
-                  <div className="text-xs text-zinc-500">Best rep ({data.bestRep.avg}% avg)</div>
-                </>
-              ) : (
-                <div className="text-xs text-zinc-400">No data</div>
+      {open && (
+        <div className="px-5 pb-4">
+          <table className="w-full">
+            <thead>
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-100">
+                <th className="text-left pb-2 pr-2">Metric</th>
+                <th className="text-left pb-2 pr-2">Owner</th>
+                <th className="text-right pb-2 pr-2">Target</th>
+                <th className="text-right pb-2 pr-2">Actual</th>
+                <th className="text-center pb-2 pr-2">Status</th>
+                <th className="text-center pb-2">Trend</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-50">
+              {metrics.map(m => (
+                <tr key={m.name}>
+                  <td className="py-2 pr-2 text-xs text-zinc-700">{m.name}</td>
+                  <td className="py-2 pr-2 text-xs text-zinc-400">{m.owner}</td>
+                  <td className="py-2 pr-2 text-xs text-zinc-500 text-right">{m.target}</td>
+                  <td className="py-2 pr-2 text-xs font-semibold text-zinc-900 text-right">{m.actual}</td>
+                  <td className="py-2 pr-2 text-center"><StatusDot status={m.status} /></td>
+                  <td className="py-2 text-center"><TrendArrow trend={m.trend} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Page ──────────────────────────────────────────
+
+export function CEODashboard() {
+  const { data, loading, refresh } = useCEOScorecard()
+
+  if (loading && !data) return <Spinner />
+  if (!data) return <p className="text-sm text-zinc-400">Failed to load scorecard</p>
+
+  const revPct = data.revenueTarget > 0 ? Math.round((data.revenueCollected / data.revenueTarget) * 100) : 0
+  const revBarColor = revPct >= 70 ? 'bg-emerald-500' : revPct >= 40 ? 'bg-amber-400' : 'bg-red-500'
+
+  return (
+    <div className="max-w-[1200px] mx-auto print:max-w-none">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-zinc-900">Growth Scorecard</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">Week of {data.weekRange}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-zinc-400">Last refreshed: {data.lastRefreshed}</span>
+          <button
+            onClick={refresh}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm"
+          >
+            Sync Now
+          </button>
+        </div>
+      </div>
+
+      {/* ── NORTH STAR ─────────────────────────────── */}
+      <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm text-center">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">Revenue Target</div>
+        <div className="text-4xl font-bold text-zinc-900">
+          ${(data.revenueCollected / 1000).toFixed(0)}K
+          <span className="text-lg font-normal text-zinc-400 ml-2">/ $833K monthly target</span>
+        </div>
+        <div className="mt-3 mx-auto max-w-xl">
+          <div className="h-4 rounded-full bg-zinc-100 overflow-hidden">
+            <div className={`h-full rounded-full ${revBarColor} transition-all`} style={{ width: `${Math.min(revPct, 100)}%` }} />
+          </div>
+          <div className="text-xs text-zinc-500 mt-1">{revPct}% of target ($10M annual run rate)</div>
+        </div>
+        <div className="mt-4 flex justify-center gap-8 text-xs text-zinc-500">
+          <div>Cash Collected MTD: <span className="font-semibold text-zinc-800">${(data.revenueCollected / 1000).toFixed(0)}K</span></div>
+          <div>Retainers: <span className="font-semibold text-zinc-800">${(data.retainers / 1000).toFixed(0)}K</span></div>
+          <div>Success Fees: <span className="font-semibold text-zinc-800">${(data.successFees / 1000).toFixed(0)}K</span></div>
+        </div>
+      </div>
+
+      {/* ── PIPELINE FUNNEL ────────────────────────── */}
+      <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {data.funnel.map((stage, i) => (
+            <div key={stage.label} className="flex items-center flex-1 min-w-0">
+              <div className="text-center flex-1">
+                <div className="text-lg font-bold text-zinc-900">
+                  {stage.label === 'Cash' ? `$${(stage.value / 1000).toFixed(0)}K` : stage.value >= 1000 ? `${(stage.value / 1000).toFixed(0)}K` : stage.value}
+                </div>
+                <div className="text-[9px] text-zinc-400 uppercase tracking-wider mt-0.5">{stage.label}</div>
+                {stage.conversionRate !== null && (
+                  <div className={`text-[10px] font-semibold mt-0.5 ${
+                    stage.conversionTarget !== null && stage.conversionRate >= stage.conversionTarget ? 'text-emerald-600' : 'text-red-500'
+                  }`}>
+                    {stage.conversionRate}% {'\u2192'}
+                  </div>
+                )}
+              </div>
+              {i < data.funnel.length - 1 && (
+                <svg className="w-4 h-4 text-zinc-300 shrink-0 mx-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
               )}
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── DEPARTMENT CARDS ───────────────────────── */}
+      <div className="space-y-4 mb-6">
+        {/* Outbound */}
+        <DeptCard icon={'\uD83D\uDCE7'} title="OUTBOUND" owner="Outreachify" accent="#3B82F6" metrics={data.outbound} />
+
+        {/* Setters */}
+        <DeptCard icon={'\uD83D\uDC64'} title="SETTERS" owner="Alex" accent="#8B5CF6" metrics={data.setters}>
+          {data.setterBreakdown.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-zinc-100">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Setter Breakdown</div>
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <th className="text-left pb-1">Setter</th>
+                    <th className="text-right pb-1">Assigned</th>
+                    <th className="text-right pb-1">Unactioned</th>
+                    <th className="text-right pb-1">Meetings</th>
+                    <th className="text-right pb-1">Conv %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {data.setterBreakdown.map(s => (
+                    <tr key={s.name}>
+                      <td className="py-1.5 text-xs text-zinc-700">{s.name}</td>
+                      <td className="py-1.5 text-xs text-zinc-600 text-right">{s.assigned}</td>
+                      <td className={`py-1.5 text-xs font-semibold text-right ${s.unactioned > 10 ? 'text-red-600' : 'text-zinc-600'}`}>{s.unactioned}</td>
+                      <td className="py-1.5 text-xs text-zinc-600 text-right">{s.meetings}</td>
+                      <td className="py-1.5 text-xs text-zinc-600 text-right">{s.conversionRate}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DeptCard>
+
+        {/* Sales / Closers */}
+        <DeptCard icon={'\uD83D\uDCDE'} title="SALES / CLOSERS" owner={'\u26A0\uFE0F VACANT'} accent="#EF4444" metrics={data.sales}>
+          {/* Rep leaderboard */}
+          {data.repLeaderboard.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-zinc-100">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Rep Leaderboard (This Week)</div>
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <th className="text-left pb-1">#</th>
+                    <th className="text-left pb-1">Rep</th>
+                    <th className="text-right pb-1">Calls</th>
+                    <th className="text-right pb-1">Avg Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {data.repLeaderboard.map((r, i) => (
+                    <tr key={r.name}>
+                      <td className="py-1.5 text-xs text-zinc-400">#{i + 1}</td>
+                      <td className="py-1.5 text-xs font-medium text-zinc-800">{r.name}</td>
+                      <td className="py-1.5 text-xs text-zinc-600 text-right">{r.calls}</td>
+                      <td className={`py-1.5 text-xs font-semibold text-right ${r.avgScore >= 70 ? 'text-emerald-600' : r.avgScore >= 55 ? 'text-amber-600' : 'text-red-600'}`}>{r.avgScore}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-2 flex gap-4 text-xs">
+                <div><span className="text-zinc-400">Top Coaching Theme:</span> <span className="text-zinc-700">{data.topCoachingTheme}</span></div>
+                <div><span className="text-zinc-400">Worst Category:</span> <span className="text-zinc-700">{data.worstCategory}</span></div>
+              </div>
+            </div>
+          )}
+        </DeptCard>
+
+        {/* Fulfillment */}
+        <DeptCard icon={'\uD83E\uDD1D'} title="FULFILLMENT" owner="Philip / Mukul" accent="#22C55E" metrics={data.fulfillment}>
+          {data.clientStatus.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-zinc-100">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Client Status</div>
+              <div className="space-y-1">
+                {data.clientStatus.map(c => (
+                  <div key={c.name} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span className="text-xs font-medium text-zinc-800">{c.name}</span>
+                    </div>
+                    <span className="text-[10px] text-zinc-400">{c.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DeptCard>
+
+        {/* Finance */}
+        <DeptCard icon={'\uD83D\uDCB0'} title="FINANCE" owner="Alex" accent="#F59E0B" metrics={data.finance} />
+      </div>
+
+      {/* ── BOTTLENECK ─────────────────────────────── */}
+      {data.bottleneck && (
+        <div className="mb-6 rounded-lg border-2 border-amber-200 bg-amber-50 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">{'\uD83C\uDFAF'}</span>
+            <h3 className="text-sm font-bold text-amber-900">This Week's Bottleneck (Theory of Constraints)</h3>
+          </div>
+          <div className="text-sm text-amber-800 mb-2">
+            <span className="font-bold">{data.bottleneck.stage}:</span> {data.bottleneck.actual}% conversion (target: {data.bottleneck.target}%)
+          </div>
+          <div className="text-xs text-amber-700 space-y-1">
+            <div>Owner: {data.bottleneck.owner}</div>
+            <div>Impact: {data.bottleneck.impact}</div>
+            <div>Root cause: {data.bottleneck.rootCause}</div>
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-amber-900">
+            <span>{'\u26A1'}</span> Recommended action: {data.bottleneck.action}
+          </div>
+        </div>
+      )}
+
+      {/* ── ALERTS ─────────────────────────────────── */}
+      <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+        <h3 className="text-sm font-bold text-zinc-700 mb-3">Alerts</h3>
+        <div className="space-y-4">
+          {/* Critical */}
+          {data.alerts.filter(a => a.level === 'critical').length > 0 && (
             <div>
-              <div className="text-lg font-bold text-zinc-900">{data.activeDeals}</div>
-              <div className="text-xs text-zinc-500">Active deals</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-red-500 mb-1.5">Critical</div>
+              <div className="space-y-1">
+                {data.alerts.filter(a => a.level === 'critical').map((a, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded bg-red-50 px-3 py-2">
+                    <div className="h-2 w-2 rounded-full bg-red-500 mt-1 shrink-0" />
+                    <span className="text-xs text-red-800">{a.message}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="mt-4 pt-4 border-t border-zinc-100">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-zinc-500">Close rate</span>
-              <span className="text-lg font-bold text-zinc-900">{data.closeRate}%</span>
+          {/* Warning */}
+          {data.alerts.filter(a => a.level === 'warning').length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-1.5">Warning</div>
+              <div className="space-y-1">
+                {data.alerts.filter(a => a.level === 'warning').map((a, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded bg-amber-50 px-3 py-2">
+                    <div className="h-2 w-2 rounded-full bg-amber-400 mt-1 shrink-0" />
+                    <span className="text-xs text-amber-800">{a.message}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Top Right: PLACEHOLDER — Outbound Health */}
-        <div className="rounded-lg border-2 border-dashed border-zinc-200 bg-white p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-            </svg>
-            <h3 className="text-sm font-semibold text-zinc-400">Outbound Health</h3>
-          </div>
-          <div className="flex flex-col items-center justify-center py-8">
-            <p className="text-sm text-zinc-400">Connect EmailBison</p>
-            <p className="text-xs text-zinc-300 mt-1">Reply rates, open rates, campaign health</p>
-          </div>
-        </div>
-
-        {/* Bottom Left: PLACEHOLDER — Client Status */}
-        <div className="rounded-lg border-2 border-dashed border-zinc-200 bg-white p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-4 h-4 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-            </svg>
-            <h3 className="text-sm font-semibold text-zinc-400">Client Status</h3>
-          </div>
-          <div className="flex flex-col items-center justify-center py-8">
-            <p className="text-sm text-zinc-400">Connect Monday.com</p>
-            <p className="text-xs text-zinc-300 mt-1">Active clients, onboarding status, retention</p>
-          </div>
-        </div>
-
-        {/* Bottom Right: PARTIAL — Alerts */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-            </svg>
-            <h3 className="text-sm font-semibold text-zinc-700">Alerts</h3>
-          </div>
-
-          {data.alerts.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-sm text-emerald-700">All clear — no active alerts</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {data.alerts.map((alert, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-2 rounded-lg px-4 py-3 ${
-                    alert.type === 'danger' ? 'bg-red-50' : 'bg-amber-50'
-                  }`}
-                >
-                  <div className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
-                    alert.type === 'danger' ? 'bg-red-500' : 'bg-amber-500'
-                  }`} />
-                  <span className={`text-sm ${
-                    alert.type === 'danger' ? 'text-red-700' : 'text-amber-700'
-                  }`}>{alert.message}</span>
-                </div>
-              ))}
+          {/* Wins */}
+          {data.alerts.filter(a => a.level === 'win').length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 mb-1.5">Wins</div>
+              <div className="space-y-1">
+                {data.alerts.filter(a => a.level === 'win').map((a, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded bg-emerald-50 px-3 py-2">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                    <span className="text-xs text-emerald-800">{a.message}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── WEEKLY COMPARISON ──────────────────────── */}
+      <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+        <h3 className="text-sm font-bold text-zinc-700 mb-3">This Week vs Last Week</h3>
+        <table className="w-full">
+          <thead>
+            <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-100">
+              <th className="text-left pb-2">Metric</th>
+              <th className="text-right pb-2">This Week</th>
+              <th className="text-right pb-2">Last Week</th>
+              <th className="text-right pb-2">Change</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-50">
+            {data.weeklyComparison.map(row => (
+              <tr key={row.metric}>
+                <td className="py-2 text-xs text-zinc-700">{row.metric}</td>
+                <td className="py-2 text-xs font-semibold text-zinc-900 text-right">{row.thisWeek}</td>
+                <td className="py-2 text-xs text-zinc-500 text-right">{row.lastWeek}</td>
+                <td className={`py-2 text-xs font-semibold text-right ${
+                  String(row.change).startsWith('+') ? 'text-emerald-600' :
+                  String(row.change).startsWith('-') ? 'text-red-600' : 'text-zinc-400'
+                }`}>{row.change}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
