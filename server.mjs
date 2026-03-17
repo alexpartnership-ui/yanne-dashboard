@@ -107,6 +107,18 @@ app.get('/api/bison/campaigns', async (_req, res) => {
   }
 })
 
+// Campaign sequence steps
+app.get('/api/bison/campaigns/:id/sequence', async (req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch(`/campaigns/v1.1/${req.params.id}/sequence-steps`)
+    if (error) return res.status(500).json({ error })
+    res.json(data?.data || data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Campaign stats for a specific campaign
 app.get('/api/bison/campaigns/:id/stats', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })

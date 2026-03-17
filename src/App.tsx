@@ -15,6 +15,7 @@ import { EmailIntelligencePage } from './pages/EmailIntelligencePage'
 import { CopyLibraryPage } from './pages/CopyLibraryPage'
 import { SetterPerformancePage } from './pages/SetterPerformancePage'
 import { LeadQualityPage } from './pages/LeadQualityPage'
+import { ActiveCampaignsPage } from './pages/ActiveCampaignsPage'
 import { ClientOverviewPage } from './pages/ClientOverviewPage'
 import { OnboardingTrackerPage } from './pages/OnboardingTrackerPage'
 import { CampaignDashboardsPage } from './pages/CampaignDashboardsPage'
@@ -42,6 +43,7 @@ export default function App() {
 
           {/* Outbound / GTM */}
           <Route path="/outbound/email" element={<EmailIntelligencePage />} />
+          <Route path="/outbound/campaigns" element={<ActiveCampaignsPage />} />
           <Route path="/outbound/copy" element={<CopyLibraryPage />} />
           <Route path="/outbound/setters" element={<SetterPerformancePage />} />
           <Route path="/outbound/leads" element={<LeadQualityPage />} />
