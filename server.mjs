@@ -603,12 +603,18 @@ app.get('/api/setter-checkins', async (req, res) => {
       if (bookingsMatch) bookings = parseInt(bookingsMatch[1])
       else bookings = parseInt(bookingsRaw) || 0
 
-      // Parse followups — could be a number or text with numbers
+      // Parse followups — could be a number or text with campaign lists
       let followups = parseInt(followupsRaw) || 0
       if (followups === 0 && followupsRaw.includes('-')) {
-        // Sum numbers from "Campaign - N\nCampaign - M" format
-        const fuMatches = followupsRaw.matchAll(/[-–]\s*(\d+)/g)
-        for (const m of fuMatches) followups += parseInt(m[1])
+        // Sum numbers at the END of each line: "Campaign Name - 12/02/2026 - 4"
+        // Only match the very last number on each line (after the last dash)
+        const fuLines = followupsRaw.split('\n')
+        for (const line of fuLines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          const lastDash = trimmed.match(/[-–]\s*(\d{1,3})\s*$/)
+          if (lastDash) followups += parseInt(lastDash[1])
+        }
       }
 
       // Parse reply count from campaign report
