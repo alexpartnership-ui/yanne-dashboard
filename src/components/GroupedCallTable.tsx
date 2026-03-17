@@ -53,23 +53,30 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]))
   }, [data])
 
-  // Auto-expand today and yesterday
+  // Track explicit expand/collapse overrides
   const today = new Date().toISOString().slice(0, 10)
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set())
 
   function isExpanded(dateKey: string): boolean {
+    // Explicit override takes priority
+    if (expandedDates.has(dateKey)) return true
     if (collapsedDates.has(dateKey)) return false
-    if (dateKey === today || dateKey === yesterday) return true
-    return !collapsedDates.has(dateKey) && dateKey >= yesterday
+    // Default: today and yesterday expanded, rest collapsed
+    return dateKey === today || dateKey === yesterday
   }
 
   function toggleDate(dateKey: string) {
-    setCollapsedDates(prev => {
-      const next = new Set(prev)
-      if (next.has(dateKey)) next.delete(dateKey)
-      else next.add(dateKey)
-      return next
-    })
+    const currentlyExpanded = isExpanded(dateKey)
+    if (currentlyExpanded) {
+      // Collapse it
+      setExpandedDates(prev => { const n = new Set(prev); n.delete(dateKey); return n })
+      setCollapsedDates(prev => { const n = new Set(prev); n.add(dateKey); return n })
+    } else {
+      // Expand it
+      setCollapsedDates(prev => { const n = new Set(prev); n.delete(dateKey); return n })
+      setExpandedDates(prev => { const n = new Set(prev); n.add(dateKey); return n })
+    }
   }
 
   function toggleCol(key: ColumnKey) {

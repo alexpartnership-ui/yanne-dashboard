@@ -84,7 +84,7 @@ export function useDashboardStats() {
       const themeFreq: Record<string, number> = {}
       for (const c of weekCalls) {
         if (c.coaching_priority) {
-          const key = c.coaching_priority.slice(0, 80)
+          const key = c.coaching_priority
           themeFreq[key] = (themeFreq[key] || 0) + 1
         }
       }

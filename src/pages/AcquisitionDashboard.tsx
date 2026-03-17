@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useSlackMeetings } from '../hooks/useSlackMeetings'
 import { useRepCheckins } from '../hooks/useRepCheckins'
@@ -13,27 +13,10 @@ export function AcquisitionDashboard() {
   const { data: meetings } = useSlackMeetings()
   const { data: checkins } = useRepCheckins(30)
 
-  // Build recharts data for grade distribution stacked bar (30d)
-  const gradeBarData = useMemo(() => {
-    if (!data) return []
-    return [
-      {
-        name: '30d',
-        A: data.gradeDistribution.A,
-        B: data.gradeDistribution.B,
-        C: data.gradeDistribution.C,
-        D: data.gradeDistribution.D,
-        F: data.gradeDistribution.F,
-      },
-    ]
-  }, [data])
-
-  // Build calls per day from Google Sheet rep check-ins (actual calls completed)
-  // Fill ALL dates in range so weekends/OOO days show as null (not gaps)
-  const { lineData, allReps } = useMemo(() => {
+  // Build stacked bar chart for calls per day (much cleaner than lines for this data)
+  const { barData, allReps } = useMemo(() => {
     if (!checkins?.byDate?.length) {
-      // Fallback to Supabase scored calls if no sheet data
-      if (!data) return { lineData: [], allReps: [] }
+      if (!data) return { barData: [], allReps: [] }
       const reps = [...new Set(data.callsPerDay.map(d => d.rep))]
       const dayMap: Record<string, Record<string, number>> = {}
       for (const entry of data.callsPerDay) {
@@ -41,7 +24,7 @@ export function AcquisitionDashboard() {
         dayMap[entry.date][entry.rep] = entry.count
       }
       return {
-        lineData: Object.entries(dayMap)
+        barData: Object.entries(dayMap)
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([date, repData]) => ({
             date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -51,51 +34,37 @@ export function AcquisitionDashboard() {
       }
     }
 
-    // Get all reps and date range
     const reps = Object.keys(checkins.byRep)
-    const dates = checkins.byDate.map(d => d.date).sort()
-    if (dates.length === 0) return { lineData: [], allReps: reps }
-
-    // Fill every date between min and max (skip weekends — Sat=6, Sun=0)
-    const start = new Date(dates[0] + 'T12:00:00')
-    const end = new Date(dates[dates.length - 1] + 'T12:00:00')
-    const dateRepsMap: Record<string, Record<string, number | null>> = {}
-    for (const d of checkins.byDate) {
-      dateRepsMap[d.date] = {}
-      for (const rep of reps) {
-        const val = d.reps[rep]
-        // null if rep didn't report, null if 0 (likely OOO), keep actual numbers
-        dateRepsMap[d.date][rep] = (val != null && val > 0) ? val : null
-      }
-    }
-
-    // Build continuous date array (weekdays only)
-    const result: Record<string, unknown>[] = []
-    const cursor = new Date(start)
-    while (cursor <= end) {
-      const day = cursor.getDay()
-      if (day !== 0 && day !== 6) { // Skip Sat/Sun
-        const key = cursor.toISOString().slice(0, 10)
-        const label = cursor.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        if (dateRepsMap[key]) {
-          result.push({ date: label, ...dateRepsMap[key] })
-        } else {
-          // No reports this day — null for all reps
-          const empty: Record<string, null> = {}
-          for (const rep of reps) empty[rep] = null
-          result.push({ date: label, ...empty })
+    return {
+      barData: checkins.byDate.map(d => {
+        const entry: Record<string, string | number> = {
+          date: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         }
-      }
-      cursor.setDate(cursor.getDate() + 1)
+        for (const rep of reps) {
+          entry[rep] = d.reps[rep] ?? 0
+        }
+        return entry
+      }),
+      allReps: reps,
     }
-
-    return { lineData: result, allReps: reps }
   }, [checkins, data])
+
+  // Grade distribution bar data
+  const gradeBarData = useMemo(() => {
+    if (!data) return []
+    return [{
+      name: '30d',
+      A: data.gradeDistribution.A,
+      B: data.gradeDistribution.B,
+      C: data.gradeDistribution.C,
+      D: data.gradeDistribution.D,
+      F: data.gradeDistribution.F,
+    }]
+  }, [data])
 
   if (loading) return <Spinner />
   if (!data) return <p className="text-sm text-zinc-400">No data available</p>
 
-  // Total actual calls from check-ins
   const totalActualCalls = checkins
     ? Object.values(checkins.byRep).reduce((s, r) => s + r.totalCompleted, 0)
     : null
@@ -113,7 +82,7 @@ export function AcquisitionDashboard() {
         />
         <MetricCard label="Avg Score" value={`${data.avgScore}%`} subtitle="Scored calls" />
         <MetricCard label="Meetings Booked" value={meetings?.thisWeek ?? 0} subtitle={`${meetings?.todaySoFar ?? 0} today \u2022 ${meetings?.avgPerDay ?? 0}/day avg`} />
-        <MetricCard label="Active Deals" value={data.activeDeals} />
+        <MetricCard label="Active Deals" value={data.activeDeals} subtitle="HubSpot pipeline" />
         <MetricCard label="Close Rate" value="\u2014" placeholder />
         <MetricCard label="Pipeline Value" value="\u2014" placeholder />
       </div>
@@ -149,32 +118,29 @@ export function AcquisitionDashboard() {
           </div>
         </div>
 
-        {/* Calls Per Day — from rep daily check-ins */}
+        {/* Calls Per Day — stacked bar chart */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-zinc-700 mb-1">Calls Per Day (30d)</h3>
           <p className="text-[10px] text-zinc-400 mb-3">
-            {checkins?.byDate?.length ? 'Source: Rep daily check-in form' : 'Source: Scored calls (Supabase)'}
+            {checkins?.byDate?.length ? 'Source: Rep daily check-in form' : 'Source: Scored calls'}
           </p>
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData}>
+              <BarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <XAxis dataKey="date" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                 <Tooltip />
                 <Legend />
                 {allReps.map(rep => (
-                  <Line
+                  <Bar
                     key={rep}
-                    type="linear"
                     dataKey={rep}
-                    stroke={REP_HEX[rep] ?? '#a1a1aa'}
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    connectNulls
+                    stackId="calls"
+                    fill={REP_HEX[rep] ?? '#a1a1aa'}
                   />
                 ))}
-              </LineChart>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -182,7 +148,7 @@ export function AcquisitionDashboard() {
 
       {/* Row 3: Coaching Themes + Rep Quick Stats */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Top Coaching Themes */}
+        {/* Top Coaching Themes — show full text with wrapping */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 5 Coaching Themes (7d)</h3>
           {data.coachingThemes.length === 0 ? (
@@ -190,16 +156,16 @@ export function AcquisitionDashboard() {
           ) : (
             <div className="space-y-2">
               {data.coachingThemes.map((t, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
-                  <span className="text-xs text-zinc-700 leading-snug max-w-[80%]">{t.theme}</span>
-                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600">{t.count}</span>
+                <div key={i} className="flex items-start justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2">
+                  <span className="text-xs text-zinc-700 leading-snug">{t.theme}</span>
+                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600 shrink-0">{t.count}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Rep Quick Stats — from check-ins if available */}
+        {/* Rep Quick Stats */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-zinc-700 mb-3">
             {checkins?.byRep ? 'Rep Activity (30d check-ins)' : 'Rep Quick Stats (30d)'}
