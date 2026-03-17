@@ -1,6 +1,89 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCEOScorecard, type CEOScorecardData } from '../hooks/useCEOScorecard'
 import { Spinner } from '../components/Spinner'
+
+// ─── Targets Editor ─────────────────────────────────────
+
+interface Targets { [key: string]: number }
+
+function TargetsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [targets, setTargets] = useState<Targets>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) fetch('/api/scorecard/targets').then(r => r.json()).then(setTargets)
+  }, [open])
+
+  async function save() {
+    setSaving(true)
+    await fetch('/api/scorecard/targets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(targets),
+    })
+    setSaving(false)
+    onClose()
+    window.location.reload()
+  }
+
+  if (!open) return null
+
+  const fields: { key: string; label: string; prefix?: string; suffix?: string }[] = [
+    { key: 'revenueTarget', label: 'Monthly Revenue Target', prefix: '$' },
+    { key: 'emailsSentWeek', label: 'Emails Sent / Week' },
+    { key: 'activeCampaigns', label: 'Active Campaigns' },
+    { key: 'replyRate', label: 'Reply Rate Target', suffix: '%' },
+    { key: 'bounceRate', label: 'Max Bounce Rate', suffix: '%' },
+    { key: 'interestedWeek', label: 'Interested Replies / Week' },
+    { key: 'connectedSenders', label: 'Connected Senders' },
+    { key: 'burntSenders', label: 'Max Burnt Senders' },
+    { key: 'unactionedReplies', label: 'Max Unactioned Replies' },
+    { key: 'interestedToMeeting', label: 'Interested to Meeting %', suffix: '%' },
+    { key: 'meetingsBookedWeek', label: 'Meetings Booked / Week' },
+    { key: 'callsScoredWeek', label: 'Calls Scored / Week' },
+    { key: 'teamAvgScore', label: 'Team Avg Score', suffix: '%' },
+    { key: 'c1toC2Rate', label: 'Call 1 to Call 2 Rate', suffix: '%' },
+    { key: 'c2toC3Rate', label: 'Call 2 to Call 3 Rate', suffix: '%' },
+    { key: 'qualificationRate', label: 'Qualification Rate', suffix: '%' },
+    { key: 'proposalsSent', label: 'Proposals Sent / Week' },
+    { key: 'closeRate', label: 'Close Rate', suffix: '%' },
+    { key: 'stalledDeals', label: 'Max Stalled Deals' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-zinc-900">Edit Scorecard Targets</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 text-xl">&times;</button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {fields.map(f => (
+            <div key={f.key}>
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">{f.label}</label>
+              <div className="flex items-center gap-1 mt-0.5">
+                {f.prefix && <span className="text-xs text-zinc-400">{f.prefix}</span>}
+                <input
+                  type="number"
+                  value={targets[f.key] ?? ''}
+                  onChange={e => setTargets(prev => ({ ...prev, [f.key]: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded border border-zinc-200 px-2 py-1.5 text-sm text-zinc-800 focus:border-yanne focus:outline-none"
+                />
+                {f.suffix && <span className="text-xs text-zinc-400">{f.suffix}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-50">Cancel</button>
+          <button onClick={save} disabled={saving} className="rounded-lg bg-yanne px-4 py-2 text-xs font-medium text-white hover:bg-yanne/90 disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save Targets'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Status dot ─────────────────────────────────────────
 
@@ -91,6 +174,7 @@ function DeptCard({ icon, title, owner, accent, metrics, children, defaultOpen =
 
 export function CEODashboard() {
   const { data, loading, refresh } = useCEOScorecard()
+  const [showTargets, setShowTargets] = useState(false)
 
   if (loading && !data) return <Spinner />
   if (!data) return <p className="text-sm text-zinc-400">Failed to load scorecard</p>
@@ -109,12 +193,19 @@ export function CEODashboard() {
         <div className="flex items-center gap-3">
           <span className="text-[10px] text-zinc-400">Last refreshed: {data.lastRefreshed}</span>
           <button
+            onClick={() => setShowTargets(true)}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm"
+          >
+            Edit Targets
+          </button>
+          <button
             onClick={refresh}
             className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm"
           >
             Sync Now
           </button>
         </div>
+        <TargetsModal open={showTargets} onClose={() => setShowTargets(false)} />
       </div>
 
       {/* ── NORTH STAR ─────────────────────────────── */}

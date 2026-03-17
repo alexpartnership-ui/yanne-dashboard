@@ -227,9 +227,62 @@ async function hubspotFetch(endpoint) {
 
 // ─── Monday.com API routes ──────────────────────────────
 
-// All client project portfolio boards
+// Board IDs
 const PROJECT_PORTFOLIO_IDS = [5090688381, 5090690637, 5090697102, 5090697393, 5090697433, 5090697490, 5090697501]
 const PROJECT_TASK_IDS = [5090688377, 5090690633, 5090697103, 5090697391, 5090697431, 5090697473, 5090697495]
+const ONBOARDING_FORM_ID = 1785190380
+
+// Monday Onboarding Form — all clients ever onboarded
+app.get('/api/monday/onboarding-form', async (_req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${ONBOARDING_FORM_ID}]) {
+        items_page(limit: 50) {
+          items {
+            id name
+            column_values { id text value }
+          }
+        }
+      }
+    }`)
+    if (error) return res.status(500).json({ error })
+    const items = data?.boards?.[0]?.items_page?.items || []
+    const clients = items.map(item => {
+      const cols = {}
+      for (const cv of item.column_values || []) cols[cv.id] = cv.text || ''
+      return {
+        id: item.id,
+        name: item.name,
+        companyName: cols['short_text_mkmctwr8'] || item.name,
+        totalRaise: parseFloat(cols['number_mkmcvbfg']) || 0,
+        date: cols['date_mkrkpaha'] || '',
+        firstName: cols['short_text_mkmcmaxr'] || '',
+        lastName: cols['short_text_mkmck8d5'] || '',
+        email: cols['email_mkmcrz3t'] || '',
+        hq: cols['short_text_mkmcpvqx'] || '',
+      }
+    })
+    res.json({ clients })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Bison workspaces — active client projects
+app.get('/api/bison/workspaces', async (_req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const r = await fetch('https://send.yannecapital.com/api/workspaces', {
+      headers: { Authorization: `Bearer ${EMAILBISON_KEY}` },
+    })
+    if (!r.ok) return res.status(500).json({ error: await r.text() })
+    const data = await r.json()
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 app.get('/api/monday/projects', async (_req, res) => {
   if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
@@ -641,6 +694,52 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// ─── CEO Scorecard Targets (persisted in file) ──────────
+
+import { existsSync, writeFileSync } from 'fs'
+
+const TARGETS_FILE = join(__dirname, 'scorecard_targets.json')
+
+const DEFAULT_TARGETS = {
+  revenueTarget: 833000,
+  emailsSentWeek: 350000,
+  activeCampaigns: 30,
+  replyRate: 0.8,
+  bounceRate: 1.0,
+  interestedWeek: 50,
+  connectedSenders: 100,
+  burntSenders: 10,
+  unactionedReplies: 10,
+  interestedToMeeting: 60,
+  meetingsBookedWeek: 15,
+  callsScoredWeek: 40,
+  teamAvgScore: 70,
+  c1toC2Rate: 35,
+  c2toC3Rate: 50,
+  qualificationRate: 15,
+  proposalsSent: 5,
+  closeRate: 15,
+  stalledDeals: 5,
+}
+
+function loadTargets() {
+  try {
+    if (existsSync(TARGETS_FILE)) return JSON.parse(readFileSync(TARGETS_FILE, 'utf-8'))
+  } catch { /* use defaults */ }
+  return { ...DEFAULT_TARGETS }
+}
+
+app.get('/api/scorecard/targets', (_req, res) => {
+  res.json(loadTargets())
+})
+
+app.post('/api/scorecard/targets', (req, res) => {
+  const current = loadTargets()
+  const updated = { ...current, ...req.body }
+  writeFileSync(TARGETS_FILE, JSON.stringify(updated, null, 2))
+  res.json(updated)
 })
 
 // ─── Copy Library ───────────────────────────────────────
