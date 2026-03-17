@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useSlackMeetings } from '../hooks/useSlackMeetings'
+import { useRepCheckins } from '../hooks/useRepCheckins'
 import { MetricCard } from '../components/MetricCard'
 import { GradeDistributionBar } from '../components/GradeDistributionBar'
 import { Spinner } from '../components/Spinner'
@@ -10,11 +11,11 @@ import { REP_HEX } from '../lib/repColors'
 export function AcquisitionDashboard() {
   const { data, loading } = useDashboardStats()
   const { data: meetings } = useSlackMeetings()
+  const { data: checkins } = useRepCheckins(14)
 
-  // Build recharts data for grade distribution stacked bar (30d, grouped by week)
+  // Build recharts data for grade distribution stacked bar (30d)
   const gradeBarData = useMemo(() => {
     if (!data) return []
-    // Just show the grade distribution as a single bar for now — convert to per-week if enough data
     return [
       {
         name: '30d',
@@ -27,29 +28,43 @@ export function AcquisitionDashboard() {
     ]
   }, [data])
 
-  // Build recharts data for calls per day line chart
+  // Build calls per day from Google Sheet rep check-ins (actual calls completed)
   const lineData = useMemo(() => {
-    if (!data) return []
-    const dayMap: Record<string, Record<string, number>> = {}
-    for (const entry of data.callsPerDay) {
-      if (!dayMap[entry.date]) dayMap[entry.date] = {}
-      dayMap[entry.date][entry.rep] = entry.count
+    if (!checkins?.byDate?.length) {
+      // Fallback to Supabase scored calls if no sheet data
+      if (!data) return []
+      const dayMap: Record<string, Record<string, number>> = {}
+      for (const entry of data.callsPerDay) {
+        if (!dayMap[entry.date]) dayMap[entry.date] = {}
+        dayMap[entry.date][entry.rep] = entry.count
+      }
+      return Object.entries(dayMap)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, reps]) => ({
+          date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          ...reps,
+        }))
     }
-    return Object.entries(dayMap)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, reps]) => ({
-        date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        ...reps,
-      }))
-  }, [data])
+    // Use real check-in data
+    return checkins.byDate.map(d => ({
+      date: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      ...d.reps,
+    }))
+  }, [checkins, data])
 
   const allReps = useMemo(() => {
+    if (checkins?.byRep) return Object.keys(checkins.byRep)
     if (!data) return []
     return [...new Set(data.callsPerDay.map(d => d.rep))]
-  }, [data])
+  }, [checkins, data])
 
   if (loading) return <Spinner />
   if (!data) return <p className="text-sm text-zinc-400">No data available</p>
+
+  // Total actual calls from check-ins
+  const totalActualCalls = checkins
+    ? Object.values(checkins.byRep).reduce((s, r) => s + r.totalCompleted, 0)
+    : null
 
   return (
     <div>
@@ -57,12 +72,16 @@ export function AcquisitionDashboard() {
 
       {/* Row 1: Metric Cards */}
       <div className="mb-6 grid grid-cols-6 gap-4">
-        <MetricCard label="Total Calls" value={data.totalCalls} subtitle="Last 30 days" />
-        <MetricCard label="Avg Score" value={`${data.avgScore}%`} />
+        <MetricCard
+          label="Total Calls"
+          value={totalActualCalls ?? data.totalCalls}
+          subtitle={totalActualCalls ? 'Last 14d (rep-reported)' : 'Last 30d (scored)'}
+        />
+        <MetricCard label="Avg Score" value={`${data.avgScore}%`} subtitle="Scored calls" />
         <MetricCard label="Meetings Booked" value={meetings?.thisWeek ?? 0} subtitle={`${meetings?.todaySoFar ?? 0} today \u2022 ${meetings?.avgPerDay ?? 0}/day avg`} />
         <MetricCard label="Active Deals" value={data.activeDeals} />
-        <MetricCard label="Close Rate" value="—" placeholder />
-        <MetricCard label="Pipeline Value" value="—" placeholder />
+        <MetricCard label="Close Rate" value="\u2014" placeholder />
+        <MetricCard label="Pipeline Value" value="\u2014" placeholder />
       </div>
 
       {/* Row 2: Charts */}
@@ -96,10 +115,13 @@ export function AcquisitionDashboard() {
           </div>
         </div>
 
-        {/* Calls Per Day */}
+        {/* Calls Per Day — from rep daily check-ins */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-4">Calls Per Day (14d)</h3>
-          <div className="h-64">
+          <h3 className="text-sm font-semibold text-zinc-700 mb-1">Calls Per Day (14d)</h3>
+          <p className="text-[10px] text-zinc-400 mb-3">
+            {checkins?.byDate?.length ? 'Source: Rep daily check-in form' : 'Source: Scored calls (Supabase)'}
+          </p>
+          <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={lineData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
@@ -143,29 +165,58 @@ export function AcquisitionDashboard() {
           )}
         </div>
 
-        {/* Rep Quick Stats */}
+        {/* Rep Quick Stats — from check-ins if available */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">Rep Quick Stats (30d)</h3>
+          <h3 className="text-sm font-semibold text-zinc-700 mb-3">
+            {checkins?.byRep ? 'Rep Activity (14d check-ins)' : 'Rep Quick Stats (30d)'}
+          </h3>
           <table className="w-full">
             <thead>
               <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                 <th className="text-left pb-2">Rep</th>
-                <th className="text-right pb-2">Calls</th>
+                <th className="text-right pb-2">Scheduled</th>
+                <th className="text-right pb-2">Completed</th>
+                <th className="text-right pb-2">Progressed</th>
                 <th className="text-right pb-2">Avg Score</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {data.repQuickStats.map(r => (
-                <tr key={r.rep}>
-                  <td className="py-2 text-sm font-medium text-zinc-800">{r.rep}</td>
-                  <td className="py-2 text-sm text-zinc-600 text-right">{r.calls}</td>
-                  <td className="py-2 text-sm font-semibold text-right">
-                    <span className={r.avg >= 70 ? 'text-emerald-600' : r.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
-                      {r.avg}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {checkins?.byRep ? (
+                Object.entries(checkins.byRep)
+                  .sort((a, b) => b[1].totalCompleted - a[1].totalCompleted)
+                  .map(([rep, s]) => {
+                    const scoreData = data.repQuickStats.find(r => r.rep === rep)
+                    return (
+                      <tr key={rep}>
+                        <td className="py-2 text-sm font-medium text-zinc-800">{rep}</td>
+                        <td className="py-2 text-sm text-zinc-600 text-right">{s.totalScheduled}</td>
+                        <td className="py-2 text-sm font-semibold text-zinc-900 text-right">{s.totalCompleted}</td>
+                        <td className="py-2 text-sm text-emerald-600 text-right">{s.totalProgressed}</td>
+                        <td className="py-2 text-sm font-semibold text-right">
+                          {scoreData ? (
+                            <span className={scoreData.avg >= 70 ? 'text-emerald-600' : scoreData.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
+                              {scoreData.avg}%
+                            </span>
+                          ) : <span className="text-zinc-300">{'\u2014'}</span>}
+                        </td>
+                      </tr>
+                    )
+                  })
+              ) : (
+                data.repQuickStats.map(r => (
+                  <tr key={r.rep}>
+                    <td className="py-2 text-sm font-medium text-zinc-800">{r.rep}</td>
+                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
+                    <td className="py-2 text-sm text-zinc-600 text-right">{r.calls}</td>
+                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
+                    <td className="py-2 text-sm font-semibold text-right">
+                      <span className={r.avg >= 70 ? 'text-emerald-600' : r.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
+                        {r.avg}%
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

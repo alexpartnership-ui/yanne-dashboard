@@ -322,6 +322,103 @@ app.get('/api/hubspot/pipeline', async (_req, res) => {
   }
 })
 
+// ─── Google Sheets — Rep Daily Check-ins ────────────────
+
+const REP_CHECKIN_SHEET = '1RQoRjAZIMFi6NenrdynzTPRnuDlZl2ynQJ6qRMCBOhA'
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
+
+app.get('/api/rep-checkins', async (req, res) => {
+  // Fetch from Google Sheets API (public read via API key) or direct URL
+  try {
+    const days = parseInt(req.query.days) || 14
+    // Fetch all rows — sheet is small enough
+    const url = GOOGLE_API_KEY
+      ? `https://sheets.googleapis.com/v4/spreadsheets/${REP_CHECKIN_SHEET}/values/A1:F500?key=${GOOGLE_API_KEY}`
+      : `https://docs.google.com/spreadsheets/d/${REP_CHECKIN_SHEET}/gviz/tq?tqx=out:json`
+
+    let rows = []
+
+    if (GOOGLE_API_KEY) {
+      const r = await fetch(url)
+      if (!r.ok) return res.status(500).json({ error: 'Failed to fetch sheet' })
+      const json = await r.json()
+      rows = json.values || []
+    } else {
+      // Fallback: use gviz endpoint (works for sheets shared as "anyone with link")
+      const r = await fetch(url)
+      if (!r.ok) return res.status(500).json({ error: 'Failed to fetch sheet' })
+      const text = await r.text()
+      // gviz returns: google.visualization.Query.setResponse({...})
+      const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
+      const gviz = JSON.parse(jsonStr)
+      const gRows = gviz.table?.rows || []
+      const gCols = gviz.table?.cols || []
+      rows = [gCols.map(c => c.label || '')]
+      for (const gr of gRows) {
+        rows.push(gr.c.map(cell => cell?.v != null ? String(cell.v) : ''))
+      }
+    }
+
+    if (rows.length < 2) return res.json({ checkins: [], byDate: [], byRep: {} })
+
+    // Parse rows (skip header)
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    const checkins = []
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row || row.length < 5) continue
+      const rep = (row[1] || '').trim()
+      const dateStr = (row[2] || '').trim()
+      const scheduled = parseInt(row[3]) || 0
+      const completed = parseInt(row[4]) || 0
+      const progressed = parseInt(row[5]) || 0
+
+      // Parse date (M/D/YYYY format)
+      let date = null
+      if (dateStr) {
+        const parts = dateStr.split('/')
+        if (parts.length === 3) {
+          const m = parseInt(parts[0]) - 1
+          const d = parseInt(parts[1])
+          const y = parseInt(parts[2])
+          date = new Date(y, m, d)
+        }
+      }
+      if (!date || isNaN(date.getTime())) continue
+      if (date < cutoff) continue
+
+      const dateKey = date.toISOString().slice(0, 10)
+      checkins.push({ rep, date: dateKey, scheduled, completed, progressed })
+    }
+
+    // Group by date
+    const dateMap = {}
+    for (const c of checkins) {
+      if (!dateMap[c.date]) dateMap[c.date] = { date: c.date, totalScheduled: 0, totalCompleted: 0, reps: {} }
+      dateMap[c.date].totalScheduled += c.scheduled
+      dateMap[c.date].totalCompleted += c.completed
+      dateMap[c.date].reps[c.rep] = c.completed
+    }
+    const byDate = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date))
+
+    // Group by rep
+    const repMap = {}
+    for (const c of checkins) {
+      if (!repMap[c.rep]) repMap[c.rep] = { totalScheduled: 0, totalCompleted: 0, totalProgressed: 0, days: 0 }
+      repMap[c.rep].totalScheduled += c.scheduled
+      repMap[c.rep].totalCompleted += c.completed
+      repMap[c.rep].totalProgressed += c.progressed
+      repMap[c.rep].days++
+    }
+
+    res.json({ checkins, byDate, byRep: repMap })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Slack helper ───────────────────────────────────────
 
 async function slackFetch(method, body = {}) {
