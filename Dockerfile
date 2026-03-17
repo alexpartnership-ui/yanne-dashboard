@@ -19,6 +19,7 @@ COPY nginx.conf /etc/nginx/http.d/default.conf
 # Copy API server + node_modules
 WORKDIR /app
 COPY --from=build /app/server.mjs ./
+COPY --from=build /app/copy_library.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 

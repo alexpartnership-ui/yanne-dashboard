@@ -320,6 +320,52 @@ app.get('/api/hubspot/pipeline', async (_req, res) => {
   }
 })
 
+// ─── Copy Library ───────────────────────────────────────
+
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+let copyLibrary = []
+try {
+  copyLibrary = JSON.parse(readFileSync(join(__dirname, 'copy_library.json'), 'utf-8'))
+  console.log(`Copy library loaded: ${copyLibrary.length} sequences`)
+} catch { console.warn('copy_library.json not found — copy library page will be empty') }
+
+app.get('/api/copy-library', (req, res) => {
+  const { sector, angle } = req.query
+  let filtered = copyLibrary
+  if (sector) filtered = filtered.filter(s => s.sector === sector)
+  if (angle) filtered = filtered.filter(s => s.angle === angle)
+  // Return lightweight summary (no full email bodies) unless detail requested
+  if (req.query.detail === 'true') return res.json(filtered)
+  const summary = filtered.map(s => ({
+    sector: s.sector,
+    angle: s.angle,
+    set_number: s.set_number,
+    skeleton: s.skeleton,
+    cta_type: s.cta_type,
+    subject_lines: s.subject_lines,
+  }))
+  res.json(summary)
+})
+
+app.get('/api/copy-library/sectors', (_req, res) => {
+  const sectors = [...new Set(copyLibrary.map(s => s.sector))].sort()
+  const angles = [...new Set(copyLibrary.map(s => s.angle))].sort()
+  res.json({ sectors, angles, total: copyLibrary.length })
+})
+
+app.get('/api/copy-library/sequence', (req, res) => {
+  const { sector, angle, set } = req.query
+  const match = copyLibrary.find(s =>
+    s.sector === sector && s.angle === angle && String(s.set_number) === String(set)
+  )
+  if (!match) return res.status(404).json({ error: 'Sequence not found' })
+  res.json(match)
+})
+
 // ─── Intent detection + query routing ───────────────────
 
 const REPS = ['Jake', 'Stanley', 'Thomas', 'Tahawar']
