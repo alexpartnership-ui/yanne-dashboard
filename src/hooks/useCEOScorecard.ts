@@ -177,19 +177,19 @@ export function useCEOScorecard() {
       let openRateSum = 0, replyRateSum = 0, bounceRateSum = 0, rateCount = 0
       for (const c of campaignList) {
         if (c.status === 'active' || c.status === 'launching') activeCampaigns++
-        const s = c.statistics
-        if (s) {
-          totalSent += s.emails_sent || 0
-          totalReplies += s.replies || 0
-          totalBounced += s.bounced || 0
-          if (s.emails_sent > 0) {
-            openRateSum += s.open_rate || 0
-            replyRateSum += s.reply_rate || 0
-            bounceRateSum += s.bounce_rate || 0
-            rateCount++
-          }
+        const sent = Number(c.emails_sent) || 0
+        const replied = Number(c.replied) || Number(c.unique_replies) || 0
+        const bounced = Number(c.bounced) || 0
+        totalSent += sent
+        totalReplies += replied
+        totalBounced += bounced
+        if (sent > 0) {
+          replyRateSum += (replied / sent) * 100
+          bounceRateSum += (bounced / sent) * 100
+          rateCount++
         }
       }
+      void openRateSum
       const avgReplyRate = rateCount > 0 ? replyRateSum / rateCount : 0
       const avgBounceRate = rateCount > 0 ? bounceRateSum / rateCount : 0
 

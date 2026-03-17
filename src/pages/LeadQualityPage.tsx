@@ -100,18 +100,18 @@ export function LeadQualityPage() {
           <p className="text-xs text-zinc-400 mb-3">Campaigns with highest bounce rates</p>
           <div className="space-y-2">
             {(campaigns?.campaigns ?? [])
-              .filter(c => c.statistics && c.statistics.emails_sent > 100)
-              .sort((a, b) => (b.statistics?.bounce_rate ?? 0) - (a.statistics?.bounce_rate ?? 0))
+              .filter(c => c.emails_sent > 100)
+              .sort((a, b) => b.bounce_rate - a.bounce_rate)
               .slice(0, 8)
               .map(c => (
                 <div key={c.id} className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
                   <span className="text-xs text-zinc-700 truncate max-w-[60%]">{c.name}</span>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-bold ${
-                      (c.statistics?.bounce_rate ?? 0) > 3 ? 'text-red-600' :
-                      (c.statistics?.bounce_rate ?? 0) > 1 ? 'text-amber-600' : 'text-emerald-600'
+                      (c.bounce_rate ?? 0) > 3 ? 'text-red-600' :
+                      (c.bounce_rate ?? 0) > 1 ? 'text-amber-600' : 'text-emerald-600'
                     }`}>
-                      {c.statistics?.bounce_rate?.toFixed(1)}% bounce
+                      {c.bounce_rate?.toFixed(1)}% bounce
                     </span>
                   </div>
                 </div>
@@ -122,13 +122,13 @@ export function LeadQualityPage() {
             <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Lowest Reply Campaigns</h4>
             <div className="space-y-2">
               {(campaigns?.campaigns ?? [])
-                .filter(c => c.statistics && c.statistics.emails_sent > 200 && c.statistics.reply_rate < 1)
-                .sort((a, b) => (a.statistics?.reply_rate ?? 0) - (b.statistics?.reply_rate ?? 0))
+                .filter(c => c.emails_sent > 200 && c.reply_rate < 1)
+                .sort((a, b) => a.reply_rate - b.reply_rate)
                 .slice(0, 5)
                 .map(c => (
                   <div key={c.id} className="flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
                     <span className="text-xs text-zinc-700 truncate max-w-[60%]">{c.name}</span>
-                    <span className="text-xs font-bold text-red-600">{c.statistics?.reply_rate?.toFixed(2)}%</span>
+                    <span className="text-xs font-bold text-red-600">{c.reply_rate?.toFixed(2)}%</span>
                   </div>
                 ))}
             </div>

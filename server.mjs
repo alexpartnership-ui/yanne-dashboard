@@ -84,13 +84,22 @@ async function airtableFetch(baseId, tableId, params = {}) {
 
 // ─── EmailBison API routes ──────────────────────────────
 
-// Campaign analytics (aggregated)
+// Campaign analytics — paginate to get ALL campaigns
 app.get('/api/bison/campaigns', async (_req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
-    const { data, error } = await bisonFetch('/campaigns', { per_page: 100 })
-    if (error) return res.status(500).json({ error })
-    res.json(data)
+    const allCampaigns = []
+    let page = 1
+    while (page <= 20) { // safety limit
+      const { data, error } = await bisonFetch('/campaigns', { per_page: 100, page })
+      if (error) return res.status(500).json({ error })
+      const items = data?.data || data?.campaigns || (Array.isArray(data) ? data : [])
+      if (items.length === 0) break
+      allCampaigns.push(...items)
+      if (items.length < 100) break
+      page++
+    }
+    res.json(allCampaigns)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

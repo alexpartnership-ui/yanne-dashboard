@@ -45,9 +45,9 @@ export function CampaignDashboardsPage() {
     const clientName = selectedClient.replace(/^Project\s*[-–]?\s*/i, '').trim().toLowerCase()
     const clientCampaigns = allCampaigns.filter(c => c.name.toLowerCase().includes(clientName))
     const active = clientCampaigns.filter(c => c.status === 'active' || c.status === 'launching')
-    const totalSent = clientCampaigns.reduce((s, c) => s + (c.statistics?.emails_sent || 0), 0)
-    const totalReplies = clientCampaigns.reduce((s, c) => s + (c.statistics?.replies || 0), 0)
-    const totalInterested = clientCampaigns.reduce((s, c) => s + (c.statistics?.interested || 0), 0)
+    const totalSent = clientCampaigns.reduce((s, c) => s + (c.emails_sent || 0), 0)
+    const totalReplies = clientCampaigns.reduce((s, c) => s + (c.replied || 0), 0)
+    const totalInterested = clientCampaigns.reduce((s, c) => s + (c.interested || 0), 0)
 
     return (
       <div>
@@ -78,28 +78,25 @@ export function CampaignDashboardsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {clientCampaigns.map(c => {
-                const s = c.statistics
-                return (
+              {clientCampaigns.map(c => (
                   <tr key={c.id} className="hover:bg-zinc-50">
                     <td className="px-4 py-2.5 text-sm text-zinc-800 max-w-[250px] truncate">{c.name}</td>
                     <td className="px-4 py-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge(c.status)}`}>{c.status}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600 text-right">{s?.emails_sent?.toLocaleString() ?? 0}</td>
-                    <td className="px-4 py-2.5 text-xs text-zinc-600 text-right">{s?.replies ?? 0}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-600 text-right">{c.emails_sent?.toLocaleString() ?? 0}</td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-600 text-right">{c.replied ?? 0}</td>
                     <td className="px-4 py-2.5 text-xs font-semibold text-right">
-                      <span className={(s?.reply_rate ?? 0) > 3 ? 'text-emerald-600' : (s?.reply_rate ?? 0) > 1 ? 'text-amber-600' : 'text-red-600'}>
-                        {s?.reply_rate?.toFixed(2) ?? 0}%
+                      <span className={c.reply_rate > 3 ? 'text-emerald-600' : c.reply_rate > 1 ? 'text-amber-600' : 'text-red-600'}>
+                        {c.reply_rate?.toFixed(2) ?? 0}%
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-emerald-600 text-right">{s?.interested ?? 0}</td>
+                    <td className="px-4 py-2.5 text-xs text-emerald-600 text-right">{c.interested ?? 0}</td>
                     <td className="px-4 py-2.5 text-xs text-right">
-                      <span className={(s?.bounce_rate ?? 0) > 3 ? 'text-red-600' : 'text-zinc-400'}>{s?.bounce_rate?.toFixed(1) ?? 0}%</span>
+                      <span className={c.bounce_rate > 3 ? 'text-red-600' : 'text-zinc-400'}>{c.bounce_rate?.toFixed(1) ?? 0}%</span>
                     </td>
                   </tr>
-                )
-              })}
+              ))}
               {clientCampaigns.length === 0 && (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-xs text-zinc-400">No campaigns found for this client</td></tr>
               )}

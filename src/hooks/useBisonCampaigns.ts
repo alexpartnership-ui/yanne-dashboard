@@ -1,25 +1,23 @@
 import { useEffect, useState } from 'react'
 
-interface BisonCampaign {
+export interface BisonCampaign {
   id: number
   name: string
   status: string
   created_at: string
-  statistics?: {
-    total_leads: number
-    leads_contacted: number
-    emails_sent: number
-    emails_opened: number
-    unique_opens: number
-    replies: number
-    interested: number
-    bounced: number
-    unsubscribed: number
-    open_rate: number
-    reply_rate: number
-    bounce_rate: number
-    interested_rate: number
-  }
+  emails_sent: number
+  replied: number
+  unique_replies: number
+  bounced: number
+  interested: number
+  total_leads: number
+  total_leads_contacted: number
+  unique_opens: number
+  unsubscribed: number
+  completion_percentage: number
+  // Computed
+  reply_rate: number
+  bounce_rate: number
 }
 
 interface BisonCampaignsResult {
@@ -31,7 +29,6 @@ interface BisonCampaignsResult {
     totalReplies: number
     totalInterested: number
     totalBounced: number
-    avgOpenRate: number
     avgReplyRate: number
     avgBounceRate: number
   }
@@ -43,7 +40,7 @@ export function useBisonCampaigns() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function fetch() {
+    async function fetchAll() {
       try {
         const res = await globalThis.fetch('/api/bison/campaigns')
         if (!res.ok) {
@@ -53,25 +50,47 @@ export function useBisonCampaigns() {
           return
         }
         const json = await res.json()
-        const campaigns: BisonCampaign[] = json.data || json.campaigns || json || []
+        const raw = Array.isArray(json) ? json : json.data || json.campaigns || []
+
+        // Map flat Bison fields + compute rates
+        const campaigns: BisonCampaign[] = raw.map((c: Record<string, unknown>) => {
+          const sent = Number(c.emails_sent) || 0
+          const replied = Number(c.replied) || Number(c.unique_replies) || 0
+          const bounced = Number(c.bounced) || 0
+          const interested = Number(c.interested) || 0
+          return {
+            id: c.id as number,
+            name: (c.name as string) || '',
+            status: (c.status as string) || '',
+            created_at: (c.created_at as string) || '',
+            emails_sent: sent,
+            replied,
+            unique_replies: Number(c.unique_replies) || 0,
+            bounced,
+            interested,
+            total_leads: Number(c.total_leads) || 0,
+            total_leads_contacted: Number(c.total_leads_contacted) || 0,
+            unique_opens: Number(c.unique_opens) || 0,
+            unsubscribed: Number(c.unsubscribed) || 0,
+            completion_percentage: Number(c.completion_percentage) || 0,
+            reply_rate: sent > 0 ? (replied / sent) * 100 : 0,
+            bounce_rate: sent > 0 ? (bounced / sent) * 100 : 0,
+          }
+        })
 
         const active = campaigns.filter(c => c.status === 'active' || c.status === 'launching')
         let totalSent = 0, totalReplies = 0, totalInterested = 0, totalBounced = 0
-        let openRateSum = 0, replyRateSum = 0, bounceRateSum = 0, rateCount = 0
+        let replyRateSum = 0, bounceRateSum = 0, rateCount = 0
 
         for (const c of campaigns) {
-          const s = c.statistics
-          if (s) {
-            totalSent += s.emails_sent || 0
-            totalReplies += s.replies || 0
-            totalInterested += s.interested || 0
-            totalBounced += s.bounced || 0
-            if (s.emails_sent > 0) {
-              openRateSum += s.open_rate || 0
-              replyRateSum += s.reply_rate || 0
-              bounceRateSum += s.bounce_rate || 0
-              rateCount++
-            }
+          totalSent += c.emails_sent
+          totalReplies += c.replied
+          totalInterested += c.interested
+          totalBounced += c.bounced
+          if (c.emails_sent > 0) {
+            replyRateSum += c.reply_rate
+            bounceRateSum += c.bounce_rate
+            rateCount++
           }
         }
 
@@ -84,7 +103,6 @@ export function useBisonCampaigns() {
             totalReplies,
             totalInterested,
             totalBounced,
-            avgOpenRate: rateCount > 0 ? Math.round((openRateSum / rateCount) * 100) / 100 : 0,
             avgReplyRate: rateCount > 0 ? Math.round((replyRateSum / rateCount) * 100) / 100 : 0,
             avgBounceRate: rateCount > 0 ? Math.round((bounceRateSum / rateCount) * 100) / 100 : 0,
           },
@@ -94,7 +112,7 @@ export function useBisonCampaigns() {
       }
       setLoading(false)
     }
-    fetch()
+    fetchAll()
   }, [])
 
   return { data, loading, error }

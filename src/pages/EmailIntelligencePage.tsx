@@ -22,7 +22,6 @@ export function EmailIntelligencePage() {
         <h2 className="mb-6 text-2xl font-bold text-zinc-900">Email Intelligence</h2>
         <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-200 bg-white py-20">
           <p className="text-sm text-zinc-500">EmailBison API key not configured</p>
-          <p className="text-xs text-zinc-400 mt-1">Add EMAILBISON_API_KEY to environment variables</p>
         </div>
       </div>
     )
@@ -41,7 +40,7 @@ export function EmailIntelligencePage() {
         <MetricCard label="Emails Sent" value={(t?.totalSent ?? 0).toLocaleString()} />
         <MetricCard label="Avg Reply Rate" value={`${t?.avgReplyRate ?? 0}%`} />
         <MetricCard label="Total Replies" value={t?.totalReplies ?? 0} />
-        <MetricCard label="Interested" value={r?.interested ?? 0} subtitle={`${r?.unread ?? 0} unread`} />
+        <MetricCard label="Interested" value={t?.totalInterested ?? 0} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -50,21 +49,21 @@ export function EmailIntelligencePage() {
           <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top Campaigns by Reply Rate</h3>
           <div className="space-y-2">
             {(campaigns?.campaigns ?? [])
-              .filter(c => c.statistics && c.statistics.emails_sent > 50)
-              .sort((a, b) => (b.statistics?.reply_rate ?? 0) - (a.statistics?.reply_rate ?? 0))
+              .filter(c => c.emails_sent > 50)
+              .sort((a, b) => b.reply_rate - a.reply_rate)
               .slice(0, 10)
               .map(c => (
                 <div key={c.id} className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
                   <div className="flex-1 min-w-0">
                     <span className="text-xs text-zinc-700 truncate block">{c.name}</span>
-                    <span className="text-[10px] text-zinc-400">{c.statistics?.emails_sent?.toLocaleString()} sent</span>
+                    <span className="text-[10px] text-zinc-400">{c.emails_sent.toLocaleString()} sent</span>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-2">
-                    <span className={`text-xs font-bold ${rateColor(c.statistics?.reply_rate ?? 0)}`}>
-                      {c.statistics?.reply_rate?.toFixed(1)}% reply
+                    <span className={`text-xs font-bold ${rateColor(c.reply_rate)}`}>
+                      {c.reply_rate.toFixed(2)}% reply
                     </span>
                     <span className="text-xs text-zinc-400">
-                      {c.statistics?.interested ?? 0} interested
+                      {c.interested} interested
                     </span>
                   </div>
                 </div>
@@ -72,7 +71,7 @@ export function EmailIntelligencePage() {
           </div>
         </div>
 
-        {/* Reply breakdown */}
+        {/* Reply breakdown + deliverability */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-zinc-700 mb-3">Reply Breakdown</h3>
 
@@ -81,7 +80,7 @@ export function EmailIntelligencePage() {
               { label: 'Interested', count: r?.interested ?? 0, color: 'bg-emerald-500' },
               { label: 'Not Interested', count: r?.notInterested ?? 0, color: 'bg-red-400' },
               { label: 'Auto-Reply', count: r?.autoReply ?? 0, color: 'bg-zinc-300' },
-              { label: 'Other', count: (r?.total ?? 0) - (r?.interested ?? 0) - (r?.notInterested ?? 0) - (r?.autoReply ?? 0), color: 'bg-amber-400' },
+              { label: 'Other', count: Math.max(0, (r?.total ?? 0) - (r?.interested ?? 0) - (r?.notInterested ?? 0) - (r?.autoReply ?? 0)), color: 'bg-amber-400' },
             ].map(item => {
               const pct = (r?.total ?? 0) > 0 ? (item.count / r!.total) * 100 : 0
               return (
@@ -98,7 +97,6 @@ export function EmailIntelligencePage() {
             })}
           </div>
 
-          {/* Bounce & deliverability */}
           <div className="mt-6 pt-4 border-t border-zinc-100">
             <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Deliverability</h4>
             <div className="grid grid-cols-2 gap-3">
