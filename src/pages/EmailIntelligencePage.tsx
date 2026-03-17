@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, Legend } from 'recharts'
 import { useBisonCampaigns, type BisonCampaign } from '../hooks/useBisonCampaigns'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
@@ -8,9 +8,9 @@ type TimeRange = '7d' | '30d' | '90d' | 'all'
 type SortKey = 'name' | 'emails_sent' | 'replied' | 'reply_rate' | 'bounce_rate' | 'interested'
 type SortDir = 'asc' | 'desc'
 
-function rateColor(rate: number, thresholds: [number, number] = [0.5, 2]): string {
-  if (rate >= thresholds[1]) return 'text-emerald-600'
-  if (rate >= thresholds[0]) return 'text-amber-600'
+function rateColor(rate: number): string {
+  if (rate >= 2) return 'text-emerald-600'
+  if (rate >= 0.5) return 'text-amber-600'
   return 'text-red-600'
 }
 
@@ -27,40 +27,35 @@ export function EmailIntelligencePage() {
   const [selectedCampaign, setSelectedCampaign] = useState<BisonCampaign | null>(null)
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  // Filter campaigns by time range + search + status
+  // Filter: use updated_at to find campaigns with activity in the period
   const filtered = useMemo(() => {
     if (!allData) return []
     let campaigns = allData.campaigns
 
-    // Time filter
     if (timeRange !== 'all') {
       const cutoff = timeRange === '7d' ? daysAgo(7) : timeRange === '30d' ? daysAgo(30) : daysAgo(90)
-      campaigns = campaigns.filter(c => c.created_at && new Date(c.created_at) >= cutoff)
+      campaigns = campaigns.filter(c => {
+        const updated = c.created_at ? new Date(c.created_at) : null
+        const updatedAt = (c as unknown as { updated_at?: string }).updated_at
+        const lastActive = updatedAt ? new Date(updatedAt) : updated
+        return lastActive && lastActive >= cutoff
+      })
     }
 
-    // Status filter
-    if (statusFilter !== 'all') {
-      campaigns = campaigns.filter(c => c.status === statusFilter)
-    }
-
-    // Search
+    if (statusFilter !== 'all') campaigns = campaigns.filter(c => c.status === statusFilter)
     if (search) {
       const q = search.toLowerCase()
       campaigns = campaigns.filter(c => c.name.toLowerCase().includes(q))
     }
 
-    // Sort
-    campaigns = [...campaigns].sort((a, b) => {
+    return [...campaigns].sort((a, b) => {
       const av = a[sortKey] ?? 0
       const bv = b[sortKey] ?? 0
       if (typeof av === 'string' && typeof bv === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
       return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number)
     })
-
-    return campaigns
   }, [allData, timeRange, search, sortKey, sortDir, statusFilter])
 
-  // Totals for filtered set
   const totals = useMemo(() => {
     const totalSent = filtered.reduce((s, c) => s + c.emails_sent, 0)
     const totalReplied = filtered.reduce((s, c) => s + c.replied, 0)
@@ -72,13 +67,37 @@ export function EmailIntelligencePage() {
     return { totalSent, totalReplied, totalInterested, totalBounced, active, avgReply, avgBounce, count: filtered.length }
   }, [filtered])
 
-  // Top 10 by reply rate for chart
+  // Line graph: emails sent by campaign creation month
+  const lineData = useMemo(() => {
+    if (!allData) return []
+    const monthMap: Record<string, { sent: number; replies: number; interested: number; bounced: number }> = {}
+    for (const c of allData.campaigns) {
+      if (!c.created_at) continue
+      const month = c.created_at.slice(0, 7) // YYYY-MM
+      if (!monthMap[month]) monthMap[month] = { sent: 0, replies: 0, interested: 0, bounced: 0 }
+      monthMap[month].sent += c.emails_sent
+      monthMap[month].replies += c.replied
+      monthMap[month].interested += c.interested
+      monthMap[month].bounced += c.bounced
+    }
+    return Object.entries(monthMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-12) // last 12 months
+      .map(([month, v]) => ({
+        month: new Date(month + '-15').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        'Emails Sent': v.sent,
+        Replies: v.replies,
+        Interested: v.interested,
+      }))
+  }, [allData])
+
+  // Top 10 bar chart
   const chartData = useMemo(() => {
     return filtered
       .filter(c => c.emails_sent > 100)
       .sort((a, b) => b.reply_rate - a.reply_rate)
       .slice(0, 10)
-      .map(c => ({ name: c.name.length > 25 ? c.name.slice(0, 25) + '...' : c.name, reply_rate: Math.round(c.reply_rate * 100) / 100, interested: c.interested }))
+      .map(c => ({ name: c.name.length > 30 ? c.name.slice(0, 30) + '...' : c.name, 'Reply %': Math.round(c.reply_rate * 100) / 100 }))
   }, [filtered])
 
   function toggleSort(key: SortKey) {
@@ -86,13 +105,7 @@ export function EmailIntelligencePage() {
     else { setSortKey(key); setSortDir('desc') }
   }
 
-  function SortHeader({ label, field }: { label: string; field: SortKey }) {
-    return (
-      <th className="px-3 py-2 text-right cursor-pointer hover:text-zinc-700 select-none" onClick={() => toggleSort(field)}>
-        {label} {sortKey === field ? (sortDir === 'desc' ? '\u2193' : '\u2191') : ''}
-      </th>
-    )
-  }
+  const sortArrow = (key: SortKey) => sortKey === key ? (sortDir === 'desc' ? ' \u2193' : ' \u2191') : ''
 
   if (loading) return <Spinner />
   if (error) return <p className="text-sm text-red-600">{error}</p>
@@ -103,7 +116,6 @@ export function EmailIntelligencePage() {
 
       {/* Controls */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        {/* Time range */}
         <div className="flex rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
           {([['7d', '7 Days'], ['30d', '30 Days'], ['90d', '90 Days'], ['all', 'All Time']] as [TimeRange, string][]).map(([val, label]) => (
             <button key={val} onClick={() => setTimeRange(val)}
@@ -113,7 +125,6 @@ export function EmailIntelligencePage() {
           ))}
         </div>
 
-        {/* Status filter */}
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 shadow-sm">
           <option value="all">All Statuses</option>
@@ -124,11 +135,13 @@ export function EmailIntelligencePage() {
           <option value="archived">Archived</option>
         </select>
 
-        {/* Search */}
         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search campaigns..."
           className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-yanne focus:outline-none w-56" />
 
-        <span className="text-xs text-zinc-400">{totals.count} campaigns</span>
+        <span className="text-xs text-zinc-400">
+          {totals.count} campaigns
+          {timeRange !== 'all' && ' (active in period)'}
+        </span>
       </div>
 
       {/* Metrics */}
@@ -141,23 +154,47 @@ export function EmailIntelligencePage() {
         <MetricCard label="Bounce Rate" value={`${totals.avgBounce.toFixed(2)}%`} />
       </div>
 
-      {/* Chart */}
-      {chartData.length > 0 && (
-        <div className="mb-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 10 by Reply Rate</h3>
-          <div className="h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 120 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={120} />
-                <Tooltip formatter={(v) => `${v}%`} />
-                <Bar dataKey="reply_rate" fill="#1A3C34" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {/* Charts row */}
+      <div className="mb-5 grid grid-cols-2 gap-4">
+        {/* Line graph — volume over time */}
+        {lineData.length > 1 && (
+          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-zinc-700 mb-3">Volume Over Time (by campaign launch month)</h3>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={lineData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="Emails Sent" stroke="#1A3C34" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Replies" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Interested" stroke="#22C55E" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Bar chart — top reply rates */}
+        {chartData.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 10 by Reply Rate</h3>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} layout="vertical" margin={{ left: 130 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={130} />
+                  <Tooltip formatter={(v) => `${v}%`} />
+                  <Bar dataKey="Reply %" fill="#1A3C34" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Campaign table */}
       <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
@@ -165,15 +202,13 @@ export function EmailIntelligencePage() {
           <table className="w-full">
             <thead className="bg-zinc-50 sticky top-0">
               <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                <th className="text-left px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('name')}>
-                  Campaign {sortKey === 'name' ? (sortDir === 'desc' ? '\u2193' : '\u2191') : ''}
-                </th>
+                <th className="text-left px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('name')}>Campaign{sortArrow('name')}</th>
                 <th className="text-left px-3 py-2">Status</th>
-                <SortHeader label="Sent" field="emails_sent" />
-                <SortHeader label="Replies" field="replied" />
-                <SortHeader label="Reply %" field="reply_rate" />
-                <SortHeader label="Interested" field="interested" />
-                <SortHeader label="Bounce %" field="bounce_rate" />
+                <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('emails_sent')}>Sent{sortArrow('emails_sent')}</th>
+                <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('replied')}>Replies{sortArrow('replied')}</th>
+                <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('reply_rate')}>Reply %{sortArrow('reply_rate')}</th>
+                <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('interested')}>Interested{sortArrow('interested')}</th>
+                <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('bounce_rate')}>Bounce %{sortArrow('bounce_rate')}</th>
                 <th className="text-right px-3 py-2">Leads</th>
               </tr>
             </thead>
@@ -205,7 +240,7 @@ export function EmailIntelligencePage() {
         </div>
       </div>
 
-      {/* Campaign detail panel */}
+      {/* Detail panel */}
       {selectedCampaign && (
         <div className="mt-4 rounded-lg border border-yanne/20 bg-yanne/5 p-5">
           <div className="flex items-center justify-between mb-3">
@@ -213,38 +248,14 @@ export function EmailIntelligencePage() {
             <button onClick={() => setSelectedCampaign(null)} className="text-xs text-zinc-400 hover:text-zinc-600">&times; Close</button>
           </div>
           <div className="grid grid-cols-4 gap-4">
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Emails Sent</div>
-              <div className="text-lg font-bold text-zinc-900">{selectedCampaign.emails_sent.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Unique Opens</div>
-              <div className="text-lg font-bold text-zinc-900">{selectedCampaign.unique_opens.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Replies</div>
-              <div className="text-lg font-bold text-zinc-900">{selectedCampaign.replied}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Interested</div>
-              <div className="text-lg font-bold text-emerald-600">{selectedCampaign.interested}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Reply Rate</div>
-              <div className={`text-lg font-bold ${rateColor(selectedCampaign.reply_rate)}`}>{selectedCampaign.reply_rate.toFixed(2)}%</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Bounce Rate</div>
-              <div className={`text-lg font-bold ${selectedCampaign.bounce_rate > 3 ? 'text-red-600' : 'text-zinc-900'}`}>{selectedCampaign.bounce_rate.toFixed(2)}%</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Total Leads</div>
-              <div className="text-lg font-bold text-zinc-900">{selectedCampaign.total_leads.toLocaleString()}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Completion</div>
-              <div className="text-lg font-bold text-zinc-900">{selectedCampaign.completion_percentage}%</div>
-            </div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Emails Sent</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.emails_sent.toLocaleString()}</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Replies</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.replied}</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Interested</div><div className="text-lg font-bold text-emerald-600">{selectedCampaign.interested}</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Reply Rate</div><div className={`text-lg font-bold ${rateColor(selectedCampaign.reply_rate)}`}>{selectedCampaign.reply_rate.toFixed(2)}%</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Bounce Rate</div><div className={`text-lg font-bold ${selectedCampaign.bounce_rate > 3 ? 'text-red-600' : 'text-zinc-900'}`}>{selectedCampaign.bounce_rate.toFixed(2)}%</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Total Leads</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.total_leads.toLocaleString()}</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Completion</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.completion_percentage}%</div></div>
+            <div><div className="text-[10px] text-zinc-500 uppercase">Unsubscribed</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.unsubscribed}</div></div>
           </div>
         </div>
       )}
