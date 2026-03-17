@@ -11,6 +11,11 @@ import { ChatPage } from './pages/ChatPage'
 import { ReportingPage } from './pages/ReportingPage'
 import { CEODashboard } from './pages/CEODashboard'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { EmailIntelligencePage } from './pages/EmailIntelligencePage'
+import { CopyLibraryPage } from './pages/CopyLibraryPage'
+import { SetterPerformancePage } from './pages/SetterPerformancePage'
+import { LeadQualityPage } from './pages/LeadQualityPage'
+import { ClientOverviewPage } from './pages/ClientOverviewPage'
 
 export default function App() {
   return (
@@ -27,17 +32,17 @@ export default function App() {
           <Route path="/chat" element={<ChatPage />} />
 
           {/* Clients */}
-          <Route path="/clients/overview" element={<PlaceholderPage title="Client Overview" source="Monday.com" previews={['Active client list', 'Client health scores', 'Revenue by client', 'Contract renewal dates']} />} />
+          <Route path="/clients/overview" element={<ClientOverviewPage />} />
           <Route path="/clients/campaigns" element={<PlaceholderPage title="Campaign Dashboards" source="Monday.com" previews={['Campaign timeline', 'Deliverables tracker', 'Client satisfaction scores']} />} />
           <Route path="/clients/onboarding" element={<PlaceholderPage title="Onboarding Tracker" source="Monday.com" previews={['Onboarding pipeline', 'Task completion rates', 'Time-to-launch metrics']} />} />
           <Route path="/clients/deals" element={<PlaceholderPage title="Client Deal Pipeline" source="Airtable" previews={['Deal stages', 'Expected close dates', 'Deal values']} />} />
           <Route path="/clients/reporting" element={<ReportingPage />} />
 
           {/* Outbound / GTM */}
-          <Route path="/outbound/email" element={<PlaceholderPage title="Email Intelligence" source="EmailBison" previews={['Open rates by campaign', 'Reply rates', 'Bounce analysis', 'Best send times']} />} />
-          <Route path="/outbound/copy" element={<PlaceholderPage title="Copy Library" source="EmailBison" previews={['Top-performing sequences', 'A/B test results', 'Sector performance']} />} />
-          <Route path="/outbound/setters" element={<PlaceholderPage title="Setter Performance" source="EmailBison" previews={['Meetings booked per setter', 'Response rates', 'Lead quality scores']} />} />
-          <Route path="/outbound/leads" element={<PlaceholderPage title="Lead Quality" source="EmailBison" previews={['Lead scoring distribution', 'Source quality', 'Conversion funnel']} />} />
+          <Route path="/outbound/email" element={<EmailIntelligencePage />} />
+          <Route path="/outbound/copy" element={<CopyLibraryPage />} />
+          <Route path="/outbound/setters" element={<SetterPerformancePage />} />
+          <Route path="/outbound/leads" element={<LeadQualityPage />} />
 
           {/* CEO Dashboard */}
           <Route path="/ceo" element={<CEODashboard />} />

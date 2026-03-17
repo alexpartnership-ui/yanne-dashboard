@@ -9,6 +9,8 @@ app.use(express.json())
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
+const EMAILBISON_KEY = process.env.EMAILBISON_API_KEY
+const AIRTABLE_KEY = process.env.AIRTABLE_API_KEY
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
@@ -18,6 +20,8 @@ if (!ANTHROPIC_KEY) {
   console.error('Missing ANTHROPIC_API_KEY')
   process.exit(1)
 }
+if (!EMAILBISON_KEY) console.warn('Missing EMAILBISON_API_KEY — outbound pages will not work')
+if (!AIRTABLE_KEY) console.warn('Missing AIRTABLE_API_KEY — client pages will not work')
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
 
@@ -35,6 +39,157 @@ async function supaQuery(table, params = '') {
   return { data: await res.json(), error: null }
 }
 
+// ─── EmailBison helper ──────────────────────────────────
+
+const BISON_BASE = 'https://send.yannecapital.com/api'
+
+async function bisonFetch(endpoint, params = {}) {
+  const url = new URL(`${BISON_BASE}${endpoint}`)
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
+  }
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${EMAILBISON_KEY}` },
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  return { data: await res.json(), error: null }
+}
+
+// ─── Airtable helper ────────────────────────────────────
+
+const AIRTABLE_BASE = 'https://api.airtable.com/v0'
+
+async function airtableFetch(baseId, tableId, params = {}) {
+  const url = new URL(`${AIRTABLE_BASE}/${baseId}/${tableId}`)
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
+  }
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${AIRTABLE_KEY}` },
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  return { data: await res.json(), error: null }
+}
+
+// ─── EmailBison API routes ──────────────────────────────
+
+// Campaign analytics (aggregated)
+app.get('/api/bison/campaigns', async (_req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch('/campaigns', { per_page: 100 })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Campaign stats for a specific campaign
+app.get('/api/bison/campaigns/:id/stats', async (req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch(`/campaigns/${req.params.id}/statistics`)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Lead analytics
+app.get('/api/bison/leads', async (req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch('/leads', {
+      per_page: req.query.per_page || 50,
+      page: req.query.page || 1,
+      lead_campaign_status: req.query.status,
+    })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Replies
+app.get('/api/bison/replies', async (req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch('/replies', {
+      per_page: req.query.per_page || 50,
+      page: req.query.page || 1,
+      folder: req.query.folder || 'inbox',
+      status: req.query.status,
+    })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Sender accounts (for deliverability)
+app.get('/api/bison/senders', async (_req, res) => {
+  if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  try {
+    const { data, error } = await bisonFetch('/sender-emails', { per_page: 100 })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Airtable API routes ────────────────────────────────
+
+// Inbox Manager — lead categories, setter performance
+app.get('/api/airtable/inbox', async (req, res) => {
+  if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
+  try {
+    const params = { pageSize: '100', view: req.query.view }
+    if (req.query.formula) params.filterByFormula = req.query.formula
+    if (req.query.sort) params['sort[0][field]'] = req.query.sort
+    if (req.query.direction) params['sort[0][direction]'] = req.query.direction
+    const { data, error } = await airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', params)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Deliverability — sender inboxes
+app.get('/api/airtable/senders', async (req, res) => {
+  if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
+  try {
+    const params = { pageSize: '100' }
+    if (req.query.formula) params.filterByFormula = req.query.formula
+    const { data, error } = await airtableFetch('app70IAsUKudzw5UI', 'tblIWs6XXXdBW4OdP', params)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Meetings
+app.get('/api/airtable/meetings', async (req, res) => {
+  if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
+  try {
+    const params = { pageSize: '100' }
+    if (req.query.formula) params.filterByFormula = req.query.formula
+    params['sort[0][field]'] = 'Start Time'
+    params['sort[0][direction]'] = 'desc'
+    const { data, error } = await airtableFetch('appzvZe6ctSCK79zj', 'tblsRnOQbDiAa64nD', params)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Intent detection + query routing ───────────────────
 
 const REPS = ['Jake', 'Stanley', 'Thomas', 'Tahawar']
@@ -43,10 +198,8 @@ function detectIntent(question) {
   const q = question.toLowerCase()
   const intents = []
 
-  // Detect rep names
   const mentionedReps = REPS.filter(r => q.includes(r.toLowerCase()))
 
-  // Date ranges
   let dateFilter = ''
   if (q.includes('today')) {
     dateFilter = `scored_at=gte.${new Date().toISOString().split('T')[0]}`
@@ -58,40 +211,33 @@ function detectIntent(question) {
     dateFilter = `scored_at=gte.${d.toISOString()}`
   }
 
-  // Rep-specific questions
   if (mentionedReps.length > 0 || q.includes('rep') || q.includes('who') || q.includes('compare')) {
     intents.push('rep_performance')
     intents.push('rep_calls')
   }
 
-  // Deal questions
   if (q.includes('deal') || q.includes('pipeline') || q.includes('stuck') || q.includes('stage') || q.includes('kanban')) {
     intents.push('deals')
   }
 
-  // Grade/score questions
   if (q.match(/\b[abcdf]\b/i) || q.includes('grade') || q.includes('score') || q.includes('fail') || q.includes('best') || q.includes('worst')) {
     intents.push('rep_calls')
   }
 
-  // Coaching questions
   if (q.includes('coaching') || q.includes('weakness') || q.includes('improve') || q.includes('pattern') || q.includes('issue') || q.includes('common')) {
     intents.push('rep_calls')
     intents.push('rep_performance')
   }
 
-  // Flag questions
   if (q.includes('flag') || q.includes('inflation') || q.includes('dead end')) {
     intents.push('flagged_calls')
   }
 
-  // Summary / general
   if (q.includes('summary') || q.includes('overview') || q.includes('how did') || q.includes('today')) {
     intents.push('rep_calls')
     intents.push('rep_performance')
   }
 
-  // Default: pull everything relevant
   if (intents.length === 0) {
     intents.push('rep_calls', 'rep_performance', 'deals')
   }
@@ -178,10 +324,8 @@ app.post('/api/chat', async (req, res) => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
     if (!lastUserMsg) return res.status(400).json({ error: 'no user message' })
 
-    // Gather relevant data
     const context = await gatherContext(lastUserMsg.content)
 
-    // Build messages with context injected
     const contextStr = JSON.stringify(context, null, 2)
     const enrichedMessages = [
       ...messages.slice(0, -1),
@@ -191,7 +335,6 @@ app.post('/api/chat', async (req, res) => {
       },
     ]
 
-    // Stream response
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
