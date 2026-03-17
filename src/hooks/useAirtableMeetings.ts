@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 interface Meeting {
   id: string
@@ -26,7 +27,7 @@ export function useAirtableMeetings() {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch('/api/airtable/meetings')
+        const res = await apiFetch('/api/airtable/meetings')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch meetings')

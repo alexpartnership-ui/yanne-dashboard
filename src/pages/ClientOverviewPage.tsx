@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { apiFetch } from '../hooks/useAuth'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 
@@ -28,8 +29,8 @@ export function ClientOverviewPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/monday/onboarding-form').then(r => r.ok ? r.json() : { clients: [] }),
-      fetch('/api/bison/workspaces').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/monday/onboarding-form').then(r => r.ok ? r.json() : { clients: [] }),
+      apiFetch('/api/bison/workspaces').then(r => r.ok ? r.json() : []),
     ]).then(([mondayData, bisonData]) => {
       setClients(mondayData.clients || [])
       const ws = Array.isArray(bisonData) ? bisonData : bisonData.data || bisonData.workspaces || []

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from './useAuth'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -20,7 +20,7 @@ interface ScorecardMetric {
   rawTarget: number
   status: 'green' | 'red' | 'yellow'
   trend: 'up' | 'down' | 'flat'
-  inverted?: boolean // lower is better (bounce, stalled, etc)
+  inverted?: boolean
 }
 
 interface SetterRow {
@@ -68,18 +68,13 @@ interface WeeklyComparison {
 }
 
 export interface CEOScorecardData {
-  // North star
   revenueCollected: number
   revenueTarget: number
   retainers: number
   successFees: number
   outstanding: number
   monthlyTrend: { month: string; amount: number }[]
-
-  // Funnel
   funnel: FunnelStage[]
-
-  // Department cards
   outbound: ScorecardMetric[]
   setters: ScorecardMetric[]
   setterBreakdown: SetterRow[]
@@ -90,13 +85,9 @@ export interface CEOScorecardData {
   fulfillment: ScorecardMetric[]
   clientStatus: ClientRow[]
   finance: ScorecardMetric[]
-
-  // Bottom
   bottleneck: Bottleneck | null
   alerts: Alert[]
   weeklyComparison: WeeklyComparison[]
-
-  // Meta
   weekRange: string
   lastRefreshed: string
 }
@@ -125,7 +116,7 @@ function metric(name: string, owner: string, target: string, actual: string, raw
   return {
     name, owner, target, actual, rawActual, rawTarget,
     status: met ? 'green' : 'red',
-    trend: 'flat', // Will be overridden when we have snapshot history
+    trend: 'flat',
     inverted,
   }
 }
@@ -139,42 +130,30 @@ export function useCEOScorecard() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      // Parallel fetch ALL data sources
-      const [
-        bisonRes, inboxRes, meetingsRes, sendersRes,
-        mondayRes, hubspotRes,
-        callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
-      ] = await Promise.all([
-        fetch('/api/bison/campaigns').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/airtable/inbox').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/slack/meetings-booked?days=30').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/airtable/senders').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/monday/projects').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/hubspot/deals').then(r => r.ok ? r.json() : null).catch(() => null),
-        supabase.from('call_logs').select('rep, score_percentage, call_type, coaching_priority, pipeline_inflation, qualification_result, date').gte('scored_at', daysAgo(7)),
-        supabase.from('call_logs').select('rep, score_percentage, call_type, date').gte('scored_at', daysAgo(30)),
-        supabase.from('deals_with_calls').select('*'),
-        supabase.from('rep_performance').select('*'),
-        supabase.from('call_logs').select('rep, score_percentage, call_type, date, coaching_priority').gte('scored_at', daysAgo(14)),
-      ])
+      // Use batch endpoint — single request instead of 11
+      const res = await apiFetch('/api/scorecard/data')
+      if (!res.ok) throw new Error('Failed to fetch scorecard data')
+      const raw = await res.json()
+
+      // Also fetch meetings from Slack endpoint
+      const meetingsRes = await apiFetch('/api/slack/meetings-booked?days=30').then(r => r.ok ? r.json() : null).catch(() => null)
 
       // ── Parse sources ──────────────────────────────
-      const campaigns = bisonRes?.data || bisonRes?.campaigns || bisonRes || []
+      const campaigns = raw.bison?.data || (Array.isArray(raw.bison) ? raw.bison : [])
       const campaignList = Array.isArray(campaigns) ? campaigns : []
-      const inboxRecords = inboxRes?.records || []
+      const inboxRecords = raw.inbox?.records || []
       const slackMeetings = meetingsRes || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
-      const senderRecords = sendersRes?.records || []
-      const mondayBoards = mondayRes?.boards || []
-      const hubspotDeals = hubspotRes?.results || []
-      const weekCalls = callsWeekRes.data || []
-      void callsMonthRes // reserved for monthly trends
-      const deals = (dealsRes.data || []) as Array<Record<string, unknown>>
-      const reps = (repsRes.data || []) as Array<Record<string, unknown>>
-      const twoWeekCalls = allCallsRes.data || []
+      const senderRecords = raw.senders?.records || []
+      const mondayBoards = raw.monday?.boards || []
+      const hubspotDeals = raw.hubspot?.results || []
+      const weekCalls = raw.callsWeek || []
+      const deals = (raw.deals || []) as Array<Record<string, unknown>>
+      const reps = (raw.reps || []) as Array<Record<string, unknown>>
+      const twoWeekCalls = raw.allCalls || []
 
       // ── EmailBison aggregates ──────────────────────
       let totalSent = 0, totalReplies = 0, totalBounced = 0, activeCampaigns = 0
-      let openRateSum = 0, replyRateSum = 0, bounceRateSum = 0, rateCount = 0
+      let replyRateSum = 0, bounceRateSum = 0, rateCount = 0
       for (const c of campaignList) {
         if (c.status === 'active' || c.status === 'launching') activeCampaigns++
         const sent = Number(c.emails_sent) || 0
@@ -189,7 +168,6 @@ export function useCEOScorecard() {
           rateCount++
         }
       }
-      void openRateSum
       const avgReplyRate = rateCount > 0 ? replyRateSum / rateCount : 0
       const avgBounceRate = rateCount > 0 ? bounceRateSum / rateCount : 0
 
@@ -238,10 +216,10 @@ export function useCEOScorecard() {
       const proposalDeals = activeDeals.filter(d => d.current_stage === 'Call 3' || d.current_stage === 'Call 4')
 
       // Rep leaderboard
-      const repCallMap: Record<string, { calls: number; totalScore: number; dealsAdvanced: number }> = {}
+      const repCallMap: Record<string, { calls: number; totalScore: number }> = {}
       for (const c of weekCalls) {
         const rep = (c as { rep: string }).rep
-        if (!repCallMap[rep]) repCallMap[rep] = { calls: 0, totalScore: 0, dealsAdvanced: 0 }
+        if (!repCallMap[rep]) repCallMap[rep] = { calls: 0, totalScore: 0 }
         repCallMap[rep].calls++
         repCallMap[rep].totalScore += (c as { score_percentage: number }).score_percentage
       }
@@ -284,7 +262,7 @@ export function useCEOScorecard() {
       }
 
       // ── Monday.com clients ─────────────────────────
-      const clientStatus: ClientRow[] = mondayBoards.map((b: { name: string; items_page?: { items: Array<{ column_values: Array<{ text: string }> }> } }) => ({
+      const clientStatus: ClientRow[] = mondayBoards.map((b: { name: string }) => ({
         name: b.name.replace('Project ', ''),
         status: 'Active',
         campaigns: 0,
@@ -314,7 +292,6 @@ export function useCEOScorecard() {
         { label: 'Cash', value: revenueCollected, target: 833000, conversionRate: null, conversionTarget: null },
       ]
 
-      // Outbound metrics
       const outbound: ScorecardMetric[] = [
         metric('Emails Sent / Week', 'Outreachify', '350K', `${(totalSent / 1000).toFixed(0)}K`, totalSent, 350000),
         metric('Active Campaigns', 'Outreachify', '30+', String(activeCampaigns), activeCampaigns, 30),
@@ -325,7 +302,6 @@ export function useCEOScorecard() {
         metric('Burnt Senders', 'Outreachify', '<10', String(burntSenders), burntSenders, 10, true),
       ]
 
-      // Setter metrics
       const setters: ScorecardMetric[] = [
         metric('Unactioned Replies', 'Alex', '<10', String(totalUnactioned), totalUnactioned, 10, true),
         metric('Interested → Meeting %', 'Alex', '60%', `${interestedToMeeting}%`, interestedToMeeting, 60),
@@ -343,7 +319,6 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
-      // Sales metrics
       const sales: ScorecardMetric[] = [
         metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40),
         metric('Team Avg Score', 'VACANT', '70%', `${weekAvgScore}%`, weekAvgScore, 70),
@@ -356,12 +331,10 @@ export function useCEOScorecard() {
         metric('Pipeline Inflation', 'VACANT', '0', String(inflationCount), inflationCount, 0, true),
       ]
 
-      // Fulfillment metrics
       const fulfillment: ScorecardMetric[] = [
         metric('Active Clients', 'Philip / Mukul', '10+', String(clientStatus.length), clientStatus.length, 10),
       ]
 
-      // Finance metrics
       const finance: ScorecardMetric[] = [
         metric('Cash Collected MTD', 'Alex', '$833K', `$${(revenueCollected / 1000).toFixed(0)}K`, revenueCollected, 833000),
         metric('Revenue Per Employee', 'Alex', '$55K/mo', `$${(revenueCollected / 45000).toFixed(0)}K`, revenueCollected / 45, 55000),
@@ -388,26 +361,20 @@ export function useCEOScorecard() {
 
       // ── Alerts ─────────────────────────────────────
       const alerts: Alert[] = []
-
-      // Critical
       alerts.push({ level: 'critical', message: 'Sales Manager role VACANT — no one enforcing coaching directives' })
       for (const [name, s] of Object.entries(setterMap)) {
         if (s.unactioned > 10) alerts.push({ level: 'critical', message: `${name}: ${s.unactioned} unactioned replies`, link: '/outbound/setters' })
       }
       if (inflationCount > 5) alerts.push({ level: 'critical', message: `${inflationCount} deals flagged for pipeline inflation`, link: '/deals' })
-
-      // Warning
       if (avgReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${avgReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
       if (weekAvgScore < 70) alerts.push({ level: 'warning', message: `Team avg call score ${weekAvgScore}% (target 70%)`, link: '/reps' })
       if (stalledDeals.length > 3) alerts.push({ level: 'warning', message: `${stalledDeals.length} deals stalled 14+ days`, link: '/deals' })
-
-      // Wins
       if (weekCallCount > 30) alerts.push({ level: 'win', message: `${weekCallCount} calls scored this week` })
       for (const r of repLeaderboard) {
         if (r.avgScore >= 70) { alerts.push({ level: 'win', message: `${r.name} averaging ${r.avgScore}% this week` }); break }
       }
 
-      // ── Weekly comparison (this week vs last week from 2-week data) ──
+      // ── Weekly comparison ──────────────────────────
       const thisWeekCalls = twoWeekCalls.filter((c: { date: string }) => c.date && new Date(c.date) >= new Date(daysAgo(7)))
       const lastWeekCalls = twoWeekCalls.filter((c: { date: string }) => {
         if (!c.date) return false
@@ -461,7 +428,6 @@ export function useCEOScorecard() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(refresh, 5 * 60 * 1000)
     return () => clearInterval(interval)

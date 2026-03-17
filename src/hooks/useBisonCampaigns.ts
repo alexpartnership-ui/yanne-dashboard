@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 export interface BisonCampaign {
   id: number
@@ -15,7 +16,6 @@ export interface BisonCampaign {
   unique_opens: number
   unsubscribed: number
   completion_percentage: number
-  // Computed
   reply_rate: number
   bounce_rate: number
 }
@@ -42,7 +42,7 @@ export function useBisonCampaigns() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const res = await globalThis.fetch('/api/bison/campaigns')
+        const res = await apiFetch('/api/bison/campaigns')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch campaigns')
@@ -52,7 +52,6 @@ export function useBisonCampaigns() {
         const json = await res.json()
         const raw = Array.isArray(json) ? json : json.data || json.campaigns || []
 
-        // Map flat Bison fields + compute rates
         const campaigns: BisonCampaign[] = raw.map((c: Record<string, unknown>) => {
           const sent = Number(c.emails_sent) || 0
           const replied = Number(c.replied) || Number(c.unique_replies) || 0

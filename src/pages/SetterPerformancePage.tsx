@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
@@ -34,7 +35,7 @@ export function SetterPerformancePage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/setter-checkins?days=30')
+    apiFetch('/api/setter-checkins?days=30')
       .then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.error) }))
       .then(setData)
       .catch(e => setError(e.message))

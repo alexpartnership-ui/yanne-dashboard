@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { useCEOScorecard, type CEOScorecardData } from '../hooks/useCEOScorecard'
 import { Spinner } from '../components/Spinner'
 
@@ -11,12 +12,12 @@ function TargetsModal({ open, onClose }: { open: boolean; onClose: () => void })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open) fetch('/api/scorecard/targets').then(r => r.json()).then(setTargets)
+    if (open) apiFetch('/api/scorecard/targets').then(r => r.json()).then(setTargets)
   }, [open])
 
   async function save() {
     setSaving(true)
-    await fetch('/api/scorecard/targets', {
+    await apiFetch('/api/scorecard/targets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(targets),

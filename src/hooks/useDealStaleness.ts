@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import type { DealWithCalls } from '../types/database'
+import { apiFetch } from './useAuth'
 
 export type StalenessLevel = 'none' | 'warning' | 'danger'
 
@@ -22,7 +22,6 @@ export function useDealStaleness(deals: DealWithCalls[]) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Compute from deal updated_at — no extra Supabase call needed
     const map = new Map<string, DealStaleness>()
     for (const deal of deals) {
       map.set(deal.deal_id, computeStaleness(deal))
@@ -31,26 +30,25 @@ export function useDealStaleness(deals: DealWithCalls[]) {
     setLoading(false)
   }, [deals])
 
-  // Also check if we can get more precise dates from call_logs
   useEffect(() => {
     if (deals.length === 0) return
     const callIds = deals.flatMap(d => [d.call_1_record_id, d.call_2_record_id, d.call_3_record_id, d.call_4_record_id].filter(Boolean))
     if (callIds.length === 0) return
 
-    supabase
-      .from('call_logs')
-      .select('id, date')
-      .in('id', callIds as string[])
-      .then(({ data: rows }) => {
+    apiFetch('/api/deal-staleness', {
+      method: 'POST',
+      body: JSON.stringify({ callIds }),
+    })
+      .then(res => res.ok ? res.json() : [])
+      .then((rows: { id: string; date: string }[]) => {
         if (!rows || rows.length === 0) return
         const callDates = new Map<string, string>()
         for (const row of rows) {
-          if (row.date) callDates.set(row.id as string, row.date as string)
+          if (row.date) callDates.set(row.id, row.date)
         }
 
         const map = new Map<string, DealStaleness>()
         for (const deal of deals) {
-          // Find most recent call date for this deal
           const ids = [deal.call_4_record_id, deal.call_3_record_id, deal.call_2_record_id, deal.call_1_record_id]
           let latestDate: Date | null = null
           for (const id of ids) {
@@ -71,6 +69,7 @@ export function useDealStaleness(deals: DealWithCalls[]) {
         }
         setStalenessMap(map)
       })
+      .catch(() => {})
   }, [deals])
 
   return { stalenessMap, loading }

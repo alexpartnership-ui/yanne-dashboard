@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 export interface MondayProject {
   boardId: string
@@ -17,7 +18,7 @@ export function useMondayProjects() {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch('/api/monday/projects')
+        const res = await apiFetch('/api/monday/projects')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch projects')

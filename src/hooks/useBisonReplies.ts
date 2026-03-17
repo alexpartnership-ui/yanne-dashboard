@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 interface BisonReply {
   id: number
@@ -31,7 +32,7 @@ export function useBisonReplies() {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch('/api/bison/replies?per_page=100')
+        const res = await apiFetch('/api/bison/replies?per_page=100')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch replies')

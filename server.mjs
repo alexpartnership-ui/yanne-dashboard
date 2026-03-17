@@ -4,12 +4,245 @@ import Anthropic from '@anthropic-ai/sdk'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
+import rateLimit from 'express-rate-limit'
+import crypto from 'crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const app = express()
-app.use(cors())
-app.use(express.json())
+
+// ─── Phase 1.2: CORS — lock to dashboard origin ────────
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || 'https://yanneceodashboard.com'
+app.use(cors({
+  origin: process.env.NODE_ENV === 'development' ? true : ALLOWED_ORIGIN,
+  credentials: true,
+}))
+
+// ─── Phase 1.4: Payload size limit ─────────────────────
+app.use(express.json({ limit: '100kb' }))
+
+// ─── Phase 1.3: Rate limiting ──────────────────────────
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, try again later' },
+})
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many login attempts, try again later' },
+})
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Chat rate limit reached, try again later' },
+})
+app.use('/api/', globalLimiter)
+
+// ─── Phase 1.1: JWT Auth ───────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex')
+const JWT_EXPIRES = '24h'
+
+// ─── Phase 1.8: Client API key encryption ──────────────
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex')
+
+function encrypt(text) {
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'hex').subarray(0, 32), iv)
+  let encrypted = cipher.update(text, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+  return iv.toString('hex') + ':' + encrypted
+}
+
+function decrypt(text) {
+  const [ivHex, encrypted] = text.split(':')
+  if (!ivHex || !encrypted) return text // Not encrypted (legacy)
+  try {
+    const iv = Buffer.from(ivHex, 'hex')
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY, 'hex').subarray(0, 32), iv)
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
+    return decrypted
+  } catch {
+    return text // Not encrypted (legacy)
+  }
+}
+
+// ─── Phase 2: User store ───────────────────────────────
+const USERS_FILE = join(__dirname, 'users.json')
+
+function loadUsers() {
+  try {
+    if (existsSync(USERS_FILE)) return JSON.parse(readFileSync(USERS_FILE, 'utf-8'))
+  } catch { /* use defaults */ }
+  // Default admin user
+  const defaultHash = bcrypt.hashSync('REDACTED_PASSWORD', 10)
+  const defaults = [
+    { id: '1', email: 'alex@yannetr.net', name: 'Alex Ozdemir', role: 'admin', password_hash: defaultHash, created_at: new Date().toISOString() },
+  ]
+  writeFileSync(USERS_FILE, JSON.stringify(defaults, null, 2))
+  return defaults
+}
+
+function saveUsers(users) {
+  writeFileSync(USERS_FILE, JSON.stringify(users, null, 2))
+}
+
+// ─── Phase 5.1: Audit logging ──────────────────────────
+const AUDIT_FILE = join(__dirname, 'audit_log.json')
+
+function loadAuditLog() {
+  try {
+    if (existsSync(AUDIT_FILE)) return JSON.parse(readFileSync(AUDIT_FILE, 'utf-8'))
+  } catch { /* empty */ }
+  return []
+}
+
+function auditLog(userId, action, resource, details = {}, ip = '') {
+  const logs = loadAuditLog()
+  logs.push({ id: Date.now().toString(), user_id: userId, action, resource, details, ip, created_at: new Date().toISOString() })
+  // Keep last 10000 entries
+  if (logs.length > 10000) logs.splice(0, logs.length - 10000)
+  writeFileSync(AUDIT_FILE, JSON.stringify(logs, null, 2))
+}
+
+// ─── JWT middleware ─────────────────────────────────────
+function verifyToken(req, res, next) {
+  // Check cookie first, then Authorization header
+  const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '')
+  if (!token) return res.status(401).json({ error: 'Authentication required' })
+  try {
+    req.user = jwt.verify(token, JWT_SECRET)
+    next()
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' })
+  }
+}
+
+// Role-based access
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' })
+    }
+    next()
+  }
+}
+
+// Cookie parser (simple — just reads token cookie)
+app.use((req, _res, next) => {
+  req.cookies = {}
+  const cookieHeader = req.headers.cookie
+  if (cookieHeader) {
+    for (const pair of cookieHeader.split(';')) {
+      const [name, ...rest] = pair.trim().split('=')
+      req.cookies[name] = rest.join('=')
+    }
+  }
+  next()
+})
+
+// ─── Auth routes (no JWT required) ─────────────────────
+
+app.post('/api/auth/login', loginLimiter, (req, res) => {
+  const { email, password } = req.body
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
+
+  const users = loadUsers()
+  const user = users.find(u => u.email === email)
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    auditLog(user?.id || 'unknown', 'login_failed', 'auth', { email }, req.ip)
+    return res.status(401).json({ error: 'Invalid credentials' })
+  }
+
+  const token = jwt.sign(
+    { id: user.id, email: user.email, name: user.name, role: user.role },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES }
+  )
+
+  auditLog(user.id, 'login', 'auth', { email: user.email }, req.ip)
+
+  res.setHeader('Set-Cookie', `token=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400${process.env.NODE_ENV !== 'development' ? '; Secure' : ''}`)
+  res.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    token,
+  })
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  const token = req.cookies?.token
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET)
+      auditLog(decoded.id, 'logout', 'auth', {}, req.ip)
+    } catch { /* expired token, fine */ }
+  }
+  res.setHeader('Set-Cookie', `token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`)
+  res.json({ ok: true })
+})
+
+app.get('/api/auth/me', verifyToken, (req, res) => {
+  res.json({ user: req.user })
+})
+
+// ─── Phase 2.3: User management (admin only) ──────────
+
+app.get('/api/users', verifyToken, requireRole('admin'), (_req, res) => {
+  const users = loadUsers()
+  res.json(users.map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role, created_at: u.created_at })))
+})
+
+app.post('/api/users', verifyToken, requireRole('admin'), (req, res) => {
+  const { email, name, role, password } = req.body
+  if (!email || !name || !password) return res.status(400).json({ error: 'email, name, and password required' })
+  if (!['admin', 'manager', 'rep', 'finance'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
+
+  const users = loadUsers()
+  if (users.find(u => u.email === email)) return res.status(409).json({ error: 'User already exists' })
+
+  const newUser = {
+    id: Date.now().toString(),
+    email,
+    name,
+    role,
+    password_hash: bcrypt.hashSync(password, 10),
+    created_at: new Date().toISOString(),
+  }
+  users.push(newUser)
+  saveUsers(users)
+  auditLog(req.user.id, 'create_user', 'users', { email, role }, req.ip)
+  res.json({ id: newUser.id, email, name, role })
+})
+
+app.delete('/api/users/:id', verifyToken, requireRole('admin'), (req, res) => {
+  if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete yourself' })
+  let users = loadUsers()
+  const target = users.find(u => u.id === req.params.id)
+  if (!target) return res.status(404).json({ error: 'User not found' })
+  users = users.filter(u => u.id !== req.params.id)
+  saveUsers(users)
+  auditLog(req.user.id, 'delete_user', 'users', { email: target.email }, req.ip)
+  res.json({ ok: true })
+})
+
+// ─── Phase 5.1: Audit log endpoint ─────────────────────
+
+app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
+  const logs = loadAuditLog()
+  const limit = parseInt(req.query.limit) || 100
+  res.json(logs.slice(-limit).reverse())
+})
+
+// Health + public routes (no auth)
+app.get('/api/health', (_, res) => res.json({ ok: true }))
+
+// ─── Protect all remaining /api/* routes ────────────────
+app.use('/api/', verifyToken)
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
@@ -35,6 +268,26 @@ if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages 
 if (!SLACK_TOKEN) console.warn('Missing SLACK_BOT_TOKEN — Slack reporting data will not work')
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
+
+// ─── Phase 3.2: Server-side TTL cache ──────────────────
+const cache = new Map()
+
+function cached(key, ttlMs, fetcher) {
+  return async (req, res) => {
+    const cacheKey = typeof key === 'function' ? key(req) : key
+    const entry = cache.get(cacheKey)
+    if (entry && Date.now() - entry.time < ttlMs) {
+      return res.json(entry.data)
+    }
+    try {
+      const data = await fetcher(req)
+      cache.set(cacheKey, { data, time: Date.now() })
+      res.json(data)
+    } catch (err) {
+      res.status(500).json({ error: err.message })
+    }
+  }
+}
 
 // ─── Supabase helper ────────────────────────────────────
 
@@ -81,6 +334,220 @@ async function airtableFetch(baseId, tableId, params = {}) {
   if (!res.ok) return { error: await res.text(), data: null }
   return { data: await res.json(), error: null }
 }
+
+// ─── Phase 1.7: Supabase proxy routes ──────────────────
+
+// Call logs with filters
+app.get('/api/calls', async (req, res) => {
+  try {
+    const parts = ['select=*', 'order=scored_at.desc', 'limit=1000']
+    if (req.query.rep) parts.push(`rep=eq.${req.query.rep}`)
+    if (req.query.call_type) parts.push(`call_type=eq.${req.query.call_type}`)
+    if (req.query.grade) parts.push(`grade=eq.${req.query.grade}`)
+    if (req.query.scored_after) parts.push(`scored_at=gte.${req.query.scored_after}`)
+    const { data, error } = await supaQuery('call_logs', parts.join('&'))
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Single call detail
+app.get('/api/calls/:id', async (req, res) => {
+  try {
+    const { data, error } = await supaQuery('call_logs', `id=eq.${req.params.id}&limit=1`)
+    if (error) return res.status(500).json({ error })
+    if (!data || data.length === 0) return res.status(404).json({ error: 'Call not found' })
+    res.json(data[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Deals
+app.get('/api/deals', async (_req, res) => {
+  try {
+    const { data, error } = await supaQuery('deals_with_calls', 'select=*&order=updated_at.desc')
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Rep performance
+app.get('/api/reps', async (_req, res) => {
+  try {
+    const { data, error } = await supaQuery('rep_performance', 'select=*&order=rep')
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Dashboard stats (aggregated — call logs + HubSpot)
+app.get('/api/dashboard-stats', async (_req, res) => {
+  try {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const floor = thirtyDaysAgo.toISOString()
+
+    const [callsResult, hubspotRes] = await Promise.all([
+      supaQuery('call_logs', `select=rep,date,score_percentage,grade,coaching_priority&scored_at=gte.${floor}&order=scored_at.desc`),
+      HUBSPOT_KEY ? hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+    ])
+
+    const calls = callsResult.data || []
+    const hubspotDeals = hubspotRes?.data?.results || []
+    const ACTIVE_STAGES = ['appointmentscheduled', 'qualifiedtobuy', 'presentationscheduled', 'decisionmakerboughtin', '1066193534', 'closedwon']
+    const activeDeals = hubspotDeals.filter(d => ACTIVE_STAGES.includes(d.properties?.dealstage || '')).length
+
+    const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+    for (const c of calls) {
+      if (!c.grade) continue
+      const letter = c.grade.charAt(0)
+      if (letter in gradeDistribution) gradeDistribution[letter]++
+    }
+
+    const avgScore = calls.length ? Math.round(calls.reduce((s, c) => s + c.score_percentage, 0) / calls.length) : 0
+
+    // Calls per day (last 14d)
+    const fourteenDaysAgo = new Date()
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+    const recentCalls = calls.filter(c => c.date && new Date(c.date) >= fourteenDaysAgo)
+    const dayRepMap = {}
+    for (const c of recentCalls) {
+      if (!c.date) continue
+      const d = c.date.slice(0, 10)
+      if (!dayRepMap[d]) dayRepMap[d] = {}
+      dayRepMap[d][c.rep] = (dayRepMap[d][c.rep] || 0) + 1
+    }
+    const callsPerDay = []
+    for (const [date, reps] of Object.entries(dayRepMap)) {
+      for (const [rep, count] of Object.entries(reps)) {
+        callsPerDay.push({ date, rep, count })
+      }
+    }
+    callsPerDay.sort((a, b) => a.date.localeCompare(b.date))
+
+    // Top coaching themes (7d)
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const weekCalls = calls.filter(c => c.date && new Date(c.date) >= sevenDaysAgo)
+    const themeFreq = {}
+    for (const c of weekCalls) {
+      if (c.coaching_priority) themeFreq[c.coaching_priority] = (themeFreq[c.coaching_priority] || 0) + 1
+    }
+    const coachingThemes = Object.entries(themeFreq).map(([theme, count]) => ({ theme, count })).sort((a, b) => b.count - a.count).slice(0, 5)
+
+    // Rep quick stats
+    const repMap = {}
+    for (const c of calls) {
+      if (!repMap[c.rep]) repMap[c.rep] = { calls: 0, totalScore: 0 }
+      repMap[c.rep].calls++
+      repMap[c.rep].totalScore += c.score_percentage
+    }
+    const repQuickStats = Object.entries(repMap).map(([rep, s]) => ({ rep, calls: s.calls, avg: Math.round(s.totalScore / s.calls) })).sort((a, b) => b.avg - a.avg)
+
+    res.json({ totalCalls: calls.length, avgScore, activeDeals, gradeDistribution, callsPerDay, coachingThemes, repQuickStats })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// CEO stats
+app.get('/api/ceo-stats', async (_req, res) => {
+  try {
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const floor = sevenDaysAgo.toISOString()
+
+    const [callsRes, dealsRes, repsRes] = await Promise.all([
+      supaQuery('call_logs', `select=rep,score_percentage,pipeline_inflation&scored_at=gte.${floor}`),
+      supaQuery('deals_with_calls', 'select=deal_id,deal_status,updated_at,pipeline_inflation,rep_name'),
+      supaQuery('rep_performance', 'select=rep,call_1_rolling_avg,call_1_trend,call_2_rolling_avg,call_2_trend,call_3_rolling_avg,call_3_trend'),
+    ])
+
+    const calls = callsRes.data || []
+    const deals = dealsRes.data || []
+    const reps = repsRes.data || []
+
+    const callsThisWeek = calls.length
+    const avgScore = calls.length ? Math.round(calls.reduce((s, c) => s + c.score_percentage, 0) / calls.length) : 0
+
+    const repScores = {}
+    for (const c of calls) {
+      if (!repScores[c.rep]) repScores[c.rep] = { total: 0, count: 0 }
+      repScores[c.rep].total += c.score_percentage
+      repScores[c.rep].count++
+    }
+    let bestRep = null
+    for (const [name, s] of Object.entries(repScores)) {
+      const avg = Math.round(s.total / s.count)
+      if (!bestRep || avg > bestRep.avg) bestRep = { name, avg }
+    }
+
+    const activeDeals = deals.filter(d => d.deal_status === 'active').length
+    const signedDeals = deals.filter(d => d.deal_status === 'signed').length
+    const closeRate = deals.length > 0 ? Math.round((signedDeals / deals.length) * 100) : 0
+
+    const alerts = []
+    const inflatedDeals = deals.filter(d => d.pipeline_inflation && d.deal_status === 'active')
+    if (inflatedDeals.length > 0) alerts.push({ type: 'warning', message: `${inflatedDeals.length} active deal${inflatedDeals.length > 1 ? 's' : ''} flagged for pipeline inflation` })
+
+    const now = Date.now()
+    const stalledDeals = deals.filter(d => {
+      if (d.deal_status !== 'active' || !d.updated_at) return false
+      return Math.floor((now - new Date(d.updated_at).getTime()) / 86400000) >= 14
+    })
+    if (stalledDeals.length > 0) alerts.push({ type: 'danger', message: `${stalledDeals.length} deal${stalledDeals.length > 1 ? 's' : ''} stalled 14+ days` })
+
+    for (const rep of reps) {
+      const declining = [rep.call_1_trend, rep.call_2_trend, rep.call_3_trend].filter(t => t === 'Declining')
+      if (declining.length >= 2) alerts.push({ type: 'warning', message: `${rep.rep} declining in ${declining.length} call types` })
+    }
+
+    res.json({ callsThisWeek, avgScore, bestRep, activeDeals, closeRate, alerts })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Rep call history (sparklines)
+app.get('/api/rep-call-history', async (_req, res) => {
+  try {
+    const { data, error } = await supaQuery('call_logs', 'select=rep,date,score_percentage,call_type&order=scored_at.desc&limit=200')
+    if (error) return res.status(500).json({ error })
+    const rows = data || []
+    const grouped = {}
+    for (const row of rows) {
+      if (!grouped[row.rep]) grouped[row.rep] = []
+      if (grouped[row.rep].length < 30) {
+        grouped[row.rep].push({ date: row.date ?? '', score: row.score_percentage ?? 0, call_type: row.call_type ?? '' })
+      }
+    }
+    for (const rep of Object.keys(grouped)) grouped[rep].reverse()
+    res.json(grouped)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Deal staleness (call dates)
+app.post('/api/deal-staleness', async (req, res) => {
+  try {
+    const { callIds } = req.body
+    if (!callIds || !Array.isArray(callIds) || callIds.length === 0) return res.json([])
+    const ids = callIds.slice(0, 100).map(id => `"${id}"`).join(',')
+    const { data, error } = await supaQuery('call_logs', `select=id,date&id=in.(${ids})`)
+    if (error) return res.status(500).json({ error })
+    res.json(data || [])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ─── EmailBison API routes ──────────────────────────────
 
@@ -456,11 +923,14 @@ function saveClients(clients) {
 app.get('/api/clients', (_req, res) => {
   const clients = loadClients()
   // Don't expose full API keys to frontend — mask them
-  const safe = clients.map(c => ({
-    ...c,
-    apiKey: c.apiKey ? `${c.apiKey.slice(0, 6)}...${c.apiKey.slice(-4)}` : '',
-    hasKey: !!c.apiKey,
-  }))
+  const safe = clients.map(c => {
+    const rawKey = c.apiKey ? decrypt(c.apiKey) : ''
+    return {
+      ...c,
+      apiKey: rawKey ? `${rawKey.slice(0, 6)}...${rawKey.slice(-4)}` : '',
+      hasKey: !!c.apiKey,
+    }
+  })
   res.json(safe)
 })
 
@@ -471,12 +941,13 @@ app.post('/api/clients', (req, res) => {
   const existing = clients.find(c => c.name === name)
   if (existing) {
     // Update
-    if (apiKey) existing.apiKey = apiKey
+    if (apiKey) existing.apiKey = encrypt(apiKey)
     if (bisonWorkspaceId) existing.bisonWorkspaceId = bisonWorkspaceId
   } else {
-    clients.push({ id: Date.now().toString(), name, apiKey: apiKey || '', bisonWorkspaceId: bisonWorkspaceId || null, addedAt: new Date().toISOString() })
+    clients.push({ id: Date.now().toString(), name, apiKey: apiKey ? encrypt(apiKey) : '', bisonWorkspaceId: bisonWorkspaceId || null, addedAt: new Date().toISOString() })
   }
   saveClients(clients)
+  auditLog(req.user.id, 'update_client', 'clients', { name }, req.ip)
   res.json({ ok: true })
 })
 
@@ -494,6 +965,7 @@ app.get('/api/clients/:id/campaigns', async (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' })
   if (!client.apiKey) return res.status(400).json({ error: 'No API key configured for this client' })
 
+  const clientKey = decrypt(client.apiKey)
   try {
     const allCampaigns = []
     let page = 1
@@ -503,7 +975,7 @@ app.get('/api/clients/:id/campaigns', async (req, res) => {
       url.searchParams.set('per_page', '50')
       url.searchParams.set('page', String(page))
       const r = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${client.apiKey}` },
+        headers: { Authorization: `Bearer ${clientKey}` },
       })
       if (!r.ok) return res.status(500).json({ error: `Bison API error: ${r.status}` })
       const data = await r.json()
@@ -525,9 +997,10 @@ app.get('/api/clients/:id/campaigns/:campaignId/sequence', async (req, res) => {
   const client = clients.find(c => c.id === req.params.id)
   if (!client?.apiKey) return res.status(400).json({ error: 'No API key' })
 
+  const clientKey = decrypt(client.apiKey)
   try {
     const r = await fetch(`${BISON_BASE}/campaigns/v1.1/${req.params.campaignId}/sequence-steps`, {
-      headers: { Authorization: `Bearer ${client.apiKey}` },
+      headers: { Authorization: `Bearer ${clientKey}` },
     })
     if (!r.ok) return res.status(500).json({ error: `Bison API error: ${r.status}` })
     const data = await r.json()
@@ -881,6 +1354,7 @@ app.post('/api/scorecard/targets', (req, res) => {
   const current = loadTargets()
   const updated = { ...current, ...req.body }
   writeFileSync(TARGETS_FILE, JSON.stringify(updated, null, 2))
+  auditLog(req.user.id, 'update_targets', 'scorecard', { changes: req.body }, req.ip)
   res.json(updated)
 })
 
@@ -1129,7 +1603,7 @@ Rules:
 
 When comparing reps, use a structured format. When discussing trends, reference the trend direction (Improving/Plateauing/Declining) from rep_performance data.`
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
   try {
     const { messages } = req.body
     if (!messages || !Array.isArray(messages)) {
@@ -1180,7 +1654,124 @@ app.post('/api/chat', async (req, res) => {
   }
 })
 
-app.get('/api/health', (_, res) => res.json({ ok: true }))
+// ─── Deal stage update (for Kanban drag-drop) ──────────
+app.patch('/api/deals/:id/stage', async (req, res) => {
+  const { stage } = req.body
+  if (!stage) return res.status(400).json({ error: 'stage required' })
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/deals?deal_id=eq.${req.params.id}`
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ current_stage: stage }),
+    })
+    if (!r.ok) return res.status(500).json({ error: await r.text() })
+    auditLog(req.user.id, 'update_deal_stage', 'deals', { deal_id: req.params.id, stage }, req.ip)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Phase 3.3: Batch scorecard endpoint ────────────────
+app.get('/api/scorecard/data', async (_req, res) => {
+  try {
+    const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
+
+    const [
+      bisonRes, inboxRes, meetingsRes, sendersRes,
+      mondayRes, hubspotRes,
+      callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
+      targetsData,
+    ] = await Promise.all([
+      EMAILBISON_KEY ? fetch(`${BISON_BASE}/campaigns?per_page=50`, { headers: { Authorization: `Bearer ${EMAILBISON_KEY}` } }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+      AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
+      SLACK_TOKEN ? slackFetch('conversations.history', { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 30 * 86400) }).then(r => r.data) : Promise.resolve(null),
+      AIRTABLE_KEY ? airtableFetch('app70IAsUKudzw5UI', 'tblIWs6XXXdBW4OdP', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
+      MONDAY_KEY ? mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { id name column_values { id title text value } } } } }`).then(r => r.data) : Promise.resolve(null),
+      HUBSPOT_KEY ? hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+      supaQuery('call_logs', `select=rep,score_percentage,call_type,coaching_priority,pipeline_inflation,qualification_result,date&scored_at=gte.${daysAgo(7)}`),
+      supaQuery('call_logs', `select=rep,score_percentage,call_type,date&scored_at=gte.${daysAgo(30)}`),
+      supaQuery('deals_with_calls', 'select=*'),
+      supaQuery('rep_performance', 'select=*'),
+      supaQuery('call_logs', `select=rep,score_percentage,call_type,date,coaching_priority&scored_at=gte.${daysAgo(14)}`),
+      Promise.resolve(loadTargets()),
+    ])
+
+    res.json({
+      bison: bisonRes,
+      inbox: inboxRes,
+      meetings: meetingsRes,
+      senders: sendersRes,
+      monday: mondayRes,
+      hubspot: hubspotRes?.data || hubspotRes,
+      callsWeek: callsWeekRes.data,
+      callsMonth: callsMonthRes.data,
+      deals: dealsRes.data,
+      reps: repsRes.data,
+      allCalls: allCallsRes.data,
+      targets: targetsData,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Phase 5.2: Data export ─────────────────────────────
+app.get('/api/export/:type', async (req, res) => {
+  try {
+    let data = []
+    let filename = 'export.csv'
+
+    switch (req.params.type) {
+      case 'calls': {
+        const result = await supaQuery('call_logs', 'select=rep,call_type,prospect_company,date,score_percentage,grade,coaching_priority,qualification_result,pipeline_inflation,call_context,call_outcome&order=scored_at.desc&limit=5000')
+        data = result.data || []
+        filename = 'yanne_calls_export.csv'
+        break
+      }
+      case 'deals': {
+        const result = await supaQuery('deals_with_calls', 'select=prospect_company,rep_name,current_stage,deal_status,pipeline_inflation,call_1_score,call_1_grade,call_2_score,call_2_grade,call_3_score,call_3_grade,created_at,updated_at&order=updated_at.desc')
+        data = result.data || []
+        filename = 'yanne_deals_export.csv'
+        break
+      }
+      case 'reps': {
+        const result = await supaQuery('rep_performance', 'select=*&order=rep')
+        data = result.data || []
+        filename = 'yanne_reps_export.csv'
+        break
+      }
+      default:
+        return res.status(400).json({ error: 'Invalid export type. Use: calls, deals, reps' })
+    }
+
+    if (data.length === 0) return res.status(404).json({ error: 'No data to export' })
+
+    const headers = Object.keys(data[0])
+    const csvRows = [headers.join(',')]
+    for (const row of data) {
+      csvRows.push(headers.map(h => {
+        const val = row[h]
+        if (val === null || val === undefined) return ''
+        const str = String(val)
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
+      }).join(','))
+    }
+
+    auditLog(req.user.id, 'export', req.params.type, { rows: data.length }, req.ip)
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(csvRows.join('\n'))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 const PORT = process.env.API_PORT || 3001
 app.listen(PORT, () => console.log(`API server on port ${PORT}`))

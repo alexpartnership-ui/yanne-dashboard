@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 
@@ -30,7 +31,7 @@ export function CopyLibraryPage() {
 
   // Load metadata
   useEffect(() => {
-    fetch('/api/copy-library/sectors').then(r => r.json()).then(setMeta).finally(() => setLoading(false))
+    apiFetch('/api/copy-library/sectors').then(r => r.json()).then(setMeta).finally(() => setLoading(false))
   }, [])
 
   // Load filtered sequences
@@ -38,13 +39,13 @@ export function CopyLibraryPage() {
     if (!selectedSector) { setSequences([]); return }
     const params = new URLSearchParams({ sector: selectedSector })
     if (selectedAngle) params.set('angle', selectedAngle)
-    fetch(`/api/copy-library?${params}`).then(r => r.json()).then(setSequences)
+    apiFetch(`/api/copy-library?${params}`).then(r => r.json()).then(setSequences)
   }, [selectedSector, selectedAngle])
 
   // Load full sequence detail
   function viewSequence(sector: string, angle: string, set: number) {
     setDetailLoading(true)
-    fetch(`/api/copy-library/sequence?sector=${encodeURIComponent(sector)}&angle=${encodeURIComponent(angle)}&set=${set}`)
+    apiFetch(`/api/copy-library/sequence?sector=${encodeURIComponent(sector)}&angle=${encodeURIComponent(angle)}&set=${set}`)
       .then(r => r.json())
       .then(setActiveSequence)
       .finally(() => setDetailLoading(false))

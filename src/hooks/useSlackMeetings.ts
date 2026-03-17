@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 interface DailyReport {
   date: string
@@ -21,7 +22,7 @@ export function useSlackMeetings(days = 14) {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch(`/api/slack/meetings-booked?days=${days}`)
+        const res = await apiFetch(`/api/slack/meetings-booked?days=${days}`)
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch meetings data')

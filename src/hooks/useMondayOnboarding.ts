@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 export interface OnboardingTask {
   id: string
@@ -25,7 +26,7 @@ export function useMondayOnboarding() {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch('/api/monday/onboarding')
+        const res = await apiFetch('/api/monday/onboarding')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch onboarding data')

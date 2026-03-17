@@ -7,7 +7,7 @@ import { useHubSpotDeals } from '../hooks/useHubSpotDeals'
 import { useDealStaleness } from '../hooks/useDealStaleness'
 import { DealCard } from '../components/DealCard'
 import { Spinner } from '../components/Spinner'
-import { supabase } from '../lib/supabase'
+import { apiFetch } from '../hooks/useAuth'
 import type { DealWithCalls, DealStage } from '../types/database'
 
 // ─── HUBSPOT SIDE ───────────────────────────────────────
@@ -161,12 +161,20 @@ function SupabasePanel() {
     if (!targetStage || targetStage === draggedDeal.current_stage) return
 
     setDeals(prev => prev.map(d => d.deal_id === draggedId ? { ...d, current_stage: targetStage } : d))
-    const { error: err } = await supabase.from('deals').update({ current_stage: targetStage }).eq('deal_id', draggedId)
-    if (err) {
+    try {
+      const r = await apiFetch(`/api/deals/${draggedId}/stage`, {
+        method: 'PATCH',
+        body: JSON.stringify({ stage: targetStage }),
+      })
+      if (!r.ok) {
+        setDeals(prev => prev.map(d => d.deal_id === draggedId ? { ...d, current_stage: draggedDeal.current_stage } : d))
+        setToast('Failed to update deal stage')
+      } else {
+        setToast(`Moved ${draggedDeal.prospect_company} to ${targetStage}`)
+      }
+    } catch {
       setDeals(prev => prev.map(d => d.deal_id === draggedId ? { ...d, current_stage: draggedDeal.current_stage } : d))
-      setToast(`Failed: ${err.message}`)
-    } else {
-      setToast(`Moved ${draggedDeal.prospect_company} to ${targetStage}`)
+      setToast('Failed to update deal stage')
     }
     setTimeout(() => setToast(null), 3000)
   }, [deals, setDeals])

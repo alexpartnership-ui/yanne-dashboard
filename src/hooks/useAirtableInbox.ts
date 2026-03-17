@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 interface InboxRecord {
   id: string
@@ -33,7 +34,7 @@ export function useAirtableInbox(formula?: string) {
         params.set('sort', 'Reply Time')
         params.set('direction', 'desc')
 
-        const res = await globalThis.fetch(`/api/airtable/inbox?${params}`)
+        const res = await apiFetch(`/api/airtable/inbox?${params}`)
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch inbox data')

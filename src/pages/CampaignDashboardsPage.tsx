@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 
@@ -61,7 +62,7 @@ function AddClientModal({ open, onClose, onAdded }: { open: boolean; onClose: ()
   async function save() {
     if (!name) return
     setSaving(true)
-    await fetch('/api/clients', {
+    await apiFetch('/api/clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, apiKey }),
@@ -109,7 +110,7 @@ function SequenceViewer({ clientId, campaignId }: { clientId: string; campaignId
   const [expanded, setExpanded] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch(`/api/clients/${clientId}/campaigns/${campaignId}/sequence`)
+    apiFetch(`/api/clients/${clientId}/campaigns/${campaignId}/sequence`)
       .then(r => r.ok ? r.json() : { sequence_steps: [] })
       .then(d => setSteps(d.sequence_steps || []))
       .catch(() => setSteps([]))
@@ -173,7 +174,7 @@ function ClientDetail({ client, onBack }: { client: Client; onBack: () => void }
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    fetch(`/api/clients/${client.id}/campaigns`)
+    apiFetch(`/api/clients/${client.id}/campaigns`)
       .then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.error) }))
       .then(data => setCampaigns(Array.isArray(data) ? data : data.data || []))
       .catch(e => setError(e.message))
@@ -277,7 +278,7 @@ export function CampaignDashboardsPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
   function loadClients() {
-    fetch('/api/clients').then(r => r.json()).then(setClients).finally(() => setLoading(false))
+    apiFetch('/api/clients').then(r => r.json()).then(setClients).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadClients() }, [])

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 export interface HubSpotDeal {
   id: string
@@ -31,7 +32,7 @@ export function useHubSpotDeals() {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch('/api/hubspot/deals')
+        const res = await apiFetch('/api/hubspot/deals')
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch HubSpot deals')

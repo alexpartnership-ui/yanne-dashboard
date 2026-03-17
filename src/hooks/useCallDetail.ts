@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import type { CallLog } from '../types/database'
+import { apiFetch } from './useAuth'
 
 export function useCallDetail(id: string | undefined) {
   const [data, setData] = useState<CallLog | null>(null)
@@ -11,13 +11,13 @@ export function useCallDetail(id: string | undefined) {
     if (!id) return
     async function fetch() {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('call_logs')
-        .select('*')
-        .eq('id', id)
-        .single()
-      if (error) setError(error.message)
-      else setData(data as CallLog)
+      try {
+        const res = await apiFetch(`/api/calls/${id}`)
+        if (!res.ok) throw new Error('Failed to fetch call')
+        setData(await res.json())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      }
       setLoading(false)
     }
     fetch()

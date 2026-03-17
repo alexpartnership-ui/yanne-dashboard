@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import type { RepPerformance } from '../types/database'
+import { apiFetch } from './useAuth'
 
 export function useReps() {
   const [data, setData] = useState<RepPerformance[]>([])
@@ -10,12 +10,13 @@ export function useReps() {
   useEffect(() => {
     async function fetch() {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('rep_performance')
-        .select('*')
-        .order('rep')
-      if (error) setError(error.message)
-      else setData(data as RepPerformance[])
+      try {
+        const res = await apiFetch('/api/reps')
+        if (!res.ok) throw new Error('Failed to fetch reps')
+        setData(await res.json())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      }
       setLoading(false)
     }
     fetch()

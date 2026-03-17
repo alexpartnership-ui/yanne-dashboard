@@ -1,15 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env')
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-})
+// Supabase client removed — all queries now go through server-side API
+// This file kept as placeholder to avoid breaking any remaining imports
+// TODO: Remove this file and its import from package.json once confirmed
+export {}

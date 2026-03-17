@@ -4,19 +4,23 @@ import { useAuth } from '../hooks/useAuth'
 
 export function LoginPage() {
   const { authed, login } = useAuth()
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  if (authed) return <Navigate to="/calls" replace />
+  if (authed) return <Navigate to="/dashboard" replace />
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setLoading(true)
     try {
-      login('', password)
-    } catch {
-      setError('Invalid password')
+      await login(email, password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid credentials')
     }
+    setLoading(false)
   }
 
   return (
@@ -34,6 +38,19 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
+            <label className="block text-sm font-medium text-zinc-700">Email</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-yanne focus:outline-none"
+              placeholder="alex@yannetr.net"
+              autoFocus
+            />
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-zinc-700">Password</label>
             <input
               type="password"
@@ -41,7 +58,6 @@ export function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="mt-1 block w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-yanne focus:outline-none"
-              autoFocus
             />
           </div>
 
@@ -49,9 +65,10 @@ export function LoginPage() {
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-yanne px-4 py-2 text-sm font-medium text-white hover:bg-yanne/90 transition-colors"
+            disabled={loading}
+            className="w-full rounded-lg bg-yanne px-4 py-2 text-sm font-medium text-white hover:bg-yanne/90 transition-colors disabled:opacity-50"
           >
-            Sign in
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>

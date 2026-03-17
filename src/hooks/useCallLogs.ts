@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import type { CallLog, RepName, CallType, Grade } from '../types/database'
+import { apiFetch } from './useAuth'
 
 export type DateRange = 'today' | '7d' | '30d' | 'all'
 
@@ -32,22 +32,20 @@ export function useCallLogs(filters: CallFilters = {}) {
   useEffect(() => {
     async function fetch() {
       setLoading(true)
-      let query = supabase
-        .from('call_logs')
-        .select('*')
-        .order('scored_at', { ascending: false })
-        .limit(1000)
+      try {
+        const params = new URLSearchParams()
+        if (filters.rep) params.set('rep', filters.rep)
+        if (filters.call_type) params.set('call_type', filters.call_type)
+        if (filters.grade) params.set('grade', filters.grade)
+        const floor = dateFloor(filters.dateRange ?? 'all')
+        if (floor) params.set('scored_after', floor)
 
-      if (filters.rep) query = query.eq('rep', filters.rep)
-      if (filters.call_type) query = query.eq('call_type', filters.call_type)
-      if (filters.grade) query = query.eq('grade', filters.grade)
-
-      const floor = dateFloor(filters.dateRange ?? 'all')
-      if (floor) query = query.gte('scored_at', floor)
-
-      const { data, error } = await query
-      if (error) setError(error.message)
-      else setData(data as CallLog[])
+        const res = await apiFetch(`/api/calls?${params}`)
+        if (!res.ok) throw new Error('Failed to fetch calls')
+        setData(await res.json())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      }
       setLoading(false)
     }
     fetch()

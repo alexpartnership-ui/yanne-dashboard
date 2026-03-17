@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from './useAuth'
 
 interface Checkin {
   rep: string
@@ -36,7 +37,7 @@ export function useRepCheckins(days = 14) {
   useEffect(() => {
     async function fetch() {
       try {
-        const res = await globalThis.fetch(`/api/rep-checkins?days=${days}`)
+        const res = await apiFetch(`/api/rep-checkins?days=${days}`)
         if (!res.ok) {
           const err = await res.json()
           setError(err.error || 'Failed to fetch check-ins')

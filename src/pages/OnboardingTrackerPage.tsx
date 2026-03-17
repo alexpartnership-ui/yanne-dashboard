@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { useMondayOnboarding } from '../hooks/useMondayOnboarding'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
@@ -28,7 +29,7 @@ export function OnboardingTrackerPage() {
   const [loadingC, setLoadingC] = useState(true)
 
   useEffect(() => {
-    fetch('/api/monday/onboarding-form')
+    apiFetch('/api/monday/onboarding-form')
       .then(r => r.ok ? r.json() : { clients: [] })
       .then(d => setClients(d.clients || []))
       .finally(() => setLoadingC(false))
