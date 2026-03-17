@@ -394,6 +394,9 @@ app.get('/api/rep-checkins', async (req, res) => {
       if (!date || isNaN(date.getTime())) continue
       if (date < cutoff) continue
 
+      // Filter out ex-reps
+      if (rep === 'Lucas') continue
+
       const dateKey = date.toISOString().slice(0, 10)
       checkins.push({ rep, date: dateKey, scheduled, completed, progressed })
     }
