@@ -1,6 +1,11 @@
 import express from 'express'
 import cors from 'cors'
 import Anthropic from '@anthropic-ai/sdk'
+import { readFileSync, existsSync, writeFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 app.use(cors())
@@ -698,8 +703,6 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
 
 // ─── CEO Scorecard Targets (persisted in file) ──────────
 
-import { existsSync, writeFileSync } from 'fs'
-
 const TARGETS_FILE = join(__dirname, 'scorecard_targets.json')
 
 const DEFAULT_TARGETS = {
@@ -744,11 +747,6 @@ app.post('/api/scorecard/targets', (req, res) => {
 
 // ─── Copy Library ───────────────────────────────────────
 
-import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
 let copyLibrary = []
 try {
   copyLibrary = JSON.parse(readFileSync(join(__dirname, 'copy_library.json'), 'utf-8'))
