@@ -147,7 +147,7 @@ export function useCEOScorecard() {
       ] = await Promise.all([
         fetch('/api/bison/campaigns').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/airtable/inbox').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/airtable/meetings').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/slack/meetings-booked?days=30').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/airtable/senders').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/monday/projects').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/hubspot/deals').then(r => r.ok ? r.json() : null).catch(() => null),
@@ -162,7 +162,7 @@ export function useCEOScorecard() {
       const campaigns = bisonRes?.data || bisonRes?.campaigns || bisonRes || []
       const campaignList = Array.isArray(campaigns) ? campaigns : []
       const inboxRecords = inboxRes?.records || []
-      const meetingRecords = meetingsRes?.records || []
+      const slackMeetings = meetingsRes || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
       const senderRecords = sendersRes?.records || []
       const mondayBoards = mondayRes?.boards || []
       const hubspotDeals = hubspotRes?.results || []
@@ -215,9 +215,9 @@ export function useCEOScorecard() {
       }
 
       const totalInterested = categoryCounts['Interested'] || 0
-      const totalMeetingsBooked = categoryCounts['Meeting Booked'] || 0
+      const totalMeetingsBooked = (slackMeetings.thisWeek || 0) + (slackMeetings.todaySoFar || 0)
       const totalUnactioned = Object.values(setterMap).reduce((s, v) => s + v.unactioned, 0)
-      const meetingsThisMonth = meetingRecords.length
+      const meetingsThisMonth = (slackMeetings.dailyReports || []).reduce((s: number, r: { count: number }) => s + r.count, 0) + (slackMeetings.todaySoFar || 0)
 
       // ── Supabase call aggregates ───────────────────
       const weekCallCount = weekCalls.length

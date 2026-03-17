@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart, Line, CartesianGrid } from 'recharts'
 import { useDashboardStats } from '../hooks/useDashboardStats'
+import { useSlackMeetings } from '../hooks/useSlackMeetings'
 import { MetricCard } from '../components/MetricCard'
 import { GradeDistributionBar } from '../components/GradeDistributionBar'
 import { Spinner } from '../components/Spinner'
@@ -8,6 +9,7 @@ import { REP_HEX } from '../lib/repColors'
 
 export function AcquisitionDashboard() {
   const { data, loading } = useDashboardStats()
+  const { data: meetings } = useSlackMeetings()
 
   // Build recharts data for grade distribution stacked bar (30d, grouped by week)
   const gradeBarData = useMemo(() => {
@@ -57,7 +59,7 @@ export function AcquisitionDashboard() {
       <div className="mb-6 grid grid-cols-6 gap-4">
         <MetricCard label="Total Calls" value={data.totalCalls} subtitle="Last 30 days" />
         <MetricCard label="Avg Score" value={`${data.avgScore}%`} />
-        <MetricCard label="Meetings Booked" value="—" placeholder />
+        <MetricCard label="Meetings Booked" value={meetings?.thisWeek ?? 0} subtitle={`${meetings?.todaySoFar ?? 0} today \u2022 ${meetings?.avgPerDay ?? 0}/day avg`} />
         <MetricCard label="Active Deals" value={data.activeDeals} />
         <MetricCard label="Close Rate" value="—" placeholder />
         <MetricCard label="Pipeline Value" value="—" placeholder />

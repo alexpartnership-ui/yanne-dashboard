@@ -13,6 +13,7 @@ const EMAILBISON_KEY = process.env.EMAILBISON_API_KEY
 const AIRTABLE_KEY = process.env.AIRTABLE_API_KEY
 const MONDAY_KEY = process.env.MONDAY_API_KEY
 const HUBSPOT_KEY = process.env.HUBSPOT_API_KEY
+const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
@@ -26,6 +27,7 @@ if (!EMAILBISON_KEY) console.warn('Missing EMAILBISON_API_KEY — outbound pages
 if (!AIRTABLE_KEY) console.warn('Missing AIRTABLE_API_KEY — client pages will not work')
 if (!MONDAY_KEY) console.warn('Missing MONDAY_API_KEY — client project pages will not work')
 if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages will not work')
+if (!SLACK_TOKEN) console.warn('Missing SLACK_BOT_TOKEN — Slack reporting data will not work')
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
 
@@ -315,6 +317,89 @@ app.get('/api/hubspot/pipeline', async (_req, res) => {
     const { data, error } = await hubspotFetch('/crm/v3/pipelines/deals')
     if (error) return res.status(500).json({ error })
     res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Slack helper ───────────────────────────────────────
+
+async function slackFetch(method, body = {}) {
+  const res = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SLACK_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  const json = await res.json()
+  if (!json.ok) return { error: json.error, data: null }
+  return { data: json, error: null }
+}
+
+// Meetings booked — parse EOD reports from #y-c-meetings-reportings
+const MEETINGS_CHANNEL = 'C0A62CG3Z55'
+
+app.get('/api/slack/meetings-booked', async (req, res) => {
+  if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
+  try {
+    const days = parseInt(req.query.days) || 14
+    const oldest = String(Math.floor(Date.now() / 1000) - days * 86400)
+    const { data, error } = await slackFetch('conversations.history', {
+      channel: MEETINGS_CHANNEL,
+      limit: 200,
+      oldest,
+    })
+    if (error) return res.status(500).json({ error })
+
+    const messages = data.messages || []
+    const dailyReports = []
+    let todayIndividual = 0
+
+    for (const m of messages) {
+      const text = m.text || ''
+      // Parse EOD summary messages
+      const eodMatch = text.match(/Total Meetings Booked Today:\*?\s*(\d+)/)
+      if (eodMatch) {
+        const ts = parseFloat(m.ts)
+        const date = new Date(ts * 1000).toISOString().slice(0, 10)
+        dailyReports.push({ date, count: parseInt(eodMatch[1]) })
+      }
+      // Count individual "New Meeting Booked" messages for today (since last EOD)
+      if (text.includes('New Meeting Booked')) {
+        const ts = parseFloat(m.ts)
+        const msgDate = new Date(ts * 1000).toISOString().slice(0, 10)
+        const today = new Date().toISOString().slice(0, 10)
+        if (msgDate === today) todayIndividual++
+      }
+    }
+
+    // Parse per-host from individual messages
+    const hostCounts = {}
+    for (const m of messages) {
+      const text = m.text || ''
+      if (!text.includes('New Meeting Booked')) continue
+      const hostMatch = text.match(/Host:\*?\s*([^\n<]+)/i)
+      if (hostMatch) {
+        const host = hostMatch[1].trim().replace(/\s*\(.*$/, '')
+        hostCounts[host] = (hostCounts[host] || 0) + 1
+      }
+    }
+
+    const thisWeek = dailyReports.reduce((s, r) => s + r.count, 0) + todayIndividual
+    const avgPerDay = dailyReports.length > 0
+      ? Math.round(dailyReports.reduce((s, r) => s + r.count, 0) / dailyReports.length)
+      : 0
+
+    res.json({
+      todaySoFar: todayIndividual,
+      thisWeek,
+      avgPerDay,
+      dailyReports: dailyReports.sort((a, b) => b.date.localeCompare(a.date)),
+      byHost: hostCounts,
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
