@@ -90,13 +90,15 @@ app.get('/api/bison/campaigns', async (_req, res) => {
   try {
     const allCampaigns = []
     let page = 1
-    while (page <= 20) { // safety limit
-      const { data, error } = await bisonFetch('/campaigns', { per_page: 100, page })
+    let lastPage = 1
+    while (page <= lastPage && page <= 30) {
+      const { data, error } = await bisonFetch('/campaigns', { per_page: 50, page })
       if (error) return res.status(500).json({ error })
-      const items = data?.data || data?.campaigns || (Array.isArray(data) ? data : [])
+      const items = data?.data || (Array.isArray(data) ? data : [])
       if (items.length === 0) break
       allCampaigns.push(...items)
-      if (items.length < 100) break
+      // Update lastPage from meta
+      if (data?.meta?.last_page) lastPage = data.meta.last_page
       page++
     }
     res.json(allCampaigns)
