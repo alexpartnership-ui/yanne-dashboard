@@ -756,6 +756,86 @@ app.post('/api/scorecard/targets', (req, res) => {
   res.json(updated)
 })
 
+// ─── Email Daily Reports (Slack #y-c-emails-reportings) ─
+
+const EMAILS_REPORT_CHANNEL = 'C0A6FQPDRPY'
+
+app.get('/api/slack/email-reports', async (req, res) => {
+  if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
+  try {
+    const days = parseInt(req.query.days) || 30
+    const oldest = String(Math.floor(Date.now() / 1000) - days * 86400)
+    const { data, error } = await slackFetch('conversations.history', {
+      channel: EMAILS_REPORT_CHANNEL,
+      limit: 200,
+      oldest,
+    })
+    if (error) return res.status(500).json({ error })
+
+    const messages = data.messages || []
+    const dailyReports = []
+
+    for (const m of messages) {
+      const text = m.text || ''
+      if (!text.includes('Daily Email Campaign Report')) continue
+
+      const ts = parseFloat(m.ts)
+      const date = new Date(ts * 1000).toISOString().slice(0, 10)
+
+      // Parse aggregate stats
+      const sent = text.match(/Total Emails Sent:\*?\s*([\d,]+)/i)
+      const contacted = text.match(/Total People Contacted:\*?\s*([\d,]+)/i)
+      const replies = text.match(/Total Replies:\*?\s*([\d,]+)/i)
+      const replyRate = text.match(/reply rate\)/)
+      const replyRateNum = text.match(/Total Replies:\*?\s*[\d,]+\s*\(([\d.]+)%/i)
+      const bounced = text.match(/Bounced Emails:\*?\s*([\d,]+)/i)
+      const bounceRate = text.match(/Bounced Emails:\*?\s*[\d,]+\s*\(([\d.]+)%/i)
+      const unsubscribed = text.match(/Unsubscribed:\*?\s*([\d,]+)/i)
+      const interested = text.match(/Interested Replies:\*?\s*([\d,]+)/i)
+      const interestedPct = text.match(/Interested Replies:\*?\s*[\d,]+\s*\(([\d.]+)%/i)
+      const mailboxes = text.match(/Total Active Mailboxes:\*?\s*([\d,]+)/i)
+
+      const parseNum = (m) => m ? parseInt(m[1].replace(/,/g, '')) : 0
+      const parseFloat2 = (m) => m ? parseFloat(m[1]) : 0
+
+      dailyReports.push({
+        date,
+        emailsSent: parseNum(sent),
+        peopleContacted: parseNum(contacted),
+        replies: parseNum(replies),
+        replyRate: parseFloat2(replyRateNum),
+        bounced: parseNum(bounced),
+        bounceRate: parseFloat2(bounceRate),
+        unsubscribed: parseNum(unsubscribed),
+        interested: parseNum(interested),
+        interestedPct: parseFloat2(interestedPct),
+        activeMailboxes: parseNum(mailboxes),
+      })
+    }
+
+    // Sort by date ascending
+    dailyReports.sort((a, b) => a.date.localeCompare(b.date))
+
+    // Compute period totals
+    const totals = {
+      emailsSent: dailyReports.reduce((s, r) => s + r.emailsSent, 0),
+      peopleContacted: dailyReports.reduce((s, r) => s + r.peopleContacted, 0),
+      replies: dailyReports.reduce((s, r) => s + r.replies, 0),
+      bounced: dailyReports.reduce((s, r) => s + r.bounced, 0),
+      unsubscribed: dailyReports.reduce((s, r) => s + r.unsubscribed, 0),
+      interested: dailyReports.reduce((s, r) => s + r.interested, 0),
+      days: dailyReports.length,
+    }
+    totals.replyRate = totals.emailsSent > 0 ? (totals.replies / totals.emailsSent) * 100 : 0
+    totals.bounceRate = totals.emailsSent > 0 ? (totals.bounced / totals.emailsSent) * 100 : 0
+    totals.interestedPct = totals.replies > 0 ? (totals.interested / totals.replies) * 100 : 0
+
+    res.json({ dailyReports, totals })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Copy Library ───────────────────────────────────────
 
 let copyLibrary = []
