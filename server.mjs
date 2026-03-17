@@ -556,24 +556,30 @@ app.get('/api/setter-checkins', async (req, res) => {
     if (!r.ok) return res.status(500).json({ error: 'Failed to fetch setter sheet' })
     const csvText = await r.text()
 
-    // Parse CSV
-    const lines = csvText.split('\n')
+    // Parse CSV properly (handle multiline quoted fields)
+    const rows = []
+    let current = []
+    let field = ''
+    let inQuotes = false
+    for (let i = 0; i < csvText.length; i++) {
+      const ch = csvText[i]
+      if (ch === '"') {
+        if (inQuotes && csvText[i + 1] === '"') { field += '"'; i++; continue }
+        inQuotes = !inQuotes; continue
+      }
+      if (ch === ',' && !inQuotes) { current.push(field); field = ''; continue }
+      if (ch === '\n' && !inQuotes) { current.push(field); rows.push(current); current = []; field = ''; continue }
+      if (ch === '\r') continue
+      field += ch
+    }
+    if (current.length > 0) { current.push(field); rows.push(current) }
+
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - days)
     const checkins = []
 
-    for (let i = 1; i < lines.length; i++) {
-      // Simple CSV parse (handle quoted fields with commas/newlines)
-      const row = []
-      let current = ''
-      let inQuotes = false
-      for (const ch of lines[i]) {
-        if (ch === '"') { inQuotes = !inQuotes; continue }
-        if (ch === ',' && !inQuotes) { row.push(current); current = ''; continue }
-        current += ch
-      }
-      row.push(current)
-
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
       if (row.length < 7) continue
       const name = (row[2] || '').trim()
       const dateStr = (row[3] || '').trim()
