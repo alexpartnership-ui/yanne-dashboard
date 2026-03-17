@@ -438,6 +438,105 @@ app.get('/api/hubspot/pipeline', async (_req, res) => {
   }
 })
 
+// ─── Client Workspace Manager ───────────────────────────
+
+const CLIENTS_FILE = join(__dirname, 'client_workspaces.json')
+
+function loadClients() {
+  try {
+    if (existsSync(CLIENTS_FILE)) return JSON.parse(readFileSync(CLIENTS_FILE, 'utf-8'))
+  } catch { /* use empty */ }
+  return []
+}
+
+function saveClients(clients) {
+  writeFileSync(CLIENTS_FILE, JSON.stringify(clients, null, 2))
+}
+
+app.get('/api/clients', (_req, res) => {
+  const clients = loadClients()
+  // Don't expose full API keys to frontend — mask them
+  const safe = clients.map(c => ({
+    ...c,
+    apiKey: c.apiKey ? `${c.apiKey.slice(0, 6)}...${c.apiKey.slice(-4)}` : '',
+    hasKey: !!c.apiKey,
+  }))
+  res.json(safe)
+})
+
+app.post('/api/clients', (req, res) => {
+  const { name, apiKey, bisonWorkspaceId } = req.body
+  if (!name) return res.status(400).json({ error: 'Name is required' })
+  const clients = loadClients()
+  const existing = clients.find(c => c.name === name)
+  if (existing) {
+    // Update
+    if (apiKey) existing.apiKey = apiKey
+    if (bisonWorkspaceId) existing.bisonWorkspaceId = bisonWorkspaceId
+  } else {
+    clients.push({ id: Date.now().toString(), name, apiKey: apiKey || '', bisonWorkspaceId: bisonWorkspaceId || null, addedAt: new Date().toISOString() })
+  }
+  saveClients(clients)
+  res.json({ ok: true })
+})
+
+app.delete('/api/clients/:id', (req, res) => {
+  let clients = loadClients()
+  clients = clients.filter(c => c.id !== req.params.id)
+  saveClients(clients)
+  res.json({ ok: true })
+})
+
+// Fetch campaigns for a specific client using their workspace API key
+app.get('/api/clients/:id/campaigns', async (req, res) => {
+  const clients = loadClients()
+  const client = clients.find(c => c.id === req.params.id)
+  if (!client) return res.status(404).json({ error: 'Client not found' })
+  if (!client.apiKey) return res.status(400).json({ error: 'No API key configured for this client' })
+
+  try {
+    const allCampaigns = []
+    let page = 1
+    let lastPage = 1
+    while (page <= lastPage && page <= 10) {
+      const url = new URL(`${BISON_BASE}/campaigns`)
+      url.searchParams.set('per_page', '50')
+      url.searchParams.set('page', String(page))
+      const r = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${client.apiKey}` },
+      })
+      if (!r.ok) return res.status(500).json({ error: `Bison API error: ${r.status}` })
+      const data = await r.json()
+      const items = data?.data || (Array.isArray(data) ? data : [])
+      if (items.length === 0) break
+      allCampaigns.push(...items)
+      if (data?.meta?.last_page) lastPage = data.meta.last_page
+      page++
+    }
+    res.json(allCampaigns)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Fetch sequence for a campaign using client's workspace API key
+app.get('/api/clients/:id/campaigns/:campaignId/sequence', async (req, res) => {
+  const clients = loadClients()
+  const client = clients.find(c => c.id === req.params.id)
+  if (!client?.apiKey) return res.status(400).json({ error: 'No API key' })
+
+  try {
+    const r = await fetch(`${BISON_BASE}/campaigns/v1.1/${req.params.campaignId}/sequence-steps`, {
+      headers: { Authorization: `Bearer ${client.apiKey}` },
+    })
+    if (!r.ok) return res.status(500).json({ error: `Bison API error: ${r.status}` })
+    const data = await r.json()
+    res.json(data?.data || data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Google Sheets — Rep Daily Check-ins ────────────────
 
 const REP_CHECKIN_SHEET = '1RQoRjAZIMFi6NenrdynzTPRnuDlZl2ynQJ6qRMCBOhA'
