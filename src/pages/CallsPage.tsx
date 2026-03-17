@@ -16,7 +16,7 @@ function mostCommonCoaching(calls: { coaching_priority: string | null }[]): stri
   const freq: Record<string, number> = {}
   for (const c of calls) {
     if (c.coaching_priority) {
-      const key = c.coaching_priority.slice(0, 80)
+      const key = c.coaching_priority
       freq[key] = (freq[key] || 0) + 1
     }
   }
@@ -29,16 +29,30 @@ function mostCommonCoaching(calls: { coaching_priority: string | null }[]): stri
 
 export function CallsPage() {
   const [filters, setFilters] = useState<CallFilters>({ dateRange: 'all' })
+  const [search, setSearch] = useState('')
   const { data, loading, error } = useCallLogs(filters)
   const navigate = useNavigate()
 
+  const filtered = useMemo(() => {
+    if (!search) return data
+    const q = search.toLowerCase()
+    return data.filter(c =>
+      (c.prospect_company && c.prospect_company.toLowerCase().includes(q)) ||
+      (c.rep && c.rep.toLowerCase().includes(q)) ||
+      (c.prospect_contact && c.prospect_contact.toLowerCase().includes(q)) ||
+      (c.coaching_priority && c.coaching_priority.toLowerCase().includes(q)) ||
+      (c.call_type && c.call_type.toLowerCase().includes(q)) ||
+      (c.grade && c.grade.toLowerCase().includes(q))
+    )
+  }, [data, search])
+
   const stats = useMemo(() => {
-    if (!data.length) return null
+    if (!filtered.length) return null
     const today = new Date().toISOString().slice(0, 10)
-    const todayCount = data.filter(c => c.date && c.date.slice(0, 10) === today).length
-    const avgScore = Math.round(data.reduce((s, c) => s + c.score_percentage, 0) / data.length)
-    return { total: data.length, todayCount, avgScore }
-  }, [data])
+    const todayCount = filtered.filter(c => c.date && c.date.slice(0, 10) === today).length
+    const avgScore = Math.round(filtered.reduce((s, c) => s + c.score_percentage, 0) / filtered.length)
+    return { total: filtered.length, todayCount, avgScore }
+  }, [filtered])
 
   return (
     <div>
@@ -52,6 +66,20 @@ export function CallsPage() {
           )}
         </div>
         <FilterBar filters={filters} onChange={setFilters} />
+      </div>
+
+      {/* Search */}
+      <div className="mb-4 flex items-center gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by company, rep, contact, grade..."
+          className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-yanne focus:outline-none w-80"
+        />
+        {search && (
+          <span className="text-xs text-zinc-400">{filtered.length} of {data.length} calls</span>
+        )}
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600">Error: {error}</p>}
@@ -69,11 +97,11 @@ export function CallsPage() {
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
             <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Grade Distribution</div>
-            <GradeDistributionBar calls={data} />
+            <GradeDistributionBar calls={filtered} />
           </div>
           <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
             <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Top Coaching Theme</div>
-            <div className="text-sm text-zinc-700 leading-snug">{mostCommonCoaching(data)}</div>
+            <div className="text-sm text-zinc-700 leading-snug">{mostCommonCoaching(filtered)}</div>
           </div>
         </div>
       )}
@@ -82,7 +110,7 @@ export function CallsPage() {
         <Spinner />
       ) : (
         <GroupedCallTable
-          data={data}
+          data={filtered}
           onRowClick={row => navigate(`/calls/${row.id}`)}
         />
       )}
