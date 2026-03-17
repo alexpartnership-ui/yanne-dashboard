@@ -29,33 +29,65 @@ export function AcquisitionDashboard() {
   }, [data])
 
   // Build calls per day from Google Sheet rep check-ins (actual calls completed)
-  const lineData = useMemo(() => {
+  // Fill ALL dates in range so weekends/OOO days show as null (not gaps)
+  const { lineData, allReps } = useMemo(() => {
     if (!checkins?.byDate?.length) {
       // Fallback to Supabase scored calls if no sheet data
-      if (!data) return []
+      if (!data) return { lineData: [], allReps: [] }
+      const reps = [...new Set(data.callsPerDay.map(d => d.rep))]
       const dayMap: Record<string, Record<string, number>> = {}
       for (const entry of data.callsPerDay) {
         if (!dayMap[entry.date]) dayMap[entry.date] = {}
         dayMap[entry.date][entry.rep] = entry.count
       }
-      return Object.entries(dayMap)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, reps]) => ({
-          date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          ...reps,
-        }))
+      return {
+        lineData: Object.entries(dayMap)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, repData]) => ({
+            date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            ...repData,
+          })),
+        allReps: reps,
+      }
     }
-    // Use real check-in data
-    return checkins.byDate.map(d => ({
-      date: new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      ...d.reps,
-    }))
-  }, [checkins, data])
 
-  const allReps = useMemo(() => {
-    if (checkins?.byRep) return Object.keys(checkins.byRep)
-    if (!data) return []
-    return [...new Set(data.callsPerDay.map(d => d.rep))]
+    // Get all reps and date range
+    const reps = Object.keys(checkins.byRep)
+    const dates = checkins.byDate.map(d => d.date).sort()
+    if (dates.length === 0) return { lineData: [], allReps: reps }
+
+    // Fill every date between min and max (skip weekends — Sat=6, Sun=0)
+    const start = new Date(dates[0] + 'T12:00:00')
+    const end = new Date(dates[dates.length - 1] + 'T12:00:00')
+    const dateRepsMap: Record<string, Record<string, number | null>> = {}
+    for (const d of checkins.byDate) {
+      dateRepsMap[d.date] = {}
+      for (const rep of reps) {
+        dateRepsMap[d.date][rep] = d.reps[rep] ?? null
+      }
+    }
+
+    // Build continuous date array (weekdays only)
+    const result: Record<string, unknown>[] = []
+    const cursor = new Date(start)
+    while (cursor <= end) {
+      const day = cursor.getDay()
+      if (day !== 0 && day !== 6) { // Skip Sat/Sun
+        const key = cursor.toISOString().slice(0, 10)
+        const label = cursor.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        if (dateRepsMap[key]) {
+          result.push({ date: label, ...dateRepsMap[key] })
+        } else {
+          // No reports this day — null for all reps
+          const empty: Record<string, null> = {}
+          for (const rep of reps) empty[rep] = null
+          result.push({ date: label, ...empty })
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    return { lineData: result, allReps: reps }
   }, [checkins, data])
 
   if (loading) return <Spinner />
