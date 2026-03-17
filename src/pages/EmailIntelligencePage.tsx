@@ -36,10 +36,9 @@ export function EmailIntelligencePage() {
       <h2 className="mb-6 text-2xl font-bold text-zinc-900">Email Intelligence</h2>
 
       {/* Top metrics */}
-      <div className="mb-6 grid grid-cols-6 gap-4">
+      <div className="mb-6 grid grid-cols-5 gap-4">
         <MetricCard label="Campaigns" value={t?.totalCampaigns ?? 0} subtitle={`${t?.activeCampaigns ?? 0} active`} />
         <MetricCard label="Emails Sent" value={(t?.totalSent ?? 0).toLocaleString()} />
-        <MetricCard label="Avg Open Rate" value={`${t?.avgOpenRate ?? 0}%`} />
         <MetricCard label="Avg Reply Rate" value={`${t?.avgReplyRate ?? 0}%`} />
         <MetricCard label="Total Replies" value={t?.totalReplies ?? 0} />
         <MetricCard label="Interested" value={r?.interested ?? 0} subtitle={`${r?.unread ?? 0} unread`} />
@@ -65,7 +64,7 @@ export function EmailIntelligencePage() {
                       {c.statistics?.reply_rate?.toFixed(1)}% reply
                     </span>
                     <span className="text-xs text-zinc-400">
-                      {c.statistics?.open_rate?.toFixed(0)}% open
+                      {c.statistics?.interested ?? 0} interested
                     </span>
                   </div>
                 </div>

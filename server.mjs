@@ -462,6 +462,104 @@ app.get('/api/rep-checkins', async (req, res) => {
   }
 })
 
+// ─── Setter EOD Reports (Google Sheet) ──────────────────
+
+const SETTER_SHEET = '1Pt6P0BWtBuxlO7YSojy35WRgYaHPnanrLSY8M5eOEpw'
+
+app.get('/api/setter-checkins', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30
+    const url = `https://docs.google.com/spreadsheets/d/${SETTER_SHEET}/gviz/tq?tqx=out:json`
+    const r = await fetch(url)
+    if (!r.ok) return res.status(500).json({ error: 'Failed to fetch setter sheet' })
+    const text = await r.text()
+    const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
+    const gviz = JSON.parse(jsonStr)
+    const gRows = gviz.table?.rows || []
+
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+    const checkins = []
+
+    for (const gr of gRows) {
+      const cells = gr.c || []
+      const name = cells[2]?.v || ''
+      const dateVal = cells[3]?.v || ''
+      const campaignReport = cells[4]?.v || ''
+      const followupsRaw = cells[5]?.v
+      const bookingsRaw = cells[6]?.v
+      const notes = cells[7]?.v || ''
+
+      // Parse date
+      let date = null
+      const gvizMatch = String(dateVal).match(/Date\((\d+),(\d+),(\d+)\)/)
+      if (gvizMatch) {
+        date = new Date(parseInt(gvizMatch[1]), parseInt(gvizMatch[2]), parseInt(gvizMatch[3]))
+      } else if (typeof dateVal === 'string' && dateVal.includes('/')) {
+        const parts = dateVal.split('/')
+        if (parts.length === 3) date = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]))
+      }
+      if (!date || isNaN(date.getTime()) || date < cutoff) continue
+
+      // Parse bookings (handle "Total Number of bookings: N" pattern)
+      let bookings = 0
+      if (typeof bookingsRaw === 'number') {
+        bookings = bookingsRaw
+      } else if (typeof bookingsRaw === 'string') {
+        const numMatch = bookingsRaw.match(/(\d+)\s*$/) || bookingsRaw.match(/bookings:\s*(\d+)/i)
+        if (numMatch) bookings = parseInt(numMatch[1])
+        else bookings = parseInt(bookingsRaw) || 0
+      }
+
+      // Parse followups
+      let followups = 0
+      if (typeof followupsRaw === 'number') {
+        followups = followupsRaw
+      } else if (typeof followupsRaw === 'string') {
+        followups = parseInt(followupsRaw) || 0
+      }
+
+      // Parse reply count from campaign report
+      let totalReplies = 0
+      const replyMatches = campaignReport.matchAll(/Mail Replies:\s*(\d+)/gi)
+      for (const m of replyMatches) totalReplies += parseInt(m[1])
+
+      checkins.push({
+        name: name.trim(),
+        date: date.toISOString().slice(0, 10),
+        bookings,
+        followups,
+        totalReplies,
+        notes: notes.slice(0, 200),
+      })
+    }
+
+    // Aggregate by setter
+    const setterMap = {}
+    for (const c of checkins) {
+      if (!setterMap[c.name]) setterMap[c.name] = { totalBookings: 0, totalFollowups: 0, totalReplies: 0, days: 0, dailyData: [] }
+      setterMap[c.name].totalBookings += c.bookings
+      setterMap[c.name].totalFollowups += c.followups
+      setterMap[c.name].totalReplies += c.totalReplies
+      setterMap[c.name].days++
+      setterMap[c.name].dailyData.push({ date: c.date, bookings: c.bookings, followups: c.followups, replies: c.totalReplies })
+    }
+
+    // Daily totals
+    const dayMap = {}
+    for (const c of checkins) {
+      if (!dayMap[c.date]) dayMap[c.date] = { date: c.date, totalBookings: 0, setters: {} }
+      dayMap[c.date].totalBookings += c.bookings
+      dayMap[c.date].setters[c.name] = c.bookings
+    }
+    const byDate = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date))
+
+    res.json({ checkins, bySetter: setterMap, byDate })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Slack helper ───────────────────────────────────────
 
 async function slackFetch(method, body = {}) {
