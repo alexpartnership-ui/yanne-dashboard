@@ -36,7 +36,7 @@ export function useCallLogs(filters: CallFilters = {}) {
         .from('call_logs')
         .select('*')
         .order('scored_at', { ascending: false })
-        .limit(200)
+        .limit(1000)
 
       if (filters.rep) query = query.eq('rep', filters.rep)
       if (filters.call_type) query = query.eq('call_type', filters.call_type)
