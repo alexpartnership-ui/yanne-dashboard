@@ -12,3 +12,10 @@ export function repDotClass(rep: string): string {
 export function repBorderClass(rep: string): string {
   return REP_COLORS[rep]?.border ?? 'border-l-zinc-400'
 }
+
+export const REP_HEX: Record<string, string> = {
+  Jake: '#3B82F6',
+  Stanley: '#22C55E',
+  Thomas: '#8B5CF6',
+  Tahawar: '#F59E0B',
+}

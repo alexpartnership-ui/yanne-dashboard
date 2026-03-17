@@ -1,48 +1,127 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
+import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { useNavigate } from 'react-router-dom'
 import { useDeals } from '../hooks/useDeals'
+import { useDealStaleness } from '../hooks/useDealStaleness'
 import { DataTable } from '../components/DataTable'
+import { DealCard } from '../components/DealCard'
 import { GradeBadge } from '../components/GradeBadge'
 import { Spinner } from '../components/Spinner'
 import { repDotClass } from '../lib/repColors'
-import type { DealWithCalls, Grade } from '../types/database'
+import { supabase } from '../lib/supabase'
+import type { DealWithCalls, DealStage, Grade } from '../types/database'
 
 type ViewMode = 'kanban' | 'table'
 
-// Calculate days since a date
-function daysSince(dateStr: string | null): number | null {
-  if (!dateStr) return null
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return null
-  return Math.floor((Date.now() - d.getTime()) / 86400000)
+const KANBAN_COLUMNS: DealStage[] = ['Call 1', 'Call 2', 'Call 3', 'Call 4']
+
+// ─── SORTABLE CARD ─────────────────────────────────────
+
+function SortableDealCard({ deal, staleness }: { deal: DealWithCalls; staleness?: ReturnType<typeof useDealStaleness>['stalenessMap'] extends Map<string, infer V> ? V : never }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: deal.deal_id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <DealCard deal={deal} staleness={staleness} />
+    </div>
+  )
 }
 
-// Get the latest grade from a deal
-function latestGrade(deal: DealWithCalls): Grade | null {
-  if (deal.call_4_grade) return deal.call_4_grade
-  if (deal.call_3_grade) return deal.call_3_grade
-  if (deal.call_2_grade) return deal.call_2_grade
-  return deal.call_1_grade
-}
+// ─── DROPPABLE COLUMN ──────────────────────────────────
 
-// Derive deal health status
-function dealHealth(deal: DealWithCalls): { label: string; color: string } {
-  if (deal.deal_status === 'signed') return { label: 'Signed', color: 'bg-blue-100 text-blue-800' }
-  if (deal.deal_status === 'lost') return { label: 'Lost', color: 'bg-zinc-100 text-zinc-500' }
-
-  const days = daysSince(deal.updated_at)
-  if (days !== null && days >= 21) return { label: 'At Risk', color: 'bg-red-100 text-red-800' }
-  if (days !== null && days >= 14) return { label: 'Stalled', color: 'bg-amber-100 text-amber-800' }
-  return { label: 'Active', color: 'bg-emerald-100 text-emerald-800' }
+function KanbanColumn({ stage, deals, stalenessMap }: {
+  stage: DealStage
+  deals: DealWithCalls[]
+  stalenessMap: Map<string, { days: number; level: 'none' | 'warning' | 'danger' }>
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-yanne">{stage === 'Call 4' ? 'Call 4 / Close' : stage}</h3>
+        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-500">
+          {deals.length}
+        </span>
+      </div>
+      <SortableContext items={deals.map(d => d.deal_id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2 min-h-[80px]">
+          {deals.map(deal => (
+            <SortableDealCard
+              key={deal.deal_id}
+              deal={deal}
+              staleness={stalenessMap.get(deal.deal_id)}
+            />
+          ))}
+          {deals.length === 0 && (
+            <div className="rounded-lg border border-dashed border-zinc-200 py-8 text-center text-xs text-zinc-400">
+              No deals
+            </div>
+          )}
+        </div>
+      </SortableContext>
+    </div>
+  )
 }
 
 // ─── KANBAN VIEW ────────────────────────────────────────
 
-const KANBAN_COLUMNS = ['Call 1', 'Call 2', 'Call 3', 'Call 4'] as const
+function KanbanView({ deals, setDeals, stalenessMap }: {
+  deals: DealWithCalls[]
+  setDeals: (fn: (prev: DealWithCalls[]) => DealWithCalls[]) => void
+  stalenessMap: Map<string, { days: number; level: 'none' | 'warning' | 'danger' }>
+}) {
+  const [toast, setToast] = useState<string | null>(null)
 
-function KanbanView({ deals }: { deals: DealWithCalls[] }) {
-  const navigate = useNavigate()
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const draggedId = active.id as string
+    const draggedDeal = deals.find(d => d.deal_id === draggedId)
+    if (!draggedDeal) return
+
+    // Figure out which column it was dropped into
+    // The over.id could be another deal id or empty — find which column contains the over target
+    const overId = over.id as string
+    const overDeal = deals.find(d => d.deal_id === overId)
+
+    let targetStage: DealStage | null = null
+    if (overDeal) {
+      targetStage = overDeal.current_stage
+    }
+
+    if (!targetStage || targetStage === draggedDeal.current_stage) return
+
+    // Optimistic update
+    setDeals(prev => prev.map(d =>
+      d.deal_id === draggedId ? { ...d, current_stage: targetStage } : d
+    ))
+
+    // Persist to Supabase
+    const { error } = await supabase
+      .from('deals')
+      .update({ current_stage: targetStage })
+      .eq('deal_id', draggedId)
+
+    if (error) {
+      // Revert on failure
+      setDeals(prev => prev.map(d =>
+        d.deal_id === draggedId ? { ...d, current_stage: draggedDeal.current_stage } : d
+      ))
+      setToast(`Failed to move deal: ${error.message}`)
+    } else {
+      setToast(`Moved ${draggedDeal.prospect_company} to ${targetStage}`)
+    }
+
+    setTimeout(() => setToast(null), 3000)
+  }, [deals, setDeals])
 
   const columns = KANBAN_COLUMNS.map(stage => ({
     stage,
@@ -52,82 +131,51 @@ function KanbanView({ deals }: { deals: DealWithCalls[] }) {
   }))
 
   return (
-    <div className="grid grid-cols-4 gap-4">
-      {columns.map(col => (
-        <div key={col.stage}>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-yanne">{col.stage === 'Call 4' ? 'Call 4 / Close' : col.stage}</h3>
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-500">
-              {col.deals.length}
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {col.deals.map(deal => {
-              const days = daysSince(deal.updated_at)
-              const grade = latestGrade(deal)
-              const health = dealHealth(deal)
-
-              return (
-                <div
-                  key={deal.deal_id}
-                  onClick={() => {
-                    // Navigate to latest call detail
-                    const callId = deal.call_4_record_id || deal.call_3_record_id || deal.call_2_record_id || deal.call_1_record_id
-                    if (callId) navigate(`/calls/${callId}`)
-                  }}
-                  className="rounded-lg border border-zinc-200 bg-white p-3.5 shadow-sm hover:shadow-md hover:border-yanne-light transition-all cursor-pointer"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="font-semibold text-sm text-zinc-900 leading-tight">{deal.prospect_company}</div>
-                    {grade && <GradeBadge grade={grade} />}
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className={`h-2 w-2 rounded-full ${repDotClass(deal.rep_name)}`} />
-                    <span className="text-xs text-zinc-500">{deal.rep_name}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    {days !== null && (
-                      <span className={`text-[10px] ${days >= 14 ? 'text-red-500 font-semibold' : 'text-zinc-400'}`}>
-                        {days}d in stage
-                      </span>
-                    )}
-
-                    {deal.pipeline_inflation && (
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-red-100" title="Pipeline Inflation">
-                        <svg className="h-2.5 w-2.5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                        </svg>
-                      </span>
-                    )}
-
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${health.color}`}>
-                      {health.label}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-
-            {col.deals.length === 0 && (
-              <div className="rounded-lg border border-dashed border-zinc-200 py-8 text-center text-xs text-zinc-400">
-                No deals
-              </div>
-            )}
-          </div>
+    <>
+      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-4 gap-4">
+          {columns.map(col => (
+            <KanbanColumn
+              key={col.stage}
+              stage={col.stage}
+              deals={col.deals}
+              stalenessMap={stalenessMap}
+            />
+          ))}
         </div>
-      ))}
-    </div>
+      </DndContext>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-zinc-800 px-4 py-2.5 text-sm text-white shadow-lg animate-fade-in">
+          {toast}
+        </div>
+      )}
+    </>
   )
 }
 
 // ─── TABLE VIEW ─────────────────────────────────────────
 
+function daysSince(dateStr: string | null): number | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return null
+  return Math.floor((Date.now() - d.getTime()) / 86400000)
+}
+
+function dealHealth(deal: DealWithCalls): { label: string; color: string } {
+  if (deal.deal_status === 'signed') return { label: 'Signed', color: 'bg-blue-100 text-blue-800' }
+  if (deal.deal_status === 'lost') return { label: 'Lost', color: 'bg-zinc-100 text-zinc-500' }
+  const days = daysSince(deal.updated_at)
+  if (days !== null && days >= 21) return { label: 'At Risk', color: 'bg-red-100 text-red-800' }
+  if (days !== null && days >= 14) return { label: 'Stalled', color: 'bg-amber-100 text-amber-800' }
+  return { label: 'Active', color: 'bg-emerald-100 text-emerald-800' }
+}
+
 function ClickableGrade({ grade, callId }: { grade: Grade | null; callId: string | null }) {
   const navigate = useNavigate()
-  if (!grade) return <span className="text-zinc-300">—</span>
+  if (!grade) return <span className="text-zinc-300">{'\u2014'}</span>
   return (
     <span
       className={callId ? 'cursor-pointer' : ''}
@@ -170,7 +218,7 @@ const tableColumns = [
     header: 'Last Activity',
     cell: ({ row }) => {
       const days = daysSince(row.original.updated_at)
-      if (days === null) return <span className="text-zinc-300">—</span>
+      if (days === null) return <span className="text-zinc-300">{'\u2014'}</span>
       return <span className={`text-sm ${days >= 14 ? 'text-red-600 font-semibold' : 'text-zinc-600'}`}>{days}d ago</span>
     },
   }),
@@ -182,23 +230,31 @@ const tableColumns = [
     header: 'Flag',
     cell: info => info.getValue() ? (
       <span className="inline-flex rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">Inflation</span>
-    ) : <span className="text-zinc-300">—</span>,
+    ) : <span className="text-zinc-300">{'\u2014'}</span>,
   }),
 ]
 
 // ─── MAIN PAGE ──────────────────────────────────────────
 
 export function DealsPage() {
-  const { data, loading, error } = useDeals()
+  const { data: initialData, loading, error } = useDeals()
+  const [localDeals, setLocalDeals] = useState<DealWithCalls[] | null>(null)
+  const deals = localDeals ?? initialData
+  const { stalenessMap } = useDealStaleness(deals)
   const [view, setView] = useState<ViewMode>('kanban')
+
+  // Sync initial data when it loads
+  const setDeals = useCallback((fn: (prev: DealWithCalls[]) => DealWithCalls[]) => {
+    setLocalDeals(prev => fn(prev ?? initialData))
+  }, [initialData])
 
   if (loading) return <Spinner />
   if (error) return <p className="text-sm text-red-600">Error: {error}</p>
 
-  const activeCount = data.filter(d => d.deal_status === 'active').length
-  const stalledCount = data.filter(d => {
-    const days = daysSince(d.updated_at)
-    return d.deal_status === 'active' && days !== null && days >= 14
+  const activeCount = deals.filter(d => d.deal_status === 'active').length
+  const stalledCount = deals.filter(d => {
+    const s = stalenessMap.get(d.deal_id)
+    return d.deal_status === 'active' && s && s.level === 'danger'
   }).length
 
   return (
@@ -226,9 +282,9 @@ export function DealsPage() {
       </div>
 
       {view === 'kanban' ? (
-        <KanbanView deals={data} />
+        <KanbanView deals={deals} setDeals={setDeals} stalenessMap={stalenessMap} />
       ) : (
-        <DataTable data={data} columns={tableColumns} striped />
+        <DataTable data={deals} columns={tableColumns} striped />
       )}
     </div>
   )

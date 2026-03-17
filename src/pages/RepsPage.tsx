@@ -41,8 +41,11 @@ export function RepsPage() {
                     {rep.total_scored_calls} calls scored
                   </span>
                 </div>
-                <div className="text-xs text-zinc-400">
+                <div className="tooltip-wrap relative text-xs text-zinc-400">
                   Qualification rate: <span className="font-semibold text-zinc-700">{(rep.qualification_rate * 100).toFixed(0)}%</span>
+                  <div className="tooltip-text absolute right-0 bottom-full mb-1 z-50 w-64 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-white shadow-lg">
+                    % of Call 1s where the prospect was genuinely qualified
+                  </div>
                 </div>
               </div>
 
@@ -73,11 +76,11 @@ export function RepsPage() {
                 <div className="flex gap-8 text-sm shrink-0">
                   <div>
                     <span className="text-[11px] text-zinc-400 uppercase tracking-wider block mb-0.5">Strongest</span>
-                    <span className="font-medium text-zinc-800">{rep.strongest_category ?? '—'}</span>
+                    <span className="font-medium text-zinc-800">{rep.strongest_category ?? '\u2014'}</span>
                   </div>
                   <div>
                     <span className="text-[11px] text-zinc-400 uppercase tracking-wider block mb-0.5">Weakest</span>
-                    <span className="font-medium text-zinc-800">{rep.weakest_category ?? '—'}</span>
+                    <span className="font-medium text-zinc-800">{rep.weakest_category ?? '\u2014'}</span>
                   </div>
                 </div>
 

@@ -2,11 +2,11 @@ import type { Grade } from '../types/database'
 
 function gradeColor(grade: string): string {
   const letter = grade.charAt(0)
-  if (letter === 'A') return 'bg-emerald-100 text-emerald-800'
-  if (letter === 'B') return 'bg-emerald-50 text-emerald-700'
-  if (letter === 'C') return 'bg-amber-100 text-amber-800'
-  if (letter === 'D') return 'bg-orange-100 text-orange-800'
-  if (letter === 'F') return 'bg-red-100 text-red-800'
+  if (letter === 'A') return 'bg-[#166534] text-white'
+  if (letter === 'B') return 'bg-[#22C55E] text-white'
+  if (letter === 'C') return 'bg-[#EAB308] text-black'
+  if (letter === 'D') return 'bg-[#F97316] text-white'
+  if (letter === 'F') return 'bg-[#EF4444] text-white'
   return 'bg-zinc-100 text-zinc-600'
 }
 
