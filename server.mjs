@@ -375,15 +375,20 @@ app.get('/api/rep-checkins', async (req, res) => {
       const completed = parseInt(row[4]) || 0
       const progressed = parseInt(row[5]) || 0
 
-      // Parse date (M/D/YYYY format)
+      // Parse date — handles both M/D/YYYY and Date(YYYY,M,D) from gviz
       let date = null
       if (dateStr) {
-        const parts = dateStr.split('/')
-        if (parts.length === 3) {
-          const m = parseInt(parts[0]) - 1
-          const d = parseInt(parts[1])
-          const y = parseInt(parts[2])
-          date = new Date(y, m, d)
+        const gvizMatch = dateStr.match(/Date\((\d+),(\d+),(\d+)\)/)
+        if (gvizMatch) {
+          date = new Date(parseInt(gvizMatch[1]), parseInt(gvizMatch[2]), parseInt(gvizMatch[3]))
+        } else {
+          const parts = dateStr.split('/')
+          if (parts.length === 3) {
+            const m = parseInt(parts[0]) - 1
+            const d = parseInt(parts[1])
+            const y = parseInt(parts[2])
+            date = new Date(y, m, d)
+          }
         }
       }
       if (!date || isNaN(date.getTime())) continue

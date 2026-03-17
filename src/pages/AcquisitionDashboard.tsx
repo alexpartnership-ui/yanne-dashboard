@@ -11,7 +11,7 @@ import { REP_HEX } from '../lib/repColors'
 export function AcquisitionDashboard() {
   const { data, loading } = useDashboardStats()
   const { data: meetings } = useSlackMeetings()
-  const { data: checkins } = useRepCheckins(14)
+  const { data: checkins } = useRepCheckins(30)
 
   // Build recharts data for grade distribution stacked bar (30d)
   const gradeBarData = useMemo(() => {
@@ -75,7 +75,7 @@ export function AcquisitionDashboard() {
         <MetricCard
           label="Total Calls"
           value={totalActualCalls ?? data.totalCalls}
-          subtitle={totalActualCalls ? 'Last 14d (rep-reported)' : 'Last 30d (scored)'}
+          subtitle={totalActualCalls ? 'Last 30d (rep-reported)' : 'Last 30d (scored)'}
         />
         <MetricCard label="Avg Score" value={`${data.avgScore}%`} subtitle="Scored calls" />
         <MetricCard label="Meetings Booked" value={meetings?.thisWeek ?? 0} subtitle={`${meetings?.todaySoFar ?? 0} today \u2022 ${meetings?.avgPerDay ?? 0}/day avg`} />
@@ -117,7 +117,7 @@ export function AcquisitionDashboard() {
 
         {/* Calls Per Day — from rep daily check-ins */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-1">Calls Per Day (14d)</h3>
+          <h3 className="text-sm font-semibold text-zinc-700 mb-1">Calls Per Day (30d)</h3>
           <p className="text-[10px] text-zinc-400 mb-3">
             {checkins?.byDate?.length ? 'Source: Rep daily check-in form' : 'Source: Scored calls (Supabase)'}
           </p>
@@ -168,7 +168,7 @@ export function AcquisitionDashboard() {
         {/* Rep Quick Stats — from check-ins if available */}
         <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-zinc-700 mb-3">
-            {checkins?.byRep ? 'Rep Activity (14d check-ins)' : 'Rep Quick Stats (30d)'}
+            {checkins?.byRep ? 'Rep Activity (30d check-ins)' : 'Rep Quick Stats (30d)'}
           </h3>
           <table className="w-full">
             <thead>
