@@ -849,7 +849,7 @@ app.get('/api/monday/onboarding', async (_req, res) => {
 // ─── HubSpot API routes ─────────────────────────────────
 
 const HUBSPOT_STAGE_MAP = {
-  // Sales Pipeline (default)
+  // Sales Pipeline (default) — only pipeline we pull
   appointmentscheduled: 'Meeting Qualified',
   qualifiedtobuy: 'NDA',
   presentationscheduled: '1st Closing Call',
@@ -859,20 +859,6 @@ const HUBSPOT_STAGE_MAP = {
   closedlost: 'Closed Lost',
   contractsent: 'Long Term Lead',
   '1066871403': 'Disqualified',
-  // Master Project Tracker
-  '1068620433': 'Appointment Scheduled',
-  '1068620434': 'Qualified To Buy',
-  '1068620435': 'Presentation Scheduled',
-  '1068620436': 'Decision Maker Bought-In',
-  '1068620437': 'Contract Sent',
-  '1068620438': 'Closed Won',
-  '1068620439': 'Closed Lost',
-  // Master Fulfillment
-  '1081726001': 'New Clients',
-  '1081726002': 'In Onboarding',
-  '1081726003': 'Live (Pre-Campaign)',
-  '1081726004': 'Active Campaign',
-  '1081726005': 'Campaign Complete',
 }
 
 app.get('/api/hubspot/deals', async (_req, res) => {
@@ -880,8 +866,10 @@ app.get('/api/hubspot/deals', async (_req, res) => {
   try {
     const { data, error } = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate')
     if (error) return res.status(500).json({ error })
-    // Enrich with stage names
-    const results = (data.results || []).map(d => ({
+    // Filter to Sales Pipeline only, enrich with stage names
+    const allResults = data.results || []
+    const salesOnly = allResults.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+    const results = salesOnly.map(d => ({
       ...d,
       properties: {
         ...d.properties,
@@ -1505,8 +1493,9 @@ function detectIntent(question) {
     intents.push('rep_calls')
   }
 
-  if (q.includes('deal') || q.includes('pipeline') || q.includes('stuck') || q.includes('stage') || q.includes('kanban')) {
+  if (q.includes('deal') || q.includes('pipeline') || q.includes('stuck') || q.includes('stage') || q.includes('kanban') || q.includes('hubspot')) {
     intents.push('deals')
+    intents.push('hubspot')
   }
 
   if (q.match(/\b[abcdf]\b/i) || q.includes('grade') || q.includes('score') || q.includes('fail') || q.includes('best') || q.includes('worst')) {
@@ -1527,8 +1516,30 @@ function detectIntent(question) {
     intents.push('rep_performance')
   }
 
+  // Client / fulfillment intents
+  if (q.includes('client') || q.includes('onboard') || q.includes('project') || q.includes('fulfillment') || q.includes('monday')) {
+    intents.push('clients')
+  }
+
+  // Campaign / outbound intents
+  if (q.includes('campaign') || q.includes('email') || q.includes('outbound') || q.includes('bison') || q.includes('reply') || q.includes('bounce') || q.includes('sent') || q.includes('sender') || q.includes('deliverability')) {
+    intents.push('campaigns')
+  }
+
+  // Setter intents
+  if (q.includes('setter') || q.includes('meeting') || q.includes('booking') || q.includes('interested') || q.includes('unactioned') || q.includes('inbox')) {
+    intents.push('setters')
+  }
+
+  // Revenue / finance
+  if (q.includes('revenue') || q.includes('cash') || q.includes('money') || q.includes('retainer') || q.includes('fee') || q.includes('finance') || q.includes('won')) {
+    intents.push('hubspot')
+  }
+
+  // If asking about a specific company name (not a rep), assume client
   if (intents.length === 0) {
-    intents.push('rep_calls', 'rep_performance', 'deals')
+    // Default: broad context
+    intents.push('rep_calls', 'rep_performance', 'deals', 'campaigns', 'clients')
   }
 
   return { intents: [...new Set(intents)], mentionedReps, dateFilter }
@@ -1577,31 +1588,127 @@ async function gatherContext(question) {
     )
   }
 
+  if (intents.includes('campaigns')) {
+    promises.push(
+      bisonFetch('/campaigns', { per_page: 50 }).then(r => {
+        const campaigns = r.data?.data || (Array.isArray(r.data) ? r.data : [])
+        context.campaigns = campaigns.map(c => ({
+          name: c.name, status: c.status, emails_sent: c.emails_sent,
+          replied: c.replied || c.unique_replies, bounced: c.bounced,
+          interested: c.interested, total_leads: c.total_leads,
+        }))
+      }).catch(() => {})
+    )
+  }
+
+  if (intents.includes('clients')) {
+    if (MONDAY_KEY) {
+      promises.push(
+        mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { name column_values { title text } } } } }`)
+          .then(r => {
+            const boards = r.data?.boards || []
+            context.clients = boards.map(b => {
+              const item = b.items_page?.items?.[0]
+              const cols = {}
+              if (item) for (const cv of item.column_values || []) cols[cv.title] = cv.text
+              return { name: b.name.replace('Project ', ''), health: cols['Project Health (RAG)'] || 'Unknown', stage: cols['Stage'] || 'Unknown' }
+            })
+          }).catch(() => {})
+      )
+    }
+    // Also fetch onboarding data
+    if (MONDAY_KEY) {
+      promises.push(
+        mondayQuery(`{ boards(ids: [${PROJECT_TASK_IDS.join(',')}]) { name items_page(limit: 50) { items { name group { title } column_values(ids: ["status"]) { text } } } } }`)
+          .then(r => {
+            const boards = r.data?.boards || []
+            context.onboarding = boards.map(b => {
+              const items = b.items_page?.items || []
+              const total = items.length
+              const done = items.filter(i => i.column_values?.[0]?.text === 'Done').length
+              return { project: b.name.replace('Project ', ''), total_tasks: total, done, completion: total > 0 ? Math.round((done / total) * 100) : 0 }
+            })
+          }).catch(() => {})
+      )
+    }
+  }
+
+  if (intents.includes('setters')) {
+    if (AIRTABLE_KEY) {
+      promises.push(
+        airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' })
+          .then(r => {
+            const records = r.data?.records || []
+            const setterMap = {}
+            for (const rec of records) {
+              const f = rec.fields || {}
+              const setter = f['Setter']
+              const cat = f['Lead Category'] || ''
+              if (setter) {
+                if (!setterMap[setter]) setterMap[setter] = { assigned: 0, meetings: 0, interested: 0, unactioned: 0 }
+                setterMap[setter].assigned++
+                if (cat === 'Meeting Booked') setterMap[setter].meetings++
+                if (cat === 'Interested') setterMap[setter].interested++
+                if (f['Open Response'] === true) setterMap[setter].unactioned++
+              }
+            }
+            context.setter_performance = Object.entries(setterMap).map(([name, s]) => ({ name, ...s }))
+          }).catch(() => {})
+      )
+    }
+  }
+
+  if (intents.includes('hubspot')) {
+    if (HUBSPOT_KEY) {
+      promises.push(
+        hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate')
+          .then(r => {
+            const allDeals = r.data?.results || []
+            const salesDeals = allDeals.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+            context.hubspot_deals = salesDeals.map(d => ({
+              name: d.properties.dealname,
+              stage: HUBSPOT_STAGE_MAP[d.properties.dealstage] || d.properties.dealstage,
+              amount: d.properties.amount,
+              closeDate: d.properties.closedate,
+              lastModified: d.properties.hs_lastmodifieddate,
+            }))
+          }).catch(() => {})
+      )
+    }
+  }
+
   await Promise.all(promises)
   return context
 }
 
 // ─── Chat endpoint ──────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are the Yanne Capital Sales Intelligence analyst. You have access to real-time scoring data from the sales team (4 closers: Jake, Stanley, Thomas, Tahawar).
+const SYSTEM_PROMPT = `You are the Yanne Capital Intelligence Platform assistant. You have access to real-time data across the entire business — sales, outbound campaigns, client fulfillment, setter performance, HubSpot deals, and revenue.
 
-Answer questions about rep performance, call quality, deal pipeline, and coaching priorities.
+Yanne Capital is an SEC-registered boutique investment bank. The team includes 4 closers (Jake, Stanley, Thomas, Tahawar), setters who handle inbound replies, and a fulfillment team managing active client campaigns.
+
+You can answer questions about:
+- **Sales**: rep performance, call scores, coaching priorities, deal pipeline, qualification rates
+- **Outbound / Campaigns**: EmailBison campaign stats (emails sent, reply rates, bounce rates, interested replies), active vs paused campaigns
+- **Clients / Fulfillment**: client onboarding status (Monday.com), project health, task completion, which clients are active
+- **Setters**: unactioned replies, meetings booked, setter-by-setter performance, interested-to-meeting conversion
+- **HubSpot Deals**: Sales Pipeline deal stages, amounts, close dates, won/lost counts, revenue
+- **Revenue**: cash collected, retainers, success fees
 
 Rules:
-- Be direct, use specific numbers, reference actual call scores
-- When discussing coaching, quote the specific coaching directive from the scorecard
-- Never make up data — only reference what's in the query results provided
+- Be direct, use specific numbers from the data provided
+- Never make up data — only reference what's in the <data> block
 - Format responses with markdown (bold, lists) for readability
 - Keep answers concise but thorough — 3-8 sentences typical
 - If data is empty or missing, say so honestly
 - Grades: A+/A/A- (excellent), B+/B/B- (good), C+/C/C- (average), D+/D/D- (below average), F (failing)
 - Scoring: 75%+ green, 55-74% yellow, <55% red
-- Pipeline stages: Call 1 → Call 2 → Call 3 → Call 4/Close
+- Sales pipeline stages: Meeting Qualified → NDA → 1st Closing Call → 2nd Closing Call → 3rd Call / Contract → Closed Won
 - qualification_result: QUALIFIED, BORDERLINE, NOT_QUALIFIED
 - pipeline_inflation: true = unqualified prospect advanced (judgment issue)
 - next_step_flag: DEAD_END = qualified but rep didn't advance (skill gap)
 
-When comparing reps, use a structured format. When discussing trends, reference the trend direction (Improving/Plateauing/Declining) from rep_performance data.`
+When comparing reps, use a structured format. When discussing trends, reference the trend direction (Improving/Plateauing/Declining) from rep_performance data. When discussing clients, reference their project health (RAG) and onboarding completion %.`
 
 app.post('/api/chat', chatLimiter, async (req, res) => {
   try {

@@ -113,13 +113,15 @@ export function ChatPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
                 </svg>
               </div>
-              <p className="text-sm text-zinc-500">What would you like to know about your team's performance?</p>
+              <p className="text-sm text-zinc-500">Ask anything about sales, campaigns, clients, or revenue</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {[
-                  'How did the team do today?',
-                  'Which rep is improving fastest?',
-                  'Show me all F calls this week',
-                  'How many deals are stuck?',
+                  'How did the team do this week?',
+                  'How is client CTO Craft doing?',
+                  'What are our campaign reply rates?',
+                  'How many deals are in the pipeline?',
+                  'Which setters have unactioned replies?',
+                  'Show me revenue from closed deals',
                 ].map(q => (
                   <button
                     key={q}
@@ -168,7 +170,7 @@ export function ChatPage() {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask about your team's performance..."
+            placeholder="Ask about sales, clients, campaigns, revenue..."
             className="flex-1 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm focus:border-yanne focus:outline-none"
             disabled={streaming}
             autoFocus
