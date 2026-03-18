@@ -22,6 +22,16 @@ const STAGE_COLORS: Record<string, string> = {
   'Disqualified': 'bg-zinc-100 text-zinc-400',
 }
 
+const KANBAN_BORDER: Record<string, string> = {
+  'Meeting Qualified': 'border-t-[#1A3C34]/40',
+  'NDA': 'border-t-[#1A3C34]/50',
+  '1st Closing Call': 'border-t-[#1A3C34]/60',
+  '2nd Closing Call': 'border-t-[#1A3C34]/70',
+  '3rd Call / Contract': 'border-t-[#1A3C34]/80',
+  'Closed Won': 'border-t-[#00875A]',
+  'Closed Lost': 'border-t-zinc-300',
+}
+
 const BAR_COLORS: Record<string, string> = {
   'Meeting Qualified': 'bg-[#1A3C34]/40',
   'NDA': 'bg-[#1A3C34]/50',
@@ -36,7 +46,7 @@ const BAR_COLORS: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────
 
-function formatCurrency(value: number): string {
+function fmt(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`
   if (value >= 1_000) return `$${Math.round(value / 1_000)}K`
   return `$${value.toLocaleString()}`
@@ -49,7 +59,7 @@ function daysSince(dateStr: string | null): number | null {
   return Math.floor((Date.now() - d.getTime()) / 86400000)
 }
 
-function formatDate(dateStr: string | null): string {
+function fmtDate(dateStr: string | null): string {
   if (!dateStr) return '\u2014'
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return '\u2014'
@@ -61,7 +71,7 @@ type SortDir = 'asc' | 'desc'
 
 function sortDeals(deals: HubSpotDeal[], key: SortKey, dir: SortDir): HubSpotDeal[] {
   return [...deals].sort((a, b) => {
-    let av: string | number | null, bv: string | number | null
+    let av: string | number, bv: string | number
     switch (key) {
       case 'name': av = a.name.toLowerCase(); bv = b.name.toLowerCase(); break
       case 'stageName': av = STAGE_ORDER.indexOf(a.stageName); bv = STAGE_ORDER.indexOf(b.stageName); break
@@ -79,18 +89,99 @@ function sortDeals(deals: HubSpotDeal[], key: SortKey, dir: SortDir): HubSpotDea
 
 // ─── Sort Header ────────────────────────────────────────
 
-function SortHeader({ label, sortKey, currentKey, dir, onSort, align = 'left' }: {
-  label: string; sortKey: SortKey; currentKey: SortKey; dir: SortDir; onSort: (k: SortKey) => void; align?: 'left' | 'right'
-}) {
-  const active = currentKey === sortKey
+function TH({ label, k, cur, dir, onSort, right }: { label: string; k: SortKey; cur: SortKey; dir: SortDir; onSort: (k: SortKey) => void; right?: boolean }) {
+  const on = cur === k
   return (
-    <th
-      className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider cursor-pointer select-none hover:text-zinc-600 transition-colors ${align === 'right' ? 'text-right' : 'text-left'} ${active ? 'text-[#1A3C34]' : 'text-zinc-400'}`}
-      onClick={() => onSort(sortKey)}
-    >
-      {label}
-      {active && <span className="ml-1">{dir === 'asc' ? '\u25B2' : '\u25BC'}</span>}
+    <th className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider cursor-pointer select-none hover:text-zinc-600 ${right ? 'text-right' : 'text-left'} ${on ? 'text-[#1A3C34]' : 'text-zinc-400'}`} onClick={() => onSort(k)}>
+      {label}{on && <span className="ml-1">{dir === 'asc' ? '\u25B2' : '\u25BC'}</span>}
     </th>
+  )
+}
+
+// ─── Kanban View ────────────────────────────────────────
+
+function KanbanView({ deals }: { deals: HubSpotDeal[] }) {
+  const columns = ACTIVE_STAGES.map(stage => {
+    const stageDeals = deals.filter(d => d.stageName === stage)
+    const total = stageDeals.reduce((s, d) => s + (d.amount || 0), 0)
+    const avg = stageDeals.length > 0 ? total / stageDeals.length : 0
+    return { stage, deals: stageDeals, total, avg }
+  })
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      {columns.map(col => (
+        <div key={col.stage} className={`rounded-lg border border-zinc-200 bg-white shadow-sm border-t-[3px] ${KANBAN_BORDER[col.stage] || 'border-t-zinc-300'}`}>
+          {/* Column header */}
+          <div className="px-3 py-3 border-b border-zinc-100">
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-xs font-bold text-zinc-800">{col.stage}</h4>
+              <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">{col.deals.length}</span>
+            </div>
+            <div className="text-[11px] text-zinc-500">
+              <span className="font-semibold text-zinc-700">{fmt(col.total)}</span>
+              <span className="mx-1">|</span>
+              Total amount
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              <span className="font-medium text-zinc-600">{fmt(col.avg)}</span>
+              <span className="mx-1">|</span>
+              Average deal
+            </div>
+          </div>
+          {/* Deal cards */}
+          <div className="p-2 space-y-1.5 max-h-[500px] overflow-y-auto scrollbar-hide">
+            {col.deals.length === 0 ? (
+              <div className="py-6 text-center text-[10px] text-zinc-400">No deals</div>
+            ) : (
+              col.deals.map(d => {
+                const actDays = daysSince(d.lastActivity)
+                const stale = actDays !== null && actDays >= 30
+                return (
+                  <div key={d.id} className="rounded-md border border-zinc-100 bg-zinc-50/50 px-3 py-2.5 hover:bg-zinc-50 transition-colors">
+                    <div className="text-xs font-medium text-zinc-800 truncate">{d.name}</div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[11px] font-semibold text-zinc-700">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
+                      <span className={`text-[10px] ${stale ? 'text-red-600 font-semibold' : 'text-zinc-400'}`}>
+                        {actDays !== null ? `${actDays}d` : ''}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Stage Summary Cards ────────────────────────────────
+
+function StageSummary({ deals }: { deals: HubSpotDeal[] }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-5">
+      {ACTIVE_STAGES.map(stage => {
+        const stageDeals = deals.filter(d => d.stageName === stage)
+        const total = stageDeals.reduce((s, d) => s + (d.amount || 0), 0)
+        const avg = stageDeals.length > 0 ? total / stageDeals.length : 0
+        return (
+          <div key={stage} className="rounded-lg bg-white border border-zinc-200 px-3 py-3 shadow-sm">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${STAGE_COLORS[stage]}`}>{stage}</span>
+              <span className="text-sm font-bold text-zinc-900">{stageDeals.length}</span>
+            </div>
+            <div className="text-[11px] text-zinc-500">
+              <span className="font-semibold text-zinc-700">{fmt(total)}</span> total
+            </div>
+            <div className="text-[10px] text-zinc-400">
+              {fmt(avg)} avg per deal
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -103,6 +194,7 @@ export function DealsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('createDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(0)
+  const [view, setView] = useState<'table' | 'kanban'>('table')
   const PAGE_SIZE = 50
 
   function handleSort(key: SortKey) {
@@ -113,31 +205,21 @@ export function DealsPage() {
 
   const allDeals = hubspot?.deals ?? []
 
-  // Computed stats
   const stats = useMemo(() => {
     const active = allDeals.filter(d => !CLOSED_STAGES.includes(d.stageName))
     const won = allDeals.filter(d => d.stageName === 'Closed Won')
     const lost = allDeals.filter(d => d.stageName === 'Closed Lost')
     const activeValue = active.reduce((s, d) => s + (d.amount || 0), 0)
     const totalValue = allDeals.reduce((s, d) => s + (d.amount || 0), 0)
-    return {
-      activeCount: active.length,
-      activeValue,
-      wonCount: won.length,
-      lostCount: lost.length,
-      totalValue,
-      totalCount: allDeals.length,
-    }
+    return { activeCount: active.length, activeValue, wonCount: won.length, lostCount: lost.length, totalValue, totalCount: allDeals.length }
   }, [allDeals])
 
-  // Stage counts for bar
   const stageCounts = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const d of allDeals) counts[d.stageName] = (counts[d.stageName] || 0) + 1
-    return counts
+    const c: Record<string, number> = {}
+    for (const d of allDeals) c[d.stageName] = (c[d.stageName] || 0) + 1
+    return c
   }, [allDeals])
 
-  // Filter + search + sort
   const displayed = useMemo(() => {
     let list = allDeals
     if (stageFilter === 'active') list = list.filter(d => !CLOSED_STAGES.includes(d.stageName))
@@ -164,6 +246,15 @@ export function DealsPage() {
           <p className="text-xs text-zinc-400 mt-0.5">Sales Pipeline — {stats.totalCount} total deals</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex rounded-lg border border-zinc-200 overflow-hidden">
+            <button onClick={() => setView('table')} className={`px-3 py-1.5 text-xs font-medium ${view === 'table' ? 'bg-[#1A3C34] text-white' : 'bg-white text-zinc-500 hover:bg-zinc-50'}`}>
+              Table
+            </button>
+            <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium ${view === 'kanban' ? 'bg-[#1A3C34] text-white' : 'bg-white text-zinc-500 hover:bg-zinc-50'}`}>
+              Kanban
+            </button>
+          </div>
           <ExportButton type="deals" />
           <select
             value={stageFilter}
@@ -188,7 +279,7 @@ export function DealsPage() {
           <div className="text-[11px] text-zinc-500 mt-1">Active Deals</div>
         </div>
         <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-[#1A3C34]">{formatCurrency(stats.activeValue)}</div>
+          <div className="text-2xl font-bold text-[#1A3C34]">{fmt(stats.activeValue)}</div>
           <div className="text-[11px] text-zinc-500 mt-1">Active Pipeline Value</div>
         </div>
         <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
@@ -200,10 +291,13 @@ export function DealsPage() {
           <div className="text-[11px] text-zinc-500 mt-1">Closed Lost</div>
         </div>
         <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-zinc-900">{formatCurrency(stats.totalValue)}</div>
+          <div className="text-2xl font-bold text-zinc-900">{fmt(stats.totalValue)}</div>
           <div className="text-[11px] text-zinc-500 mt-1">Total Pipeline Value</div>
         </div>
       </div>
+
+      {/* Per-Stage Amount + Average Cards */}
+      <StageSummary deals={allDeals} />
 
       {/* Pipeline Stage Bar */}
       <div className="mb-5 flex h-3 rounded-full overflow-hidden bg-zinc-100">
@@ -212,93 +306,81 @@ export function DealsPage() {
           if (count === 0) return null
           const pct = (count / Math.max(stats.totalCount, 1)) * 100
           return (
-            <div
-              key={stage}
-              className={`${BAR_COLORS[stage] || 'bg-zinc-300'} transition-all cursor-pointer hover:opacity-80`}
-              style={{ width: `${pct}%` }}
-              title={`${stage}: ${count} deals`}
-              onClick={() => { setStageFilter(stage); setPage(0) }}
-            />
+            <div key={stage} className={`${BAR_COLORS[stage] || 'bg-zinc-300'} transition-all cursor-pointer hover:opacity-80`} style={{ width: `${pct}%` }} title={`${stage}: ${count} deals`} onClick={() => { setStageFilter(stage); setPage(0) }} />
           )
         })}
       </div>
 
-      {/* Search */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(0) }}
-            placeholder="Search deals..."
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-[#1A3C34] focus:outline-none w-72"
-          />
-          {search && <span className="text-xs text-zinc-400">{displayed.length} results</span>}
-        </div>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
-            <span>{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
-          </div>
-        )}
-      </div>
-
-      {/* Deals Table */}
-      {displayed.length === 0 ? (
-        <EmptyState title="No deals match" description="Try changing the stage filter or search query" />
+      {/* Kanban View */}
+      {view === 'kanban' ? (
+        <KanbanView deals={allDeals.filter(d => !CLOSED_STAGES.includes(d.stageName))} />
       ) : (
-        <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-zinc-50 border-b border-zinc-100">
-                <tr>
-                  <SortHeader label="Deal Name" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Stage" sortKey="stageName" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Amount" sortKey="amount" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="right" />
-                  <SortHeader label="Close Date" sortKey="closeDate" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="right" />
-                  <SortHeader label="Created" sortKey="createDate" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="right" />
-                  <SortHeader label="Last Activity" sortKey="lastActivity" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="right" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-50">
-                {pageDeals.map(d => {
-                  const actDays = daysSince(d.lastActivity)
-                  const stale = actDays !== null && actDays >= 30
-                  return (
-                    <tr key={d.id} className="hover:bg-zinc-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm font-medium text-zinc-800 max-w-[250px] truncate">{d.name}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STAGE_COLORS[d.stageName] || 'bg-zinc-100 text-zinc-600'}`}>
-                          {d.stageName}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-zinc-700 text-right font-medium tabular-nums">
-                        {d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-zinc-500 text-right">{formatDate(d.closeDate)}</td>
-                      <td className="px-4 py-3 text-xs text-zinc-400 text-right">{formatDate(d.createDate)}</td>
-                      <td className={`px-4 py-3 text-xs text-right font-medium ${stale ? 'text-red-600' : 'text-zinc-400'}`}>
-                        {actDays !== null ? `${actDays}d ago` : '\u2014'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        <>
+          {/* Search + Pagination */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search deals..." className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-[#1A3C34] focus:outline-none w-72" />
+              {search && <span className="text-xs text-zinc-400">{displayed.length} results</span>}
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
+                <span>{page + 1} / {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
+              </div>
+            )}
           </div>
-        </div>
-      )}
 
-      {/* Bottom pagination */}
-      {totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
-          <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, displayed.length)} of {displayed.length}</span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
-          </div>
-        </div>
+          {/* Deals Table */}
+          {displayed.length === 0 ? (
+            <EmptyState title="No deals match" description="Try changing the stage filter or search query" />
+          ) : (
+            <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-zinc-50 border-b border-zinc-100">
+                    <tr>
+                      <TH label="Deal Name" k="name" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                      <TH label="Stage" k="stageName" cur={sortKey} dir={sortDir} onSort={handleSort} />
+                      <TH label="Amount" k="amount" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                      <TH label="Close Date" k="closeDate" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                      <TH label="Created" k="createDate" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                      <TH label="Last Activity" k="lastActivity" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-50">
+                    {pageDeals.map(d => {
+                      const actDays = daysSince(d.lastActivity)
+                      const stale = actDays !== null && actDays >= 30
+                      return (
+                        <tr key={d.id} className="hover:bg-zinc-50/50 transition-colors">
+                          <td className="px-4 py-3 text-sm font-medium text-zinc-800 max-w-[250px] truncate">{d.name}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STAGE_COLORS[d.stageName] || 'bg-zinc-100 text-zinc-600'}`}>{d.stageName}</span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-zinc-700 text-right font-medium tabular-nums">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</td>
+                          <td className="px-4 py-3 text-xs text-zinc-500 text-right">{fmtDate(d.closeDate)}</td>
+                          <td className="px-4 py-3 text-xs text-zinc-400 text-right">{fmtDate(d.createDate)}</td>
+                          <td className={`px-4 py-3 text-xs text-right font-medium ${stale ? 'text-red-600' : 'text-zinc-400'}`}>{actDays !== null ? `${actDays}d ago` : '\u2014'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
+              <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, displayed.length)} of {displayed.length}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
