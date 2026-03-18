@@ -1821,18 +1821,85 @@ app.get('/api/scorecard/data', async (_req, res) => {
   try {
     const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
 
+    // Fetch all Bison campaigns (paginated)
+    async function fetchAllBisonCampaigns() {
+      if (!EMAILBISON_KEY) return []
+      const all = []
+      let page = 1, lastPage = 1
+      while (page <= lastPage && page <= 10) {
+        try {
+          const r = await fetch(`${BISON_BASE}/campaigns?per_page=50&page=${page}`, { headers: { Authorization: `Bearer ${EMAILBISON_KEY}` } })
+          if (!r.ok) break
+          const data = await r.json()
+          const items = data?.data || (Array.isArray(data) ? data : [])
+          if (items.length === 0) break
+          all.push(...items)
+          if (data?.meta?.last_page) lastPage = data.meta.last_page
+          page++
+        } catch { break }
+      }
+      return all
+    }
+
+    // Parse Slack meetings
+    async function fetchMeetingsParsed() {
+      if (!SLACK_TOKEN) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
+      const { data, error } = await slackFetch('conversations.history', { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 30 * 86400) })
+      if (error || !data) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
+      const messages = data.messages || []
+      const dailyReports = []
+      let todayIndividual = 0
+      for (const m of messages) {
+        const text = m.text || ''
+        const eodMatch = text.match(/Total Meetings Booked Today:\*?\s*(\d+)/)
+        if (eodMatch) {
+          const ts = parseFloat(m.ts)
+          const date = new Date(ts * 1000).toISOString().slice(0, 10)
+          dailyReports.push({ date, count: parseInt(eodMatch[1]) })
+        }
+        if (text.includes('New Meeting Booked')) {
+          const ts = parseFloat(m.ts)
+          const msgDate = new Date(ts * 1000).toISOString().slice(0, 10)
+          const today = new Date().toISOString().slice(0, 10)
+          if (msgDate === today) todayIndividual++
+        }
+      }
+      const thisWeek = dailyReports.reduce((s, r) => s + r.count, 0) + todayIndividual
+      return { thisWeek, todaySoFar: todayIndividual, dailyReports: dailyReports.sort((a, b) => b.date.localeCompare(a.date)) }
+    }
+
+    // Fetch all HubSpot deals (paginated, Sales Pipeline only)
+    async function fetchAllHubSpotDeals() {
+      if (!HUBSPOT_KEY) return { results: [] }
+      const allDeals = []
+      let after = '', pages = 0
+      while (pages < 10) {
+        const pagination = after ? `&after=${after}` : ''
+        const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate${pagination}`)
+        if (error) break
+        const results = data.results || []
+        const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+        allDeals.push(...salesOnly.map(d => ({ ...d, properties: { ...d.properties, stageName: HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage || 'Unknown' } })))
+        const nextAfter = data.paging?.next?.after
+        if (!nextAfter) break
+        after = nextAfter
+        pages++
+      }
+      return { results: allDeals }
+    }
+
     const [
-      bisonRes, inboxRes, meetingsRes, sendersRes,
-      mondayRes, hubspotRes,
+      bisonCampaigns, inboxRes, meetingsParsed, sendersRes,
+      mondayRes, hubspotParsed,
       callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
       targetsData,
     ] = await Promise.all([
-      EMAILBISON_KEY ? fetch(`${BISON_BASE}/campaigns?per_page=50`, { headers: { Authorization: `Bearer ${EMAILBISON_KEY}` } }).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+      fetchAllBisonCampaigns(),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
-      SLACK_TOKEN ? slackFetch('conversations.history', { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 30 * 86400) }).then(r => r.data) : Promise.resolve(null),
+      fetchMeetingsParsed(),
       AIRTABLE_KEY ? airtableFetch('app70IAsUKudzw5UI', 'tblIWs6XXXdBW4OdP', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
       MONDAY_KEY ? mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { id name column_values { id title text value } } } } }`).then(r => r.data) : Promise.resolve(null),
-      HUBSPOT_KEY ? hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+      fetchAllHubSpotDeals(),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,coaching_priority,pipeline_inflation,qualification_result,date&scored_at=gte.${daysAgo(7)}`),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,date&scored_at=gte.${daysAgo(30)}`),
       supaQuery('deals_with_calls', 'select=*'),
@@ -1842,12 +1909,12 @@ app.get('/api/scorecard/data', async (_req, res) => {
     ])
 
     res.json({
-      bison: bisonRes,
+      bison: bisonCampaigns,
       inbox: inboxRes,
-      meetings: meetingsRes,
+      meetings: meetingsParsed,
       senders: sendersRes,
       monday: mondayRes,
-      hubspot: hubspotRes?.data || hubspotRes,
+      hubspot: hubspotParsed,
       callsWeek: callsWeekRes.data,
       callsMonth: callsMonthRes.data,
       deals: dealsRes.data,

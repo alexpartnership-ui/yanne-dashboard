@@ -130,19 +130,15 @@ export function useCEOScorecard() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      // Use batch endpoint — single request instead of 11
+      // Use batch endpoint — single request, all data pre-parsed server-side
       const res = await apiFetch('/api/scorecard/data')
       if (!res.ok) throw new Error('Failed to fetch scorecard data')
       const raw = await res.json()
 
-      // Also fetch meetings from Slack endpoint
-      const meetingsRes = await apiFetch('/api/slack/meetings-booked?days=30').then(r => r.ok ? r.json() : null).catch(() => null)
-
-      // ── Parse sources ──────────────────────────────
-      const campaigns = raw.bison?.data || (Array.isArray(raw.bison) ? raw.bison : [])
-      const campaignList = Array.isArray(campaigns) ? campaigns : []
+      // ── Parse sources (batch returns clean data) ───
+      const campaignList = Array.isArray(raw.bison) ? raw.bison : []
       const inboxRecords = raw.inbox?.records || []
-      const slackMeetings = meetingsRes || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
+      const slackMeetings = raw.meetings || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
       const senderRecords = raw.senders?.records || []
       const mondayBoards = raw.monday?.boards || []
       const hubspotDeals = raw.hubspot?.results || []
