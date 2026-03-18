@@ -26,6 +26,7 @@ const OnboardingTrackerPage = lazy(() => import('./pages/OnboardingTrackerPage')
 const CampaignDashboardsPage = lazy(() => import('./pages/CampaignDashboardsPage').then(m => ({ default: m.CampaignDashboardsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })))
+const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ default: m.DealsAIPage })))
 
 function PageLoader() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/calls/:id" element={<CallDetailPage />} />
                 <Route path="/reps" element={<RepsPage />} />
                 <Route path="/deals" element={<DealsPage />} />
+                <Route path="/deals/ai" element={<DealsAIPage />} />
                 <Route path="/chat" element={<ChatPage />} />
 
                 {/* Clients */}
