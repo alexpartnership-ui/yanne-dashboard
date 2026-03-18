@@ -159,9 +159,10 @@ export function CallSearchPage() {
               )}
               {c.objections && Array.isArray(c.objections) && c.objections.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {c.objections.slice(0, 3).map((o, i) => (
-                    <span key={i} className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700">{String(o).slice(0, 60)}</span>
-                  ))}
+                  {c.objections.slice(0, 3).map((o, i) => {
+                    const text = typeof o === 'string' ? o : (o as Record<string, string>)?.quote || (o as Record<string, string>)?.text || ''
+                    return text ? <span key={i} className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700">{text.slice(0, 60)}</span> : null
+                  })}
                 </div>
               )}
             </div>

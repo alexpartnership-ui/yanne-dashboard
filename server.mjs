@@ -2113,19 +2113,27 @@ app.get('/api/trackers', async (req, res) => {
       if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : [] } catch { return [] } }
       return []
     }
+    // Extract text from array items (could be strings or objects with quote/text/name fields)
+    function itemText(item) {
+      if (typeof item === 'string') return item
+      if (typeof item === 'object' && item !== null) {
+        return item.quote || item.text || item.name || item.description || item.reason || JSON.stringify(item)
+      }
+      return String(item)
+    }
 
     for (const c of calls) {
-      // Objections
+      // Objections (array of {quote, timestamp, heard, reframed, ...})
       const objs = parseArray(c.objections)
       for (const o of objs) {
-        const key = String(o).slice(0, 100)
-        objectionFreq[key] = (objectionFreq[key] || 0) + 1
+        const key = itemText(o).slice(0, 100)
+        if (key && key !== '{}') objectionFreq[key] = (objectionFreq[key] || 0) + 1
       }
-      // Red flags
+      // Red flags (array of strings or objects)
       const flags = parseArray(c.red_flags)
       for (const f of flags) {
-        const key = String(f).slice(0, 100)
-        redFlagFreq[key] = (redFlagFreq[key] || 0) + 1
+        const key = itemText(f).slice(0, 100)
+        if (key && key !== '{}') redFlagFreq[key] = (redFlagFreq[key] || 0) + 1
       }
       // Coaching themes
       if (c.coaching_priority) {
@@ -2204,15 +2212,20 @@ app.get('/api/call-search', async (req, res) => {
       if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : [val] } catch { return [val] } }
       return []
     }
+    function toText(item) {
+      if (typeof item === 'string') return item
+      if (typeof item === 'object' && item !== null) return item.quote || item.text || item.name || item.category || item.description || JSON.stringify(item)
+      return String(item)
+    }
 
     const calls = (data || []).filter(c => {
       const searchable = [
         c.prospect_company, c.prospect_contact, c.coaching_priority, c.biggest_miss,
         c.call_context, c.call_outcome, c.qualification_result,
-        ...toArr(c.objections),
-        ...toArr(c.red_flags),
-        ...toArr(c.strengths_top3),
-        ...toArr(c.gaps_top3),
+        ...toArr(c.objections).map(toText),
+        ...toArr(c.red_flags).map(toText),
+        ...toArr(c.strengths_top3).map(toText),
+        ...toArr(c.gaps_top3).map(toText),
       ].filter(Boolean).join(' ').toLowerCase()
       return searchable.includes(q)
     })
@@ -2289,9 +2302,11 @@ app.get('/api/benchmarks', async (_req, res) => {
       if (!Array.isArray(catScores)) continue
       if (!repCategories[c.rep]) repCategories[c.rep] = {}
       for (const cat of catScores) {
-        if (!repCategories[c.rep][cat.category]) repCategories[c.rep][cat.category] = { total: 0, count: 0 }
-        repCategories[c.rep][cat.category].total += cat.percentage
-        repCategories[c.rep][cat.category].count++
+        const catName = cat.category || cat.name || 'Unknown'
+        const pct = cat.percentage ?? (cat.max > 0 ? (cat.score / cat.max) * 100 : 0)
+        if (!repCategories[c.rep][catName]) repCategories[c.rep][catName] = { total: 0, count: 0 }
+        repCategories[c.rep][catName].total += pct
+        repCategories[c.rep][catName].count++
       }
     }
     const categoryBreakdown = Object.entries(repCategories).map(([rep, cats]) => ({
