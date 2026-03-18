@@ -67,7 +67,7 @@ function fmtDate(dateStr: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
 }
 
-type SortKey = 'name' | 'stageName' | 'amount' | 'closeDate' | 'createDate' | 'lastActivity'
+type SortKey = 'name' | 'stageName' | 'amount' | 'closeDate' | 'createDate' | 'lastActivity' | 'dealScore' | 'probability'
 type SortDir = 'asc' | 'desc'
 
 function sortDeals(deals: HubSpotDeal[], key: SortKey, dir: SortDir): HubSpotDeal[] {
@@ -80,6 +80,8 @@ function sortDeals(deals: HubSpotDeal[], key: SortKey, dir: SortDir): HubSpotDea
       case 'closeDate': av = a.closeDate ?? ''; bv = b.closeDate ?? ''; break
       case 'createDate': av = a.createDate ?? ''; bv = b.createDate ?? ''; break
       case 'lastActivity': av = a.lastActivity ?? ''; bv = b.lastActivity ?? ''; break
+      case 'dealScore': av = a.dealScore ?? -1; bv = b.dealScore ?? -1; break
+      case 'probability': av = a.probability ?? -1; bv = b.probability ?? -1; break
       default: av = ''; bv = ''
     }
     if (av < bv) return dir === 'asc' ? -1 : 1
@@ -436,6 +438,8 @@ export function DealsPage() {
                       <TH label="Close Date" k="closeDate" cur={sortKey} dir={sortDir} onSort={handleSort} right />
                       <TH label="Created" k="createDate" cur={sortKey} dir={sortDir} onSort={handleSort} right />
                       <TH label="Last Activity" k="lastActivity" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                      <TH label="Score" k="dealScore" cur={sortKey} dir={sortDir} onSort={handleSort} right />
+                      <TH label="Prob" k="probability" cur={sortKey} dir={sortDir} onSort={handleSort} right />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-50">
@@ -452,6 +456,12 @@ export function DealsPage() {
                           <td className="px-4 py-3 text-xs text-zinc-500 text-right">{fmtDate(d.closeDate)}</td>
                           <td className="px-4 py-3 text-xs text-zinc-400 text-right">{fmtDate(d.createDate)}</td>
                           <td className={`px-4 py-3 text-xs text-right font-medium ${stale ? 'text-red-600' : 'text-zinc-400'}`}>{actDays !== null ? `${actDays}d ago` : '\u2014'}</td>
+                          <td className="px-4 py-3 text-xs text-right">
+                            {d.dealScore !== null ? (
+                              <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${d.dealScore >= 70 ? 'bg-emerald-100 text-emerald-700' : d.dealScore >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{Math.round(d.dealScore)}</span>
+                            ) : '\u2014'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-right text-zinc-500">{d.probability !== null ? `${Math.round(d.probability * 100)}%` : '\u2014'}</td>
                         </tr>
                       )
                     })}

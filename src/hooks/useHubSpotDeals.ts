@@ -12,6 +12,9 @@ export interface HubSpotDeal {
   createDate: string | null
   lastModified: string | null
   lastActivity: string | null
+  dealScore: number | null
+  probability: number | null
+  forecastAmount: number | null
 }
 
 interface HubSpotResult {
@@ -48,6 +51,9 @@ export function useHubSpotDeals() {
           createDate: r.properties.createdate || null,
           lastModified: r.properties.hs_lastmodifieddate || null,
           lastActivity: r.properties.hs_lastactivity_date || r.properties.notes_last_updated || r.properties.hs_lastmodifieddate || null,
+          dealScore: r.properties.hs_deal_score ? parseFloat(r.properties.hs_deal_score) : null,
+          probability: r.properties.hs_deal_stage_probability ? parseFloat(r.properties.hs_deal_stage_probability) : null,
+          forecastAmount: r.properties.hs_forecast_amount ? parseFloat(r.properties.hs_forecast_amount) : null,
         }))
 
         setData({ deals, totalCount: deals.length })

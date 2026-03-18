@@ -887,7 +887,7 @@ app.get('/api/hubspot/deals', async (_req, res) => {
     let pages = 0
     while (pages < 10) {
       const pagination = after ? `&after=${after}` : ''
-      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate,notes_last_updated,hs_lastactivity_date${pagination}`)
+      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate,notes_last_updated,hs_lastactivity_date,hs_deal_stage_probability,hs_forecast_amount,hs_deal_score${pagination}`)
       if (error) return res.status(500).json({ error })
       const results = data.results || []
       // Filter to Sales Pipeline only
@@ -1709,7 +1709,7 @@ async function gatherContext(question) {
           let after = '', pg = 0
           while (pg < 10) {
             const pagination = after ? `&after=${after}` : ''
-            const { data } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate${pagination}`)
+            const { data } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate,hs_deal_stage_probability,hs_deal_score${pagination}`)
             if (!data) break
             const sales = (data.results || []).filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
             allDeals.push(...sales)
@@ -1865,18 +1865,23 @@ app.get('/api/forecast', async (_req, res) => {
     const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-    // Per-stage breakdown
+    // Per-stage breakdown — use HubSpot's native probability when available, fallback to stage weights
     const stageBreakdown = []
-    for (const [stage, prob] of Object.entries(STAGE_PROBABILITY)) {
+    for (const [stage, fallbackProb] of Object.entries(STAGE_PROBABILITY)) {
       if (stage === 'Closed Won') continue
-      const stageId = Object.entries(HUBSPOT_STAGE_MAP).find(([, v]) => v === stage)?.[0]
       const deals = allDeals.filter(d => {
         const s = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
         return s === stage
       })
       const totalAmount = deals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0)
-      const weighted = totalAmount * prob
-      stageBreakdown.push({ stage, count: deals.length, totalAmount, probability: prob, weighted })
+      // Use HubSpot's probability per deal for weighted calc
+      const weighted = deals.reduce((s, d) => {
+        const amt = parseFloat(d.properties?.amount || '0')
+        const prob = d.properties?.hs_deal_stage_probability ? parseFloat(d.properties.hs_deal_stage_probability) : fallbackProb
+        return s + (amt * prob)
+      }, 0)
+      const avgProb = deals.length > 0 ? weighted / Math.max(totalAmount, 1) : fallbackProb
+      stageBreakdown.push({ stage, count: deals.length, totalAmount, probability: Math.round(avgProb * 100) / 100, weighted: Math.round(weighted) })
     }
 
     // Stale deals (close date passed or no activity 30d+)
