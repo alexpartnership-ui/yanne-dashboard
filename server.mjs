@@ -881,19 +881,33 @@ const HUBSPOT_STAGE_MAP = {
 app.get('/api/hubspot/deals', async (_req, res) => {
   if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
   try {
-    const { data, error } = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate')
-    if (error) return res.status(500).json({ error })
-    // Filter to Sales Pipeline only, enrich with stage names
-    const allResults = data.results || []
-    const salesOnly = allResults.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
-    const results = salesOnly.map(d => ({
+    // Paginate to get ALL deals from Sales Pipeline
+    const allDeals = []
+    let after = ''
+    let pages = 0
+    while (pages < 10) {
+      const pagination = after ? `&after=${after}` : ''
+      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate${pagination}`)
+      if (error) return res.status(500).json({ error })
+      const results = data.results || []
+      // Filter to Sales Pipeline only
+      const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+      allDeals.push(...salesOnly)
+      // Check for next page
+      const nextAfter = data.paging?.next?.after
+      if (!nextAfter) break
+      after = nextAfter
+      pages++
+    }
+    // Enrich with stage names
+    const enriched = allDeals.map(d => ({
       ...d,
       properties: {
         ...d.properties,
         stageName: HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage || 'Unknown',
       },
     }))
-    res.json({ ...data, results })
+    res.json({ results: enriched })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
