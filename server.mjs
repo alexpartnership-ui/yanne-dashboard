@@ -2059,6 +2059,212 @@ app.post('/api/digest/send', verifyToken, requireRole('admin'), async (req, res)
   }
 })
 
+// ─── Call Trackers (Gong-style) ─────────────────────────
+
+app.get('/api/trackers', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 90
+    const floor = new Date(); floor.setDate(floor.getDate() - days)
+    const { data, error } = await supaQuery('call_logs', `select=rep,call_type,date,score_percentage,grade,coaching_priority,biggest_miss,objections,red_flags,qualification_result,pipeline_inflation,next_step_flag,call_outcome&scored_at=gte.${floor.toISOString()}&order=scored_at.desc`)
+    if (error) return res.status(500).json({ error })
+    const calls = data || []
+
+    // Objection frequency
+    const objectionFreq = {}
+    const redFlagFreq = {}
+    const coachingFreq = {}
+    const missFreq = {}
+
+    for (const c of calls) {
+      // Objections
+      const objs = Array.isArray(c.objections) ? c.objections : []
+      for (const o of objs) {
+        const key = o.slice(0, 100)
+        objectionFreq[key] = (objectionFreq[key] || 0) + 1
+      }
+      // Red flags
+      const flags = Array.isArray(c.red_flags) ? c.red_flags : []
+      for (const f of flags) {
+        const key = f.slice(0, 100)
+        redFlagFreq[key] = (redFlagFreq[key] || 0) + 1
+      }
+      // Coaching themes
+      if (c.coaching_priority) {
+        const key = c.coaching_priority.slice(0, 120)
+        coachingFreq[key] = (coachingFreq[key] || 0) + 1
+      }
+      // Biggest misses
+      if (c.biggest_miss) {
+        const key = c.biggest_miss.slice(0, 120)
+        missFreq[key] = (missFreq[key] || 0) + 1
+      }
+    }
+
+    const toSorted = (freq) => Object.entries(freq).map(([text, count]) => ({ text, count })).sort((a, b) => b.count - a.count).slice(0, 20)
+
+    // Weekly trends
+    const weekMap = {}
+    for (const c of calls) {
+      if (!c.date) continue
+      const d = new Date(c.date)
+      const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay())
+      const weekKey = weekStart.toISOString().slice(0, 10)
+      if (!weekMap[weekKey]) weekMap[weekKey] = { week: weekKey, calls: 0, totalScore: 0, objections: 0, redFlags: 0, inflation: 0 }
+      weekMap[weekKey].calls++
+      weekMap[weekKey].totalScore += c.score_percentage
+      weekMap[weekKey].objections += (Array.isArray(c.objections) ? c.objections.length : 0)
+      weekMap[weekKey].redFlags += (Array.isArray(c.red_flags) ? c.red_flags.length : 0)
+      weekMap[weekKey].inflation += c.pipeline_inflation ? 1 : 0
+    }
+    const weeklyTrends = Object.values(weekMap).map(w => ({
+      ...w,
+      avgScore: w.calls > 0 ? Math.round(w.totalScore / w.calls) : 0,
+      avgObjections: w.calls > 0 ? Math.round((w.objections / w.calls) * 10) / 10 : 0,
+    })).sort((a, b) => a.week.localeCompare(b.week))
+
+    // Per-rep breakdown
+    const repBreakdown = {}
+    for (const c of calls) {
+      if (!repBreakdown[c.rep]) repBreakdown[c.rep] = { calls: 0, totalScore: 0, objections: 0, redFlags: 0, inflation: 0 }
+      repBreakdown[c.rep].calls++
+      repBreakdown[c.rep].totalScore += c.score_percentage
+      repBreakdown[c.rep].objections += (Array.isArray(c.objections) ? c.objections.length : 0)
+      repBreakdown[c.rep].redFlags += (Array.isArray(c.red_flags) ? c.red_flags.length : 0)
+      repBreakdown[c.rep].inflation += c.pipeline_inflation ? 1 : 0
+    }
+
+    res.json({
+      totalCalls: calls.length,
+      topObjections: toSorted(objectionFreq),
+      topRedFlags: toSorted(redFlagFreq),
+      topCoachingThemes: toSorted(coachingFreq),
+      topMisses: toSorted(missFreq),
+      weeklyTrends,
+      repBreakdown: Object.entries(repBreakdown).map(([rep, s]) => ({
+        rep, ...s, avgScore: Math.round(s.totalScore / s.calls),
+      })),
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Call Library Search ────────────────────────────────
+
+app.get('/api/call-search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').toLowerCase()
+    if (!q || q.length < 2) return res.status(400).json({ error: 'Query must be at least 2 characters' })
+
+    // Fetch calls with text fields
+    const { data, error } = await supaQuery('call_logs', 'select=id,rep,call_type,prospect_company,prospect_contact,date,score_percentage,grade,coaching_priority,biggest_miss,objections,red_flags,strengths_top3,gaps_top3,qualification_result,pipeline_inflation,call_context,call_outcome&order=scored_at.desc&limit=2000')
+    if (error) return res.status(500).json({ error })
+
+    const calls = (data || []).filter(c => {
+      const searchable = [
+        c.prospect_company, c.prospect_contact, c.coaching_priority, c.biggest_miss,
+        c.call_context, c.call_outcome, c.qualification_result,
+        ...(Array.isArray(c.objections) ? c.objections : []),
+        ...(Array.isArray(c.red_flags) ? c.red_flags : []),
+        ...(Array.isArray(c.strengths_top3) ? c.strengths_top3 : []),
+        ...(Array.isArray(c.gaps_top3) ? c.gaps_top3 : []),
+      ].filter(Boolean).join(' ').toLowerCase()
+      return searchable.includes(q)
+    })
+
+    // Apply filters
+    let filtered = calls
+    if (req.query.rep) filtered = filtered.filter(c => c.rep === req.query.rep)
+    if (req.query.call_type) filtered = filtered.filter(c => c.call_type === req.query.call_type)
+    if (req.query.grade) filtered = filtered.filter(c => c.grade === req.query.grade)
+
+    res.json({
+      results: filtered.slice(0, 100),
+      totalMatches: filtered.length,
+      query: q,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Team Benchmarking ──────────────────────────────────
+
+app.get('/api/benchmarks', async (_req, res) => {
+  try {
+    const { data, error } = await supaQuery('call_logs', 'select=rep,call_type,date,score_percentage,grade,category_scores&order=scored_at.asc&limit=5000')
+    if (error) return res.status(500).json({ error })
+    const calls = data || []
+
+    // Weekly avg per rep
+    const weeklyRep = {}
+    const weeklyTeam = {}
+    for (const c of calls) {
+      if (!c.date) continue
+      const d = new Date(c.date)
+      const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay())
+      const weekKey = weekStart.toISOString().slice(0, 10)
+
+      // Per rep
+      const repKey = `${weekKey}|${c.rep}`
+      if (!weeklyRep[repKey]) weeklyRep[repKey] = { week: weekKey, rep: c.rep, total: 0, count: 0 }
+      weeklyRep[repKey].total += c.score_percentage
+      weeklyRep[repKey].count++
+
+      // Team
+      if (!weeklyTeam[weekKey]) weeklyTeam[weekKey] = { week: weekKey, total: 0, count: 0 }
+      weeklyTeam[weekKey].total += c.score_percentage
+      weeklyTeam[weekKey].count++
+    }
+
+    const repTrends = Object.values(weeklyRep).map(w => ({
+      week: w.week, rep: w.rep, avgScore: Math.round(w.total / w.count), calls: w.count,
+    })).sort((a, b) => a.week.localeCompare(b.week))
+
+    const teamTrend = Object.values(weeklyTeam).map(w => ({
+      week: w.week, avgScore: Math.round(w.total / w.count), calls: w.count,
+    })).sort((a, b) => a.week.localeCompare(b.week))
+
+    // Grade distribution over time (monthly)
+    const monthlyGrades = {}
+    for (const c of calls) {
+      if (!c.date || !c.grade) continue
+      const monthKey = c.date.slice(0, 7)
+      if (!monthlyGrades[monthKey]) monthlyGrades[monthKey] = { month: monthKey, A: 0, B: 0, C: 0, D: 0, F: 0, total: 0 }
+      const letter = c.grade.charAt(0)
+      if (letter in monthlyGrades[monthKey]) monthlyGrades[monthKey][letter]++
+      monthlyGrades[monthKey].total++
+    }
+
+    // Category performance per rep (all-time avg per scoring category)
+    const repCategories = {}
+    for (const c of calls) {
+      if (!Array.isArray(c.category_scores)) continue
+      if (!repCategories[c.rep]) repCategories[c.rep] = {}
+      for (const cat of c.category_scores) {
+        if (!repCategories[c.rep][cat.category]) repCategories[c.rep][cat.category] = { total: 0, count: 0 }
+        repCategories[c.rep][cat.category].total += cat.percentage
+        repCategories[c.rep][cat.category].count++
+      }
+    }
+    const categoryBreakdown = Object.entries(repCategories).map(([rep, cats]) => ({
+      rep,
+      categories: Object.entries(cats).map(([category, s]) => ({
+        category, avgScore: Math.round(s.total / s.count),
+      })).sort((a, b) => a.avgScore - b.avgScore),
+    }))
+
+    res.json({
+      repTrends,
+      teamTrend,
+      monthlyGrades: Object.values(monthlyGrades).sort((a, b) => a.month.localeCompare(b.month)),
+      categoryBreakdown,
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Deal stage update (for Kanban drag-drop) ──────────
 app.patch('/api/deals/:id/stage', async (req, res) => {
   const { stage } = req.body

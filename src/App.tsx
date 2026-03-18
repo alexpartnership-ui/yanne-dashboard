@@ -26,6 +26,9 @@ const OnboardingTrackerPage = lazy(() => import('./pages/OnboardingTrackerPage')
 const CampaignDashboardsPage = lazy(() => import('./pages/CampaignDashboardsPage').then(m => ({ default: m.CampaignDashboardsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })))
+const TrackersPage = lazy(() => import('./pages/TrackersPage').then(m => ({ default: m.TrackersPage })))
+const CallSearchPage = lazy(() => import('./pages/CallSearchPage').then(m => ({ default: m.CallSearchPage })))
+const BenchmarksPage = lazy(() => import('./pages/BenchmarksPage').then(m => ({ default: m.BenchmarksPage })))
 const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ default: m.DealsAIPage })))
 
 function PageLoader() {
@@ -55,6 +58,9 @@ export default function App() {
                 <Route path="/reps" element={<RepsPage />} />
                 <Route path="/deals" element={<DealsPage />} />
                 <Route path="/deals/ai" element={<DealsAIPage />} />
+                <Route path="/trackers" element={<TrackersPage />} />
+                <Route path="/call-search" element={<CallSearchPage />} />
+                <Route path="/benchmarks" element={<BenchmarksPage />} />
                 <Route path="/chat" element={<ChatPage />} />
 
                 {/* Clients */}
