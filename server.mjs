@@ -551,6 +551,23 @@ app.post('/api/deal-staleness', async (req, res) => {
 
 // ─── EmailBison API routes ──────────────────────────────
 
+// Switch to Yanne Capital CA workspace on startup
+const BISON_DEFAULT_WORKSPACE = 14 // "YANNE CAPITAL CA"
+async function switchBisonWorkspace() {
+  if (!EMAILBISON_KEY) return
+  try {
+    await fetch(`${BISON_BASE}/workspaces/switch`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${EMAILBISON_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: BISON_DEFAULT_WORKSPACE }),
+    })
+    console.log('EmailBison workspace set to YANNE CAPITAL CA')
+  } catch (err) {
+    console.warn('Failed to switch Bison workspace:', err.message)
+  }
+}
+switchBisonWorkspace()
+
 // Campaign analytics — paginate to get ALL campaigns
 app.get('/api/bison/campaigns', async (_req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
