@@ -145,7 +145,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3">
+      <div className="flex-1 overflow-y-auto px-3 scrollbar-hide">
         {allSections.map((section, si) => (
           <div key={section.title}>
             {si > 0 && <div className="my-3 border-t border-white/5" />}
