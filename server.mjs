@@ -551,25 +551,20 @@ app.post('/api/deal-staleness', async (req, res) => {
 
 // ─── EmailBison API routes ──────────────────────────────
 
-// Switch to Yanne Capital CA workspace on startup
+// Ensure Yanne Capital CA workspace before every Bison fetch
 const BISON_DEFAULT_WORKSPACE = 14 // "YANNE CAPITAL CA"
-async function switchBisonWorkspace() {
+async function ensureBisonWorkspace() {
   if (!EMAILBISON_KEY) return
-  try {
-    await fetch(`${BISON_BASE}/workspaces/switch`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${EMAILBISON_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: BISON_DEFAULT_WORKSPACE }),
-    })
-    console.log('EmailBison workspace set to YANNE CAPITAL CA')
-  } catch (err) {
-    console.warn('Failed to switch Bison workspace:', err.message)
-  }
+  await fetch(`${BISON_BASE}/workspaces/switch`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${EMAILBISON_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_id: BISON_DEFAULT_WORKSPACE }),
+  }).catch(() => {})
 }
-switchBisonWorkspace()
 
 // Campaign analytics — paginate to get ALL campaigns
 app.get('/api/bison/campaigns', async (_req, res) => {
+  await ensureBisonWorkspace()
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
     const allCampaigns = []
@@ -594,6 +589,7 @@ app.get('/api/bison/campaigns', async (_req, res) => {
 // Campaign sequence steps
 app.get('/api/bison/campaigns/:id/sequence', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  await ensureBisonWorkspace()
   try {
     const { data, error } = await bisonFetch(`/campaigns/v1.1/${req.params.id}/sequence-steps`)
     if (error) return res.status(500).json({ error })
@@ -606,6 +602,7 @@ app.get('/api/bison/campaigns/:id/sequence', async (req, res) => {
 // Campaign stats for a specific campaign
 app.get('/api/bison/campaigns/:id/stats', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  await ensureBisonWorkspace()
   try {
     const { data, error } = await bisonFetch(`/campaigns/${req.params.id}/statistics`)
     if (error) return res.status(500).json({ error })
@@ -618,6 +615,7 @@ app.get('/api/bison/campaigns/:id/stats', async (req, res) => {
 // Lead analytics
 app.get('/api/bison/leads', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  await ensureBisonWorkspace()
   try {
     const { data, error } = await bisonFetch('/leads', {
       per_page: req.query.per_page || 50,
@@ -634,6 +632,7 @@ app.get('/api/bison/leads', async (req, res) => {
 // Replies
 app.get('/api/bison/replies', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  await ensureBisonWorkspace()
   try {
     const { data, error } = await bisonFetch('/replies', {
       per_page: req.query.per_page || 50,
@@ -651,6 +650,7 @@ app.get('/api/bison/replies', async (req, res) => {
 // Sender accounts (for deliverability)
 app.get('/api/bison/senders', async (_req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
+  await ensureBisonWorkspace()
   try {
     const { data, error } = await bisonFetch('/sender-emails', { per_page: 100 })
     if (error) return res.status(500).json({ error })
