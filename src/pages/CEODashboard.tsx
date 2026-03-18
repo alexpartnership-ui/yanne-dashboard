@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '../hooks/useAuth'
+import { useToast } from '../components/Toast'
 import { useCEOScorecard, type CEOScorecardData } from '../hooks/useCEOScorecard'
 import { Spinner } from '../components/Spinner'
 
@@ -176,6 +177,24 @@ function DeptCard({ icon, title, owner, accent, metrics, children, defaultOpen =
 export function CEODashboard() {
   const { data, loading, refresh } = useCEOScorecard()
   const [showTargets, setShowTargets] = useState(false)
+  const { toast } = useToast()
+
+  const saveSnapshot = useCallback(async () => {
+    if (!data) return
+    try {
+      const snapshot = {
+        weekRange: data.weekRange,
+        revenueCollected: data.revenueCollected,
+        revenueTarget: data.revenueTarget,
+        funnel: data.funnel.map(f => ({ label: f.label, value: f.value, target: f.target })),
+        outbound: data.outbound.map(m => ({ name: m.name, rawActual: m.rawActual, rawTarget: m.rawTarget, status: m.status })),
+        sales: data.sales.map(m => ({ name: m.name, rawActual: m.rawActual, rawTarget: m.rawTarget, status: m.status })),
+      }
+      const res = await apiFetch('/api/scorecard/snapshot', { method: 'POST', body: JSON.stringify(snapshot) })
+      if (res.ok) toast('Snapshot saved', 'success')
+      else toast('Failed to save snapshot', 'error')
+    } catch { toast('Failed to save snapshot', 'error') }
+  }, [data, toast])
 
   if (loading && !data) return <Spinner />
   if (!data) return <p className="text-sm text-zinc-400">Failed to load scorecard</p>
@@ -194,10 +213,26 @@ export function CEODashboard() {
         <div className="flex items-center gap-3">
           <span className="text-[10px] text-zinc-400">Last refreshed: {data.lastRefreshed}</span>
           <button
+            onClick={saveSnapshot}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm"
+          >
+            Save Snapshot
+          </button>
+          <button
             onClick={() => setShowTargets(true)}
             className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm"
           >
             Edit Targets
+          </button>
+          <button
+            onClick={async () => {
+              const r = await apiFetch('/api/digest/send', { method: 'POST' })
+              if (r.ok) toast('Digest sent to Slack', 'success')
+              else toast('Failed to send digest', 'error')
+            }}
+            className="rounded-lg bg-[#1A3C34] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1A3C34]/90 shadow-sm"
+          >
+            Send Digest
           </button>
           <button
             onClick={refresh}

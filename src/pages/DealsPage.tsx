@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useHubSpotDeals, type HubSpotDeal } from '../hooks/useHubSpotDeals'
 import { Spinner } from '../components/Spinner'
 import { ExportButton } from '../components/ExportButton'
 import { EmptyState } from '../components/EmptyState'
+import { apiFetch } from '../hooks/useAuth'
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -187,6 +188,92 @@ function StageSummary({ deals }: { deals: HubSpotDeal[] }) {
 
 // ─── Page ───────────────────────────────────────────────
 
+// ─── Forecast + Stale Alerts ────────────────────────────
+
+interface ForecastData {
+  stageBreakdown: { stage: string; count: number; totalAmount: number; probability: number; weighted: number }[]
+  totalWeighted: number
+  totalActive: number
+  staleDeals: { name: string; stage: string; amount: number; closeDate: string | null; activityDays: number | null; reason: string }[]
+  staleCount: number
+  staleTotalAmount: number
+  thisMonth: { deals: number; value: number; month: string }
+}
+
+function ForecastSection() {
+  const [data, setData] = useState<ForecastData | null>(null)
+  const [showStale, setShowStale] = useState(false)
+
+  useEffect(() => {
+    apiFetch('/api/forecast').then(r => r.ok ? r.json() : null).then(setData).catch(() => {})
+  }, [])
+
+  if (!data) return null
+
+  return (
+    <div className="mb-5 space-y-3">
+      {/* Forecast bar */}
+      <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900">Revenue Forecast</h3>
+            <p className="text-[10px] text-zinc-400">Weighted by stage probability</p>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-bold text-[#1A3C34]">{fmt(data.totalWeighted)}</div>
+            <div className="text-[10px] text-zinc-400">weighted forecast</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 text-center">
+          {data.stageBreakdown.map(s => (
+            <div key={s.stage} className="rounded bg-zinc-50 px-2 py-2">
+              <div className="text-[9px] font-semibold text-zinc-500 uppercase">{s.stage}</div>
+              <div className="text-sm font-bold text-zinc-800 mt-0.5">{fmt(s.weighted)}</div>
+              <div className="text-[9px] text-zinc-400">{s.count} deals x {Math.round(s.probability * 100)}%</div>
+            </div>
+          ))}
+        </div>
+        {data.thisMonth.deals > 0 && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <span className="rounded-full bg-[#1A3C34]/10 px-2 py-0.5 text-[10px] font-semibold text-[#1A3C34]">{data.thisMonth.month}</span>
+            <span className="text-zinc-600">{data.thisMonth.deals} deals closing this month — {fmt(data.thisMonth.value)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Stale deals alert */}
+      {data.staleCount > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-bold text-red-800">{data.staleCount} Stale Deals</span>
+              <span className="text-xs text-red-600">— {fmt(data.staleTotalAmount)} at risk</span>
+            </div>
+            <button onClick={() => setShowStale(!showStale)} className="text-xs text-red-700 underline">{showStale ? 'Hide' : 'Show details'}</button>
+          </div>
+          {showStale && (
+            <div className="mt-3 space-y-1.5">
+              {data.staleDeals.map((d, i) => (
+                <div key={i} className="flex items-center justify-between text-xs bg-white rounded px-3 py-2">
+                  <div>
+                    <span className="font-medium text-zinc-800">{d.name}</span>
+                    <span className="ml-2 text-zinc-400">{d.stage}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-zinc-600">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
+                    <span className="text-red-600 font-medium">{d.reason}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function DealsPage() {
   const { data: hubspot, loading, error } = useHubSpotDeals()
   const [stageFilter, setStageFilter] = useState<string>('active')
@@ -295,6 +382,9 @@ export function DealsPage() {
           <div className="text-[11px] text-zinc-500 mt-1">Total Pipeline Value</div>
         </div>
       </div>
+
+      {/* Forecast + Stale Alerts */}
+      <ForecastSection />
 
       {/* Per-Stage Amount + Average Cards */}
       <StageSummary deals={allDeals} />

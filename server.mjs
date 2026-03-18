@@ -1832,6 +1832,233 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
   }
 })
 
+// ─── Revenue Forecast ───────────────────────────────────
+
+const STAGE_PROBABILITY = {
+  'Meeting Qualified': 0.10,
+  'NDA': 0.20,
+  '1st Closing Call': 0.35,
+  '2nd Closing Call': 0.55,
+  '3rd Call / Contract': 0.75,
+  'Closed Won': 1.0,
+}
+
+app.get('/api/forecast', async (_req, res) => {
+  if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
+  try {
+    // Fetch all Sales Pipeline deals
+    const allDeals = []
+    let after = '', pages = 0
+    while (pages < 10) {
+      const pagination = after ? `&after=${after}` : ''
+      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate,hs_lastactivity_date${pagination}`)
+      if (error) break
+      const sales = (data.results || []).filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+      allDeals.push(...sales)
+      const nextAfter = data.paging?.next?.after
+      if (!nextAfter) break
+      after = nextAfter; pages++
+    }
+
+    const CLOSED = ['closedwon', 'closedlost', 'contractsent', '1066871403']
+    const now = new Date()
+    const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0)
+
+    // Per-stage breakdown
+    const stageBreakdown = []
+    for (const [stage, prob] of Object.entries(STAGE_PROBABILITY)) {
+      if (stage === 'Closed Won') continue
+      const stageId = Object.entries(HUBSPOT_STAGE_MAP).find(([, v]) => v === stage)?.[0]
+      const deals = allDeals.filter(d => {
+        const s = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
+        return s === stage
+      })
+      const totalAmount = deals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0)
+      const weighted = totalAmount * prob
+      stageBreakdown.push({ stage, count: deals.length, totalAmount, probability: prob, weighted })
+    }
+
+    // Stale deals (close date passed or no activity 30d+)
+    const staleDeals = allDeals.filter(d => {
+      if (CLOSED.includes(d.properties?.dealstage || '')) return false
+      const closeDate = d.properties?.closedate ? new Date(d.properties.closedate) : null
+      const lastActivity = d.properties?.hs_lastactivity_date || d.properties?.hs_lastmodifieddate
+      const activityDays = lastActivity ? Math.floor((Date.now() - new Date(lastActivity).getTime()) / 86400000) : null
+      const overdue = closeDate && closeDate < now
+      const inactive = activityDays !== null && activityDays >= 30
+      return overdue || inactive
+    }).map(d => {
+      const stageName = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
+      const closeDate = d.properties?.closedate
+      const lastActivity = d.properties?.hs_lastactivity_date || d.properties?.hs_lastmodifieddate
+      const activityDays = lastActivity ? Math.floor((Date.now() - new Date(lastActivity).getTime()) / 86400000) : null
+      const overdue = closeDate && new Date(closeDate) < now
+      return {
+        name: d.properties?.dealname,
+        stage: stageName,
+        amount: parseFloat(d.properties?.amount || '0'),
+        closeDate,
+        activityDays,
+        overdue,
+        reason: overdue && activityDays >= 30 ? 'Overdue + Inactive' : overdue ? 'Overdue close date' : 'No activity 30d+',
+      }
+    })
+
+    const totalWeighted = stageBreakdown.reduce((s, b) => s + b.weighted, 0)
+    const totalActive = stageBreakdown.reduce((s, b) => s + b.totalAmount, 0)
+
+    // Monthly projection (deals with close dates this month)
+    const thisMonthDeals = allDeals.filter(d => {
+      if (CLOSED.includes(d.properties?.dealstage || '')) return false
+      const cd = d.properties?.closedate ? new Date(d.properties.closedate) : null
+      return cd && cd >= now && cd <= thisMonthEnd
+    })
+    const thisMonthValue = thisMonthDeals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0)
+
+    res.json({
+      stageBreakdown,
+      totalWeighted: Math.round(totalWeighted),
+      totalActive: Math.round(totalActive),
+      staleDeals,
+      staleCount: staleDeals.length,
+      staleTotalAmount: Math.round(staleDeals.reduce((s, d) => s + d.amount, 0)),
+      thisMonth: {
+        deals: thisMonthDeals.length,
+        value: Math.round(thisMonthValue),
+        month: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Coaching Adherence ─────────────────────────────────
+
+app.get('/api/coaching-adherence', async (_req, res) => {
+  try {
+    // Get rep performance (current coaching focus)
+    const { data: reps } = await supaQuery('rep_performance', 'select=rep,current_coaching_focus,coaching_adherence_rate,weakest_category,strongest_category')
+    // Get last 30 calls per rep to check if coaching was addressed
+    const { data: calls } = await supaQuery('call_logs', 'select=rep,date,score_percentage,coaching_priority,previous_coaching_addressed,call_type&order=scored_at.desc&limit=100')
+
+    const repAdherence = (reps || []).map(rep => {
+      const repCalls = (calls || []).filter(c => c.rep === rep.rep)
+      const recent = repCalls.slice(0, 10)
+      const addressed = recent.filter(c => c.previous_coaching_addressed).length
+      const adherenceRate = recent.length > 0 ? Math.round((addressed / recent.length) * 100) : 0
+
+      // Check if the same coaching priority keeps repeating (= not fixing it)
+      const priorities = repCalls.slice(0, 5).map(c => c.coaching_priority).filter(Boolean)
+      const priorityFreq = {}
+      for (const p of priorities) priorityFreq[p] = (priorityFreq[p] || 0) + 1
+      const repeatingIssue = Object.entries(priorityFreq).find(([, count]) => count >= 3)
+
+      return {
+        rep: rep.rep,
+        currentFocus: rep.current_coaching_focus,
+        adherenceRate,
+        addressedCount: addressed,
+        totalRecent: recent.length,
+        weakestCategory: rep.weakest_category,
+        strongestCategory: rep.strongest_category,
+        repeatingIssue: repeatingIssue ? repeatingIssue[0] : null,
+        recentScores: recent.slice(0, 5).map(c => ({ date: c.date, score: c.score_percentage, type: c.call_type })),
+      }
+    })
+
+    res.json(repAdherence)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Scorecard Snapshots (Goal Tracking) ────────────────
+
+const SNAPSHOTS_FILE = join(__dirname, 'scorecard_snapshots.json')
+
+function loadSnapshots() {
+  try {
+    if (existsSync(SNAPSHOTS_FILE)) return JSON.parse(readFileSync(SNAPSHOTS_FILE, 'utf-8'))
+  } catch { /* empty */ }
+  return []
+}
+
+app.get('/api/scorecard/snapshots', (_req, res) => {
+  res.json(loadSnapshots())
+})
+
+app.post('/api/scorecard/snapshot', async (req, res) => {
+  try {
+    const snapshot = req.body
+    snapshot.created_at = new Date().toISOString()
+    snapshot.created_by = req.user?.name || 'system'
+    const snapshots = loadSnapshots()
+    snapshots.push(snapshot)
+    // Keep last 52 weeks
+    if (snapshots.length > 52) snapshots.splice(0, snapshots.length - 52)
+    writeFileSync(SNAPSHOTS_FILE, JSON.stringify(snapshots, null, 2))
+    auditLog(req.user?.id, 'create_snapshot', 'scorecard', {}, req.ip)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Weekly CEO Digest (Slack) ──────────────────────────
+
+app.post('/api/digest/send', verifyToken, requireRole('admin'), async (req, res) => {
+  if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
+  try {
+    const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
+
+    // Gather all data
+    const [callsRes, dealsRes, repsRes] = await Promise.all([
+      supaQuery('call_logs', `select=rep,score_percentage,call_type,pipeline_inflation,qualification_result&scored_at=gte.${daysAgo(7)}`),
+      supaQuery('deals_with_calls', 'select=deal_id,prospect_company,rep_name,deal_status,current_stage,pipeline_inflation,updated_at'),
+      supaQuery('rep_performance', 'select=rep,call_1_rolling_avg,call_1_trend,call_2_rolling_avg,call_2_trend,total_scored_calls,weakest_category,current_coaching_focus'),
+    ])
+
+    const calls = callsRes.data || []
+    const deals = (dealsRes.data || [])
+    const reps = repsRes.data || []
+
+    const weekCalls = calls.length
+    const avgScore = weekCalls > 0 ? Math.round(calls.reduce((s, c) => s + c.score_percentage, 0) / weekCalls) : 0
+    const inflationCount = calls.filter(c => c.pipeline_inflation).length
+    const activeDeals = deals.filter(d => d.deal_status === 'active')
+    const stalledDeals = activeDeals.filter(d => {
+      if (!d.updated_at) return false
+      return (Date.now() - new Date(d.updated_at).getTime()) / 86400000 >= 14
+    })
+
+    // Build Slack message
+    const blocks = [
+      { type: 'header', text: { type: 'plain_text', text: `Weekly CEO Digest — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` } },
+      { type: 'section', text: { type: 'mrkdwn', text: `*Calls Scored:* ${weekCalls}\n*Team Avg Score:* ${avgScore}%\n*Active Deals:* ${activeDeals.length}\n*Pipeline Inflation Flags:* ${inflationCount}` } },
+    ]
+
+    if (stalledDeals.length > 0) {
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*:warning: ${stalledDeals.length} Stalled Deals (14d+):*\n${stalledDeals.slice(0, 5).map(d => `• ${d.prospect_company} (${d.rep_name}) — ${d.current_stage}`).join('\n')}` } })
+    }
+
+    // Rep summary
+    const repLines = reps.map(r => `• *${r.rep}*: C1 ${r.call_1_rolling_avg}% (${r.call_1_trend}) | C2 ${r.call_2_rolling_avg}% (${r.call_2_trend}) | Weakness: ${r.weakest_category || 'N/A'}`).join('\n')
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Rep Summary:*\n${repLines}` } })
+
+    // Send to #alex-daily-brief
+    const ALEX_CHANNEL = 'C0AK9CF0BU1'
+    const { error } = await slackFetch('chat.postMessage', { channel: ALEX_CHANNEL, blocks, text: `Weekly CEO Digest — ${weekCalls} calls, ${avgScore}% avg` })
+    if (error) return res.status(500).json({ error })
+
+    auditLog(req.user.id, 'send_digest', 'slack', { calls: weekCalls, avgScore }, req.ip)
+    res.json({ ok: true, calls: weekCalls, avgScore })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Deal stage update (for Kanban drag-drop) ──────────
 app.patch('/api/deals/:id/stage', async (req, res) => {
   const { stage } = req.body

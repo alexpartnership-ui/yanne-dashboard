@@ -1,11 +1,24 @@
+import { useEffect, useState } from 'react'
 import { useReps } from '../hooks/useReps'
 import { useRepCallHistory } from '../hooks/useRepCallHistory'
 import { ScoreRing } from '../components/ScoreRing'
 import { Sparkline } from '../components/Sparkline'
 import { Spinner } from '../components/Spinner'
 import { ExportButton } from '../components/ExportButton'
+import { apiFetch } from '../hooks/useAuth'
 import { repBorderClass } from '../lib/repColors'
 import type { RepPerformance } from '../types/database'
+
+interface AdherenceData {
+  rep: string
+  currentFocus: string | null
+  adherenceRate: number
+  addressedCount: number
+  totalRecent: number
+  weakestCategory: string | null
+  repeatingIssue: string | null
+  recentScores: { date: string; score: number; type: string }[]
+}
 
 function sortByVolume(reps: RepPerformance[]): RepPerformance[] {
   return [...reps].sort((a, b) => b.total_scored_calls - a.total_scored_calls)
@@ -14,6 +27,11 @@ function sortByVolume(reps: RepPerformance[]): RepPerformance[] {
 export function RepsPage() {
   const { data: reps, loading, error } = useReps()
   const { data: history } = useRepCallHistory()
+  const [adherence, setAdherence] = useState<AdherenceData[]>([])
+
+  useEffect(() => {
+    apiFetch('/api/coaching-adherence').then(r => r.ok ? r.json() : []).then(setAdherence).catch(() => {})
+  }, [])
 
   if (loading) return <Spinner />
   if (error) return <p className="text-sm text-red-600">Error: {error}</p>
@@ -99,6 +117,45 @@ export function RepsPage() {
           )
         })}
       </div>
+
+      {/* Coaching Adherence */}
+      {adherence.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-sm font-bold text-zinc-900 mb-3">Coaching Accountability</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {adherence.map(a => (
+              <div key={a.rep} className={`rounded-lg border bg-white p-4 shadow-sm ${a.repeatingIssue ? 'border-red-200' : 'border-zinc-200'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-zinc-800">{a.rep}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${a.adherenceRate >= 50 ? 'bg-emerald-100 text-emerald-700' : a.adherenceRate >= 25 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                    {a.adherenceRate}% adherence
+                  </span>
+                </div>
+                {a.currentFocus && (
+                  <div className="mb-2">
+                    <span className="text-[10px] text-zinc-400 uppercase">Current Focus:</span>
+                    <p className="text-xs text-zinc-600 mt-0.5 line-clamp-2">{a.currentFocus}</p>
+                  </div>
+                )}
+                {a.repeatingIssue && (
+                  <div className="rounded bg-red-50 px-2.5 py-1.5 mb-2">
+                    <span className="text-[10px] font-semibold text-red-700">Repeating Issue (3+ calls):</span>
+                    <p className="text-xs text-red-600 mt-0.5 line-clamp-2">{a.repeatingIssue}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 mt-2">
+                  <span className="text-[10px] text-zinc-400">Last 5:</span>
+                  {a.recentScores.map((s, i) => (
+                    <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${s.score >= 70 ? 'bg-emerald-100 text-emerald-700' : s.score >= 55 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                      {s.score}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
