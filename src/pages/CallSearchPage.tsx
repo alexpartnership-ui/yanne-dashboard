@@ -157,10 +157,10 @@ export function CallSearchPage() {
                   <span className="font-semibold">Miss:</span> {c.biggest_miss}
                 </p>
               )}
-              {c.objections && c.objections.length > 0 && (
+              {c.objections && Array.isArray(c.objections) && c.objections.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {c.objections.slice(0, 3).map((o, i) => (
-                    <span key={i} className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700">{o.slice(0, 60)}</span>
+                    <span key={i} className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700">{String(o).slice(0, 60)}</span>
                   ))}
                 </div>
               )}

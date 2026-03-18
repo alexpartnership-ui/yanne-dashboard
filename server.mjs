@@ -2075,17 +2075,23 @@ app.get('/api/trackers', async (req, res) => {
     const coachingFreq = {}
     const missFreq = {}
 
+    function parseArray(val) {
+      if (Array.isArray(val)) return val
+      if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : [] } catch { return [] } }
+      return []
+    }
+
     for (const c of calls) {
       // Objections
-      const objs = Array.isArray(c.objections) ? c.objections : []
+      const objs = parseArray(c.objections)
       for (const o of objs) {
-        const key = o.slice(0, 100)
+        const key = String(o).slice(0, 100)
         objectionFreq[key] = (objectionFreq[key] || 0) + 1
       }
       // Red flags
-      const flags = Array.isArray(c.red_flags) ? c.red_flags : []
+      const flags = parseArray(c.red_flags)
       for (const f of flags) {
-        const key = f.slice(0, 100)
+        const key = String(f).slice(0, 100)
         redFlagFreq[key] = (redFlagFreq[key] || 0) + 1
       }
       // Coaching themes
@@ -2112,8 +2118,8 @@ app.get('/api/trackers', async (req, res) => {
       if (!weekMap[weekKey]) weekMap[weekKey] = { week: weekKey, calls: 0, totalScore: 0, objections: 0, redFlags: 0, inflation: 0 }
       weekMap[weekKey].calls++
       weekMap[weekKey].totalScore += c.score_percentage
-      weekMap[weekKey].objections += (Array.isArray(c.objections) ? c.objections.length : 0)
-      weekMap[weekKey].redFlags += (Array.isArray(c.red_flags) ? c.red_flags.length : 0)
+      weekMap[weekKey].objections += parseArray(c.objections).length
+      weekMap[weekKey].redFlags += parseArray(c.red_flags).length
       weekMap[weekKey].inflation += c.pipeline_inflation ? 1 : 0
     }
     const weeklyTrends = Object.values(weekMap).map(w => ({
@@ -2128,8 +2134,8 @@ app.get('/api/trackers', async (req, res) => {
       if (!repBreakdown[c.rep]) repBreakdown[c.rep] = { calls: 0, totalScore: 0, objections: 0, redFlags: 0, inflation: 0 }
       repBreakdown[c.rep].calls++
       repBreakdown[c.rep].totalScore += c.score_percentage
-      repBreakdown[c.rep].objections += (Array.isArray(c.objections) ? c.objections.length : 0)
-      repBreakdown[c.rep].redFlags += (Array.isArray(c.red_flags) ? c.red_flags.length : 0)
+      repBreakdown[c.rep].objections += parseArray(c.objections).length
+      repBreakdown[c.rep].redFlags += parseArray(c.red_flags).length
       repBreakdown[c.rep].inflation += c.pipeline_inflation ? 1 : 0
     }
 
@@ -2160,14 +2166,20 @@ app.get('/api/call-search', async (req, res) => {
     const { data, error } = await supaQuery('call_logs', 'select=id,rep,call_type,prospect_company,prospect_contact,date,score_percentage,grade,coaching_priority,biggest_miss,objections,red_flags,strengths_top3,gaps_top3,qualification_result,pipeline_inflation,call_context,call_outcome&order=scored_at.desc&limit=2000')
     if (error) return res.status(500).json({ error })
 
+    function toArr(val) {
+      if (Array.isArray(val)) return val
+      if (typeof val === 'string') { try { const p = JSON.parse(val); return Array.isArray(p) ? p : [val] } catch { return [val] } }
+      return []
+    }
+
     const calls = (data || []).filter(c => {
       const searchable = [
         c.prospect_company, c.prospect_contact, c.coaching_priority, c.biggest_miss,
         c.call_context, c.call_outcome, c.qualification_result,
-        ...(Array.isArray(c.objections) ? c.objections : []),
-        ...(Array.isArray(c.red_flags) ? c.red_flags : []),
-        ...(Array.isArray(c.strengths_top3) ? c.strengths_top3 : []),
-        ...(Array.isArray(c.gaps_top3) ? c.gaps_top3 : []),
+        ...toArr(c.objections),
+        ...toArr(c.red_flags),
+        ...toArr(c.strengths_top3),
+        ...toArr(c.gaps_top3),
       ].filter(Boolean).join(' ').toLowerCase()
       return searchable.includes(q)
     })
@@ -2239,9 +2251,11 @@ app.get('/api/benchmarks', async (_req, res) => {
     // Category performance per rep (all-time avg per scoring category)
     const repCategories = {}
     for (const c of calls) {
-      if (!Array.isArray(c.category_scores)) continue
+      let catScores = c.category_scores
+      if (typeof catScores === 'string') { try { catScores = JSON.parse(catScores) } catch { continue } }
+      if (!Array.isArray(catScores)) continue
       if (!repCategories[c.rep]) repCategories[c.rep] = {}
-      for (const cat of c.category_scores) {
+      for (const cat of catScores) {
         if (!repCategories[c.rep][cat.category]) repCategories[c.rep][cat.category] = { total: 0, count: 0 }
         repCategories[c.rep][cat.category].total += cat.percentage
         repCategories[c.rep][cat.category].count++
