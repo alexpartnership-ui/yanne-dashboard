@@ -1579,10 +1579,9 @@ function detectIntent(question) {
     intents.push('hubspot')
   }
 
-  // If asking about a specific company name (not a rep), assume client
+  // Default: lightweight context (not everything)
   if (intents.length === 0) {
-    // Default: broad context
-    intents.push('rep_calls', 'rep_performance', 'deals', 'campaigns', 'clients')
+    intents.push('rep_calls', 'rep_performance', 'deals')
   }
 
   return { intents: [...new Set(intents)], mentionedReps, dateFilter }
@@ -1608,20 +1607,20 @@ async function gatherContext(question) {
   }
 
   if (intents.includes('rep_calls')) {
-    const parts = ['order=scored_at.desc', 'limit=50']
+    const parts = ['order=scored_at.desc', 'limit=25']
     if (repFilter) parts.push(repFilter)
     if (dateFilter) parts.push(dateFilter)
     promises.push(
-      supaQuery('call_logs', `select=id,rep,call_type,prospect_company,date,score_percentage,grade,coaching_priority,biggest_miss,strengths_top3,gaps_top3,qualification_result,pipeline_inflation,next_step_flag,call_context,call_outcome,scored_at&${parts.join('&')}`).then(r => { context.recent_calls = r.data })
+      supaQuery('call_logs', `select=id,rep,call_type,prospect_company,date,score_percentage,grade,coaching_priority,biggest_miss,qualification_result,pipeline_inflation,next_step_flag,call_context,call_outcome&${parts.join('&')}`).then(r => { context.recent_calls = r.data })
     )
   }
 
   if (intents.includes('deals')) {
     const params = repFilter
-      ? `${repFilter.replace('rep=', 'rep_name=')}&order=updated_at.desc`
-      : 'order=updated_at.desc'
+      ? `${repFilter.replace('rep=', 'rep_name=')}&order=updated_at.desc&limit=50`
+      : 'deal_status=eq.active&order=updated_at.desc&limit=50'
     promises.push(
-      supaQuery('deals_with_calls', params).then(r => { context.deals = r.data })
+      supaQuery('deals_with_calls', `select=deal_id,prospect_company,rep_name,current_stage,deal_status,pipeline_inflation,call_1_score,call_1_grade,call_2_score,call_2_grade,call_3_score,call_3_grade,updated_at&${params}`).then(r => { context.deals = r.data })
     )
   }
 
@@ -1704,18 +1703,41 @@ async function gatherContext(question) {
   if (intents.includes('hubspot')) {
     if (HUBSPOT_KEY) {
       promises.push(
-        hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate')
-          .then(r => {
-            const allDeals = r.data?.results || []
-            const salesDeals = allDeals.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
-            context.hubspot_deals = salesDeals.map(d => ({
-              name: d.properties.dealname,
-              stage: HUBSPOT_STAGE_MAP[d.properties.dealstage] || d.properties.dealstage,
-              amount: d.properties.amount,
-              closeDate: d.properties.closedate,
-              lastModified: d.properties.hs_lastmodifieddate,
-            }))
-          }).catch(() => {})
+        (async () => {
+          // Paginate all HubSpot deals but only send summary + active to context
+          const allDeals = []
+          let after = '', pg = 0
+          while (pg < 10) {
+            const pagination = after ? `&after=${after}` : ''
+            const { data } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate${pagination}`)
+            if (!data) break
+            const sales = (data.results || []).filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+            allDeals.push(...sales)
+            const nextAfter = data.paging?.next?.after
+            if (!nextAfter) break
+            after = nextAfter; pg++
+          }
+          // Build summary
+          const CLOSED = ['closedwon', 'closedlost', 'contractsent', '1066871403']
+          const activeDeals = allDeals.filter(d => !CLOSED.includes(d.properties?.dealstage || ''))
+          const wonDeals = allDeals.filter(d => d.properties?.dealstage === 'closedwon')
+          const lostDeals = allDeals.filter(d => d.properties?.dealstage === 'closedlost')
+          context.hubspot_summary = {
+            total: allDeals.length,
+            active: activeDeals.length,
+            won: wonDeals.length,
+            lost: lostDeals.length,
+            activeValue: activeDeals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0),
+            wonValue: wonDeals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0),
+          }
+          // Only send active deals (not 400+ closed ones)
+          context.hubspot_active_deals = activeDeals.map(d => ({
+            name: d.properties.dealname,
+            stage: HUBSPOT_STAGE_MAP[d.properties.dealstage] || d.properties.dealstage,
+            amount: d.properties.amount,
+            closeDate: d.properties.closedate,
+          }))
+        })().catch(() => {})
       )
     }
   }
@@ -1765,9 +1787,15 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
     const context = await gatherContext(lastUserMsg.content)
 
-    const contextStr = JSON.stringify(context, null, 2)
+    let contextStr = JSON.stringify(context, null, 2)
+    // Safety: truncate context to prevent token limit errors
+    if (contextStr.length > 50000) {
+      contextStr = contextStr.slice(0, 50000) + '\n...(truncated for token limit)'
+    }
+    // Keep last 10 messages max to stay within token budget
+    const recentMessages = messages.slice(-10)
     const enrichedMessages = [
-      ...messages.slice(0, -1),
+      ...recentMessages.slice(0, -1),
       {
         role: 'user',
         content: `${lastUserMsg.content}\n\n<data>\n${contextStr}\n</data>`,
