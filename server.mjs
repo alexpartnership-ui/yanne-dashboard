@@ -887,7 +887,7 @@ app.get('/api/hubspot/deals', async (_req, res) => {
     let pages = 0
     while (pages < 10) {
       const pagination = after ? `&after=${after}` : ''
-      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate${pagination}`)
+      const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate,notes_last_updated,hs_lastactivity_date${pagination}`)
       if (error) return res.status(500).json({ error })
       const results = data.results || []
       // Filter to Sales Pipeline only

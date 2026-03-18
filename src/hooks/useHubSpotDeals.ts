@@ -11,17 +11,12 @@ export interface HubSpotDeal {
   closeDate: string | null
   createDate: string | null
   lastModified: string | null
+  lastActivity: string | null
 }
-
-// Stage names now come enriched from server
 
 interface HubSpotResult {
   deals: HubSpotDeal[]
-  stageBreakdown: Record<string, number>
-  totalValue: number
-  wonCount: number
-  lostCount: number
-  activeCount: number
+  totalCount: number
 }
 
 export function useHubSpotDeals() {
@@ -52,21 +47,10 @@ export function useHubSpotDeals() {
           closeDate: r.properties.closedate || null,
           createDate: r.properties.createdate || null,
           lastModified: r.properties.hs_lastmodifieddate || null,
+          lastActivity: r.properties.hs_lastactivity_date || r.properties.notes_last_updated || r.properties.hs_lastmodifieddate || null,
         }))
 
-        const stageBreakdown: Record<string, number> = {}
-        let totalValue = 0, wonCount = 0, lostCount = 0, activeCount = 0
-
-        for (const d of deals) {
-          const sName = d.stageName || 'Unknown'
-          stageBreakdown[sName] = (stageBreakdown[sName] || 0) + 1
-          if (d.amount) totalValue += d.amount
-          if (d.stage === 'closedwon') wonCount++
-          else if (d.stage === 'closedlost' || d.stage === '1066871403') lostCount++
-          else activeCount++
-        }
-
-        setData({ deals, stageBreakdown, totalValue, wonCount, lostCount, activeCount })
+        setData({ deals, totalCount: deals.length })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       }
