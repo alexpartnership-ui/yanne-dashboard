@@ -518,13 +518,13 @@ app.get('/api/ceo-stats', async (_req, res) => {
 // Rep call history (sparklines)
 app.get('/api/rep-call-history', async (_req, res) => {
   try {
-    const { data, error } = await supaQuery('call_logs', 'select=rep,date,score_percentage,call_type&order=scored_at.desc&limit=200')
+    const { data, error } = await supaQuery('call_logs', 'select=rep,date,score_percentage,call_type&order=scored_at.desc&limit=2000')
     if (error) return res.status(500).json({ error })
     const rows = data || []
     const grouped = {}
     for (const row of rows) {
       if (!grouped[row.rep]) grouped[row.rep] = []
-      if (grouped[row.rep].length < 30) {
+      if (grouped[row.rep].length < 100) {
         grouped[row.rep].push({ date: row.date ?? '', score: row.score_percentage ?? 0, call_type: row.call_type ?? '' })
       }
     }

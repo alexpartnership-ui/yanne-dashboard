@@ -76,19 +76,19 @@ export function RepsPage() {
                 <div className="flex items-start gap-4">
                   <ScoreRing label="Call 1" score={rep.call_1_rolling_avg} trend={rep.call_1_trend} />
                   <div className="flex-1 pt-2">
-                    <Sparkline data={callHistory} callType="Call 1" />
+                    <Sparkline data={callHistory} callType="Call 1" rep={rep.rep} />
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
                   <ScoreRing label="Call 2" score={rep.call_2_rolling_avg} trend={rep.call_2_trend} />
                   <div className="flex-1 pt-2">
-                    <Sparkline data={callHistory} callType="Call 2" />
+                    <Sparkline data={callHistory} callType="Call 2" rep={rep.rep} />
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
                   <ScoreRing label="Call 3" score={rep.call_3_rolling_avg} trend={rep.call_3_trend} />
                   <div className="flex-1 pt-2">
-                    <Sparkline data={callHistory} callType="Call 3" />
+                    <Sparkline data={callHistory} callType="Call 3" rep={rep.rep} />
                   </div>
                 </div>
               </div>
