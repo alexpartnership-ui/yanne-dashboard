@@ -1274,14 +1274,20 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 14
     const oldest = String(Math.floor(Date.now() / 1000) - days * 86400)
-    const { data, error } = await slackFetch('conversations.history', {
-      channel: MEETINGS_CHANNEL,
-      limit: 200,
-      oldest,
-    })
-    if (error) return res.status(500).json({ error })
-
-    const messages = data.messages || []
+    // Paginate Slack to get ALL messages in range
+    const messages = []
+    let cursor = undefined
+    let pages = 0
+    while (pages < 10) {
+      const params = { channel: MEETINGS_CHANNEL, limit: 200, oldest }
+      if (cursor) params.cursor = cursor
+      const { data, error } = await slackFetch('conversations.history', params)
+      if (error) return res.status(500).json({ error })
+      messages.push(...(data.messages || []))
+      cursor = data.response_metadata?.next_cursor
+      if (!cursor) break
+      pages++
+    }
     const dailyReports = []
     let todayIndividual = 0
 
@@ -1386,14 +1392,20 @@ app.get('/api/slack/email-reports', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30
     const oldest = String(Math.floor(Date.now() / 1000) - days * 86400)
-    const { data, error } = await slackFetch('conversations.history', {
-      channel: EMAILS_REPORT_CHANNEL,
-      limit: 200,
-      oldest,
-    })
-    if (error) return res.status(500).json({ error })
-
-    const messages = data.messages || []
+    // Paginate Slack to get ALL messages in range
+    const messages = []
+    let cursor = undefined
+    let pages = 0
+    while (pages < 10) {
+      const params = { channel: EMAILS_REPORT_CHANNEL, limit: 200, oldest }
+      if (cursor) params.cursor = cursor
+      const { data, error } = await slackFetch('conversations.history', params)
+      if (error) return res.status(500).json({ error })
+      messages.push(...(data.messages || []))
+      cursor = data.response_metadata?.next_cursor
+      if (!cursor) break
+      pages++
+    }
     const dailyReports = []
 
     for (const m of messages) {
@@ -1841,12 +1853,22 @@ app.get('/api/scorecard/data', async (_req, res) => {
       return all
     }
 
-    // Parse Slack meetings
+    // Parse Slack meetings (paginated)
     async function fetchMeetingsParsed() {
       if (!SLACK_TOKEN) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
-      const { data, error } = await slackFetch('conversations.history', { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 30 * 86400) })
-      if (error || !data) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
-      const messages = data.messages || []
+      const messages = []
+      let cursor = undefined
+      let pg = 0
+      while (pg < 10) {
+        const params = { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 90 * 86400) }
+        if (cursor) params.cursor = cursor
+        const { data, error } = await slackFetch('conversations.history', params)
+        if (error || !data) break
+        messages.push(...(data.messages || []))
+        cursor = data.response_metadata?.next_cursor
+        if (!cursor) break
+        pg++
+      }
       const dailyReports = []
       let todayIndividual = 0
       for (const m of messages) {

@@ -5,7 +5,7 @@ import { useBisonCampaigns, type BisonCampaign } from '../hooks/useBisonCampaign
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 
-type TimeRange = '7d' | '14d' | '30d'
+type TimeRange = '7d' | '14d' | '30d' | '60d' | '90d' | 'all'
 type SortKey = 'name' | 'emails_sent' | 'replied' | 'reply_rate' | 'bounce_rate' | 'interested'
 type SortDir = 'asc' | 'desc'
 type Tab = 'overview' | 'campaigns'
@@ -18,7 +18,7 @@ function rateColor(rate: number): string {
 
 export function EmailIntelligencePage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('7d')
-  const days = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : 30
+  const days = timeRange === '7d' ? 7 : timeRange === '14d' ? 14 : timeRange === '30d' ? 30 : timeRange === '60d' ? 60 : timeRange === '90d' ? 90 : 365
   const { data: slackData, loading: loadingS } = useSlackEmailReports(days)
   const { data: bisonData, loading: loadingB } = useBisonCampaigns()
   const [tab, setTab] = useState<Tab>('overview')
@@ -89,7 +89,7 @@ export function EmailIntelligencePage() {
           </div>
           {/* Time range */}
           <div className="flex rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
-            {([['7d', '7 Days'], ['14d', '14 Days'], ['30d', '30 Days']] as [TimeRange, string][]).map(([val, label]) => (
+            {([['7d', '7D'], ['14d', '14D'], ['30d', '30D'], ['60d', '60D'], ['90d', '90D'], ['all', 'All']] as [TimeRange, string][]).map(([val, label]) => (
               <button key={val} onClick={() => setTimeRange(val)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${timeRange === val ? 'bg-yanne text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}>
                 {label}
