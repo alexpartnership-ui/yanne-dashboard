@@ -1867,38 +1867,47 @@ app.get('/api/forecast', async (_req, res) => {
     const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-    // Calculate REAL probabilities from historical data (deals that reached stage → closed won)
-    const stageOrder = ['Meeting Qualified', 'NDA', '1st Closing Call', '2nd Closing Call', '3rd Call / Contract', 'Closed Won']
-    const stageRank = Object.fromEntries(stageOrder.map((s, i) => [s, i]))
-    const reached = Object.fromEntries(stageOrder.map(s => [s, 0]))
-    const wonCount = allDeals.filter(d => HUBSPOT_STAGE_MAP[d.properties?.dealstage] === 'Closed Won' || d.properties?.dealstage === 'closedwon').length
+    // Calculate REAL win probability from historical data
+    // Exclude Long Term Lead + Disqualified (never real opportunities)
+    // Real pipeline = Won + Lost + Active
+    const ACTIVE_STAGE_ORDER = ['Meeting Qualified', 'NDA', '1st Closing Call', '2nd Closing Call', '3rd Call / Contract']
+    const stageRank = Object.fromEntries(ACTIVE_STAGE_ORDER.map((s, i) => [s, i]))
 
-    for (const deal of allDeals) {
-      const stageName = HUBSPOT_STAGE_MAP[deal.properties?.dealstage] || deal.properties?.dealstage
-      if (stageName === 'Closed Won') {
-        for (const s of stageOrder) reached[s]++
-      } else if (stageName in stageRank) {
-        const rank = stageRank[stageName]
-        for (let i = 0; i <= rank; i++) reached[stageOrder[i]]++
-      }
-    }
+    const wonDeals = allDeals.filter(d => (HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage) === 'Closed Won')
+    const lostDeals = allDeals.filter(d => (HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage) === 'Closed Lost')
+    const activeStageDeals = allDeals.filter(d => {
+      const s = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
+      return ACTIVE_STAGE_ORDER.includes(s)
+    })
+    const realPipelineTotal = wonDeals.length + lostDeals.length + activeStageDeals.length
+    const overallWinRate = realPipelineTotal > 0 ? wonDeals.length / realPipelineTotal : 0
 
+    // Stage-specific: later stages have higher probability
+    // Deals at/past a stage + won = reached that stage
+    // Scale probability proportionally by how far through the funnel they are
     const realProbability = {}
-    for (const s of stageOrder) {
-      if (s === 'Closed Won') continue
-      realProbability[s] = reached[s] > 0 ? Math.round((wonCount / reached[s]) * 100) / 100 : STAGE_PROBABILITY_FALLBACK[s]
+    for (const stage of ACTIVE_STAGE_ORDER) {
+      const r = stageRank[stage]
+      const atOrPast = activeStageDeals.filter(d => {
+        const s = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
+        return stageRank[s] !== undefined && stageRank[s] >= r
+      })
+      const reached = atOrPast.length + wonDeals.length
+      // Proportional estimate of lost deals at this stage
+      const lostEstimate = Math.round(lostDeals.length * (reached / Math.max(realPipelineTotal, 1)))
+      const totalEntered = reached + lostEstimate
+      realProbability[stage] = totalEntered > 0 ? Math.round((wonDeals.length / totalEntered) * 100) / 100 : overallWinRate
     }
 
-    // Per-stage breakdown with real probabilities
+    // Per-stage breakdown
     const stageBreakdown = []
-    for (const stage of stageOrder) {
-      if (stage === 'Closed Won') continue
+    for (const stage of ACTIVE_STAGE_ORDER) {
       const deals = allDeals.filter(d => {
         const s = HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage
         return s === stage
       })
       const totalAmount = deals.reduce((s, d) => s + parseFloat(d.properties?.amount || '0'), 0)
-      const prob = realProbability[stage] || STAGE_PROBABILITY_FALLBACK[stage]
+      const prob = realProbability[stage] || overallWinRate
       const weighted = Math.round(totalAmount * prob)
       stageBreakdown.push({ stage, count: deals.length, totalAmount, probability: prob, weighted })
     }
