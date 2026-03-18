@@ -5,6 +5,8 @@ import { FilterBar } from '../components/FilterBar'
 import { GroupedCallTable } from '../components/GroupedCallTable'
 import { GradeDistributionBar } from '../components/GradeDistributionBar'
 import { Spinner } from '../components/Spinner'
+import { ExportButton } from '../components/ExportButton'
+import { EmptyState } from '../components/EmptyState'
 
 function scoreColor(score: number): string {
   if (score >= 70) return 'text-emerald-600'
@@ -65,7 +67,10 @@ export function CallsPage() {
             </span>
           )}
         </div>
-        <FilterBar filters={filters} onChange={setFilters} />
+        <div className="flex items-center gap-2">
+          <ExportButton type="calls" />
+          <FilterBar filters={filters} onChange={setFilters} />
+        </div>
       </div>
 
       {/* Search */}
@@ -108,6 +113,8 @@ export function CallsPage() {
 
       {loading ? (
         <Spinner />
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No calls scored yet" description="Calls will appear here once they've been scored by the pipeline" />
       ) : (
         <GroupedCallTable
           data={filtered}

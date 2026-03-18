@@ -7,7 +7,7 @@ import { Spinner } from '../components/Spinner'
 
 interface Targets { [key: string]: number }
 
-function TargetsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function TargetsModal({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved?: () => void }) {
   const [targets, setTargets] = useState<Targets>({})
   const [saving, setSaving] = useState(false)
 
@@ -24,7 +24,7 @@ function TargetsModal({ open, onClose }: { open: boolean; onClose: () => void })
     })
     setSaving(false)
     onClose()
-    window.location.reload()
+    onSaved?.()
   }
 
   if (!open) return null
@@ -206,7 +206,7 @@ export function CEODashboard() {
             Sync Now
           </button>
         </div>
-        <TargetsModal open={showTargets} onClose={() => setShowTargets(false)} />
+        <TargetsModal open={showTargets} onClose={() => setShowTargets(false)} onSaved={refresh} />
       </div>
 
       {/* ── NORTH STAR ─────────────────────────────── */}
@@ -214,7 +214,7 @@ export function CEODashboard() {
         <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">Revenue Target</div>
         <div className="text-4xl font-bold text-zinc-900">
           ${(data.revenueCollected / 1000).toFixed(0)}K
-          <span className="text-lg font-normal text-zinc-400 ml-2">/ $833K monthly target</span>
+          <span className="text-lg font-normal text-zinc-400 ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
         </div>
         <div className="mt-3 mx-auto max-w-xl">
           <div className="h-4 rounded-full bg-zinc-100 overflow-hidden">

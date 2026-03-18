@@ -3,6 +3,7 @@ import { useRepCallHistory } from '../hooks/useRepCallHistory'
 import { ScoreRing } from '../components/ScoreRing'
 import { Sparkline } from '../components/Sparkline'
 import { Spinner } from '../components/Spinner'
+import { ExportButton } from '../components/ExportButton'
 import { repBorderClass } from '../lib/repColors'
 import type { RepPerformance } from '../types/database'
 
@@ -21,7 +22,10 @@ export function RepsPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-lg font-semibold text-yanne">Rep Performance</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-yanne">Rep Performance</h2>
+        <ExportButton type="reps" />
+      </div>
 
       <div className="space-y-4">
         {sorted.map(rep => {

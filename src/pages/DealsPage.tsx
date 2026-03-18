@@ -8,6 +8,8 @@ import { useDealStaleness } from '../hooks/useDealStaleness'
 import { DealCard } from '../components/DealCard'
 import { Spinner } from '../components/Spinner'
 import { apiFetch } from '../hooks/useAuth'
+import { ExportButton } from '../components/ExportButton'
+import { useToast } from '../components/Toast'
 import type { DealWithCalls, DealStage } from '../types/database'
 
 // ─── HUBSPOT SIDE ───────────────────────────────────────
@@ -145,7 +147,7 @@ function SupabasePanel() {
   const [localDeals, setLocalDeals] = useState<DealWithCalls[] | null>(null)
   const deals = localDeals ?? initialData
   const { stalenessMap } = useDealStaleness(deals)
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast } = useToast()
   const setDeals = useCallback((fn: (prev: DealWithCalls[]) => DealWithCalls[]) => {
     setLocalDeals(prev => fn(prev ?? initialData))
   }, [initialData])
@@ -168,15 +170,15 @@ function SupabasePanel() {
       })
       if (!r.ok) {
         setDeals(prev => prev.map(d => d.deal_id === draggedId ? { ...d, current_stage: draggedDeal.current_stage } : d))
-        setToast('Failed to update deal stage')
+        toast('Failed to update deal stage', 'error')
       } else {
-        setToast(`Moved ${draggedDeal.prospect_company} to ${targetStage}`)
+        toast(`Moved ${draggedDeal.prospect_company} to ${targetStage}`, 'success')
       }
     } catch {
       setDeals(prev => prev.map(d => d.deal_id === draggedId ? { ...d, current_stage: draggedDeal.current_stage } : d))
-      setToast('Failed to update deal stage')
+      toast('Failed to update deal stage', 'error')
     }
-    setTimeout(() => setToast(null), 3000)
+    // Toast auto-dismisses via ToastProvider
   }, [deals, setDeals])
 
   if (loading) return <div className="flex-1"><Spinner /></div>
@@ -245,11 +247,6 @@ function SupabasePanel() {
         </div>
       </DndContext>
 
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-zinc-800 px-4 py-2.5 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </div>
   )
 }
@@ -283,14 +280,17 @@ export function DealsPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-yanne">Deal Pipeline</h2>
-        <div className="text-[10px] text-zinc-400">Left: HubSpot (business) | Right: AI Scoring (coaching)</div>
+        <div className="flex items-center gap-2">
+          <ExportButton type="deals" />
+          <span className="text-[10px] text-zinc-400 hidden lg:inline">Left: HubSpot | Right: AI Scoring</span>
+        </div>
       </div>
 
       <MismatchBanner supaDeals={supaDeals} />
 
-      <div className="flex gap-4">
+      <div className="flex flex-col lg:flex-row gap-4">
         <HubSpotPanel />
-        <div className="w-px bg-zinc-200 shrink-0" />
+        <div className="hidden lg:block w-px bg-zinc-200 shrink-0" />
         <SupabasePanel />
       </div>
     </div>

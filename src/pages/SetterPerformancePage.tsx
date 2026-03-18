@@ -23,10 +23,9 @@ interface SetterData {
   byDate: DaySummary[]
 }
 
-const SETTER_COLORS: Record<string, string> = {
-  'Jenny Lupas': '#EF4444',
-  'Paula Sablayan': '#8B5CF6',
-  'Pholbert Moreno': '#3B82F6',
+const COLOR_PALETTE = ['#EF4444', '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#6366F1', '#14B8A6']
+function getSetterColor(_name: string, index: number): string {
+  return COLOR_PALETTE[index % COLOR_PALETTE.length]
 }
 
 export function SetterPerformancePage() {
@@ -84,12 +83,12 @@ export function SetterPerformancePage() {
               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
               <Tooltip />
               <Legend />
-              {setterNames.map(name => (
+              {setterNames.map((name, i) => (
                 <Line
                   key={name}
                   type="monotone"
                   dataKey={name}
-                  stroke={SETTER_COLORS[name] ?? '#a1a1aa'}
+                  stroke={getSetterColor(name, i)}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   connectNulls
@@ -104,10 +103,10 @@ export function SetterPerformancePage() {
       <div className="grid grid-cols-3 gap-4">
         {setters
           .sort((a, b) => b[1].totalBookings - a[1].totalBookings)
-          .map(([name, s]) => {
+          .map(([name, s], i) => {
             const avgBookings = s.days > 0 ? (s.totalBookings / s.days).toFixed(1) : '0'
             const avgFollowups = s.days > 0 ? Math.round(s.totalFollowups / s.days) : 0
-            const color = SETTER_COLORS[name] ?? '#71717a'
+            const color = getSetterColor(name, i)
             return (
               <div key={name} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm" style={{ borderLeftColor: color, borderLeftWidth: 4 }}>
                 <div className="flex items-baseline justify-between mb-4">

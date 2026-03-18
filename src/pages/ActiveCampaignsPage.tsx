@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../hooks/useAuth'
 import { useBisonCampaigns, type BisonCampaign } from '../hooks/useBisonCampaigns'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
@@ -26,7 +27,7 @@ function SequenceViewer({ campaignId }: { campaignId: number }) {
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch(`/api/bison/campaigns/${campaignId}/sequence`)
+    apiFetch(`/api/bison/campaigns/${campaignId}/sequence`)
       .then(r => r.ok ? r.json() : { sequence_steps: [] })
       .then(d => setSteps(d.sequence_steps || d.data?.sequence_steps || []))
       .catch(() => setSteps([]))
