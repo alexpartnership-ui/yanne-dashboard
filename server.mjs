@@ -2618,8 +2618,18 @@ async function fetchMeetingsParsed() {
       if (msgDate === today) todayIndividual++
     }
   }
-  const thisWeek = dailyReports.reduce((s, r) => s + r.count, 0) + todayIndividual
-  return { thisWeek, todaySoFar: todayIndividual, dailyReports: dailyReports.sort((a, b) => b.date.localeCompare(a.date)) }
+  // Filter to actual time ranges
+  const now = new Date()
+  const mondayOfWeek = new Date(now)
+  const day = mondayOfWeek.getDay()
+  mondayOfWeek.setDate(mondayOfWeek.getDate() - (day === 0 ? 6 : day - 1))
+  const mondayStr = mondayOfWeek.toISOString().slice(0, 10)
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+  const sortedReports = dailyReports.sort((a, b) => b.date.localeCompare(a.date))
+  const thisWeek = sortedReports.filter(r => r.date >= mondayStr).reduce((s, r) => s + r.count, 0) + todayIndividual
+  const thisMonth = sortedReports.filter(r => r.date >= firstOfMonth).reduce((s, r) => s + r.count, 0) + todayIndividual
+  return { thisWeek, thisMonth, todaySoFar: todayIndividual, dailyReports: sortedReports }
 }
 
 async function fetchAllHubSpotDeals() {

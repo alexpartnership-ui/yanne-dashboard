@@ -185,16 +185,22 @@ export function useCEOScorecard() {
       const lastSnapshot = raw.snapshots?.[0]?.snapshot_data || null
       const dataFreshness = raw.dataFreshness || {}
 
+      // Date boundaries for filtering
+      const now = new Date()
+      const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
       // ── EmailBison aggregates ──────────────────────
-      let totalSent = 0, totalReplies = 0, totalBounced = 0, activeCampaigns = 0
+      // Note: emails_sent is cumulative per campaign. We use Google Sheet monthly actual
+      // when available, otherwise show the cumulative as-is (it resets with new campaigns monthly).
+      let totalSentCumulative = 0, totalRepliesCumulative = 0, totalBounced = 0, activeCampaigns = 0
       let replyRateSum = 0, bounceRateSum = 0, rateCount = 0
       for (const c of campaignList) {
         if (c.status === 'active' || c.status === 'launching') activeCampaigns++
         const sent = Number(c.emails_sent) || 0
         const replied = Number(c.replied) || Number(c.unique_replies) || 0
         const bounced = Number(c.bounced) || 0
-        totalSent += sent
-        totalReplies += replied
+        totalSentCumulative += sent
+        totalRepliesCumulative += replied
         totalBounced += bounced
         if (sent > 0) {
           replyRateSum += (replied / sent) * 100
@@ -204,6 +210,12 @@ export function useCEOScorecard() {
       }
       const avgReplyRate = rateCount > 0 ? replyRateSum / rateCount : 0
       const avgBounceRate = rateCount > 0 ? bounceRateSum / rateCount : 0
+      // Use Google Sheet monthly actual for emails if available, otherwise use cumulative
+      const sheetEmailsSent = sheetData.get('Emails Sent')
+      const totalSent = sheetEmailsSent && Number(sheetEmailsSent.monthlyActual) > 0
+        ? Number(sheetEmailsSent.monthlyActual)
+        : totalSentCumulative
+      const totalReplies = totalRepliesCumulative
 
       // ── Airtable Inbox aggregates ──────────────────
       const categoryCounts: Record<string, number> = {}
@@ -227,21 +239,22 @@ export function useCEOScorecard() {
       }
 
       const totalInterested = categoryCounts['Interested'] || 0
-      const totalMeetingsBooked = (slackMeetings.thisWeek || 0) + (slackMeetings.todaySoFar || 0)
+      const totalMeetingsBooked = slackMeetings.thisWeek || 0
       const totalUnactioned = Object.values(setterMap).reduce((s, v) => s + v.unactioned, 0)
-      const meetingsThisMonth = (slackMeetings.dailyReports || []).reduce((s: number, r: { count: number }) => s + r.count, 0) + (slackMeetings.todaySoFar || 0)
+      const meetingsThisMonth = slackMeetings.thisMonth || slackMeetings.thisWeek || 0
 
       // ── Supabase call aggregates ───────────────────
       const weekCallCount = weekCalls.length
       const weekAvgScore = weekCallCount > 0 ? Math.round(weekCalls.reduce((s: number, c: { score_percentage: number }) => s + c.score_percentage, 0) / weekCallCount) : 0
-      const weekCall1s = weekCalls.filter((c: { call_type: string }) => c.call_type === 'Call 1')
-      const qualifiedCount = weekCall1s.filter((c: { qualification_result: string }) => c.qualification_result === 'QUALIFIED').length
-      const qualRate = weekCall1s.length > 0 ? Math.round((qualifiedCount / weekCall1s.length) * 100) : 0
       const inflationCount = weekCalls.filter((c: { pipeline_inflation: boolean }) => c.pipeline_inflation).length
 
-      // Deals
+      // Deals — signed filtered to this month
       const activeDeals = deals.filter(d => d.deal_status === 'active')
-      const signedDeals = deals.filter(d => d.deal_status === 'signed')
+      const allSignedDeals = deals.filter(d => d.deal_status === 'signed')
+      const signedDeals = allSignedDeals.filter(d => {
+        const ca = d.created_at as string || d.updated_at as string || ''
+        return ca >= firstOfMonth
+      })
       const stalledDeals = activeDeals.filter(d => {
         const ua = d.updated_at as string
         if (!ua) return false
@@ -296,11 +309,18 @@ export function useCEOScorecard() {
       const c2to3Rate = call2Deals.length > 0 ? Math.round((call3Deals.length / call2Deals.length) * 100) : 0
       const closeRate = deals.length > 0 ? Math.round((signedDeals.length / deals.length) * 100) : 0
 
-      // ── HubSpot revenue ────────────────────────────
+      // ── HubSpot revenue (this month only) ─────────
       let revenueCollected = 0
+      let revenueAllTime = 0
       const wonDeals = hubspotDeals.filter((d: { properties: Record<string, string> }) => d.properties?.dealstage === 'closedwon')
       for (const d of wonDeals) {
-        revenueCollected += parseFloat((d as { properties: Record<string, string> }).properties.amount || '0')
+        const amt = parseFloat((d as { properties: Record<string, string> }).properties.amount || '0')
+        revenueAllTime += amt
+        // Only count this month's revenue
+        const closeDate = (d as { properties: Record<string, string> }).properties.closedate || ''
+        if (closeDate >= firstOfMonth) {
+          revenueCollected += amt
+        }
       }
 
       // ── Google Sheet manual data ───────────────────
@@ -400,12 +420,19 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
+      // Qualification Rate = calls progressed to Call 2+ / total Call 1 deals (from Closer Form / deal data)
+      // Use Google Sheet value if available, otherwise use deal progression
+      const sheetQualRate = sheetData.get('Qualification Rate (Call 1 → Call 2)')
+      const qualRate = sheetQualRate && Number(sheetQualRate.monthlyActual) > 0
+        ? Math.round(Number(sheetQualRate.monthlyActual) * 100)
+        : c1to2Rate
+
       const sales: ScorecardMetric[] = [
         metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40, false, prevValue(prevSales, 'Calls Scored / Week')),
         metric('Team Avg Score', 'VACANT', '70%', `${weekAvgScore}%`, weekAvgScore, 70, false, prevValue(prevSales, 'Team Avg Score')),
+        metric('Qualification Rate', 'VACANT', '30%', `${qualRate}%`, qualRate, 30, false, prevValue(prevSales, 'Qualification Rate')),
         metric('Call 1 → Call 2 Rate', 'VACANT', '35%', `${c1to2Rate}%`, c1to2Rate, 35, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
         metric('Call 2 → Call 3 Rate', 'VACANT', '50%', `${c2to3Rate}%`, c2to3Rate, 50, false, prevValue(prevSales, 'Call 2 → Call 3 Rate')),
-        metric('Qualification Rate', 'VACANT', '15%', `${qualRate}%`, qualRate, 15, false, prevValue(prevSales, 'Qualification Rate')),
         metric('Proposals Sent', 'VACANT', '5', String(proposalDeals.length), proposalDeals.length, 5),
         metric('Close Rate', 'VACANT', '15%', `${closeRate}%`, closeRate, 15),
         metric('Stalled Deals (14d+)', 'VACANT', '<5', String(stalledDeals.length), stalledDeals.length, 5, true),
