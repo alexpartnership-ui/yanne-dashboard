@@ -803,6 +803,35 @@ app.get('/api/heyreach/campaigns/:id', async (req, res) => {
   }
 })
 
+// All lists with lead counts
+app.get('/api/heyreach/lists', async (_req, res) => {
+  if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
+  try {
+    const { data, error } = await heyreachFetch('/list/GetAll', { method: 'POST', body: {} })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Leads from a specific list (paginated)
+app.get('/api/heyreach/lists/:id/leads', async (req, res) => {
+  if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
+  try {
+    const offset = parseInt(req.query.offset) || 0
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100)
+    const { data, error } = await heyreachFetch('/list/GetLeadsFromList', {
+      method: 'POST',
+      body: { listId: parseInt(req.params.id), offset, limit },
+    })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Airtable API routes ────────────────────────────────
 
 // Inbox Manager — lead categories, setter performance

@@ -23,11 +23,32 @@ export interface HeyReachCampaign {
   startedAt: string | null
 }
 
+export interface HeyReachList {
+  id: number
+  name: string
+  totalItemsCount: number
+  listType: string
+  creationTime: string
+  campaignIds: number[]
+}
+
+export interface SenderAccount {
+  id: number
+  campaignCount: number
+  campaignNames: string[]
+  totalLeadsAssigned: number
+}
+
 interface HeyReachResult {
   campaigns: HeyReachCampaign[]
+  lists: HeyReachList[]
+  senders: SenderAccount[]
   totals: {
     totalCampaigns: number
     activeCampaigns: number
+    pausedCampaigns: number
+    draftCampaigns: number
+    completedCampaigns: number
     totalLeads: number
     totalInProgress: number
     totalFinished: number
@@ -35,6 +56,10 @@ interface HeyReachResult {
     totalPending: number
     totalExcluded: number
     totalSenderAccounts: number
+    totalLists: number
+    totalListLeads: number
+    completionRate: number
+    failureRate: number
   }
 }
 
@@ -46,21 +71,33 @@ export function useHeyReach() {
   useEffect(() => {
     async function fetchAll() {
       try {
-        const res = await apiFetch('/api/heyreach/campaigns')
-        if (!res.ok) {
-          const err = await res.json()
+        const [campaignsRes, listsRes] = await Promise.all([
+          apiFetch('/api/heyreach/campaigns'),
+          apiFetch('/api/heyreach/lists'),
+        ])
+
+        if (!campaignsRes.ok) {
+          const err = await campaignsRes.json()
           setError(err.error || 'Failed to fetch HeyReach data')
           setLoading(false)
           return
         }
-        const json = await res.json()
-        const items: HeyReachCampaign[] = json?.items || []
 
-        const active = items.filter(c => c.status === 'IN_PROGRESS')
+        const campaignsJson = await campaignsRes.json()
+        const campaigns: HeyReachCampaign[] = campaignsJson?.items || []
+
+        const listsJson = listsRes.ok ? await listsRes.json() : { items: [] }
+        const lists: HeyReachList[] = listsJson?.items || []
+
+        const active = campaigns.filter(c => c.status === 'IN_PROGRESS')
+        const paused = campaigns.filter(c => c.status === 'PAUSED')
+        const draft = campaigns.filter(c => c.status === 'DRAFT')
+        const completed = campaigns.filter(c => c.status === 'COMPLETED' || c.status === 'FINISHED')
+
         let totalLeads = 0, totalInProgress = 0, totalFinished = 0, totalFailed = 0, totalPending = 0, totalExcluded = 0
-        let totalSenderAccounts = new Set<number>()
+        const senderMap = new Map<number, { campaignCount: number; campaignNames: string[]; totalLeadsAssigned: number }>()
 
-        for (const c of items) {
+        for (const c of campaigns) {
           if (c.progressStats) {
             totalLeads += c.progressStats.totalUsers
             totalInProgress += c.progressStats.totalUsersInProgress
@@ -69,23 +106,49 @@ export function useHeyReach() {
             totalPending += c.progressStats.totalUsersPending
             totalExcluded += c.progressStats.totalUsersExcluded
           }
+          const leadsPerSender = c.progressStats ? Math.round(c.progressStats.totalUsers / Math.max(c.campaignAccountIds.length, 1)) : 0
           for (const id of c.campaignAccountIds) {
-            totalSenderAccounts.add(id)
+            const existing = senderMap.get(id)
+            if (existing) {
+              existing.campaignCount++
+              existing.campaignNames.push(c.name)
+              existing.totalLeadsAssigned += leadsPerSender
+            } else {
+              senderMap.set(id, { campaignCount: 1, campaignNames: [c.name], totalLeadsAssigned: leadsPerSender })
+            }
           }
         }
 
+        const senders: SenderAccount[] = Array.from(senderMap.entries())
+          .map(([id, s]) => ({ id, ...s }))
+          .sort((a, b) => b.campaignCount - a.campaignCount)
+
+        const totalListLeads = lists.reduce((sum, l) => sum + l.totalItemsCount, 0)
+        const processed = totalFinished + totalFailed + totalExcluded
+        const completionRate = totalLeads > 0 ? Math.round((totalFinished / totalLeads) * 1000) / 10 : 0
+        const failureRate = processed > 0 ? Math.round((totalFailed / processed) * 1000) / 10 : 0
+
         setData({
-          campaigns: items,
+          campaigns,
+          lists,
+          senders,
           totals: {
-            totalCampaigns: items.length,
+            totalCampaigns: campaigns.length,
             activeCampaigns: active.length,
+            pausedCampaigns: paused.length,
+            draftCampaigns: draft.length,
+            completedCampaigns: completed.length,
             totalLeads,
             totalInProgress,
             totalFinished,
             totalFailed,
             totalPending,
             totalExcluded,
-            totalSenderAccounts: totalSenderAccounts.size,
+            totalSenderAccounts: senderMap.size,
+            totalLists: lists.length,
+            totalListLeads,
+            completionRate,
+            failureRate,
           },
         })
       } catch (err) {
