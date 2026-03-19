@@ -365,16 +365,19 @@ async function supaInsert(table, rows) {
 
 // ─── Google Sheets helpers (CEO Scorecard sync) ─────────
 
-function getGoogleSheetsClient() {
+let _sheetsClient = null
+async function getGoogleSheetsClient() {
   if (!GOOGLE_SHEETS_PRIVATE_KEY || !GOOGLE_SHEETS_CLIENT_EMAIL) return null
+  if (_sheetsClient) return _sheetsClient
   try {
-    const auth = new google.auth.JWT(
-      GOOGLE_SHEETS_CLIENT_EMAIL,
-      null,
-      GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets']
-    )
-    return google.sheets({ version: 'v4', auth })
+    const auth = new google.auth.JWT({
+      email: GOOGLE_SHEETS_CLIENT_EMAIL,
+      key: GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    })
+    await auth.authorize()
+    _sheetsClient = google.sheets({ version: 'v4', auth })
+    return _sheetsClient
   } catch (err) {
     console.error('Google Sheets auth error:', err.message)
     return null
@@ -382,7 +385,7 @@ function getGoogleSheetsClient() {
 }
 
 async function readSheetTab(tabName, range = 'A:M') {
-  const sheets = getGoogleSheetsClient()
+  const sheets = await getGoogleSheetsClient()
   if (!sheets) return null
   try {
     const res = await sheets.spreadsheets.values.get({
@@ -398,7 +401,7 @@ async function readSheetTab(tabName, range = 'A:M') {
 }
 
 async function writeSheetCells(tabName, updates) {
-  const sheets = getGoogleSheetsClient()
+  const sheets = await getGoogleSheetsClient()
   if (!sheets || !updates.length) return false
   try {
     await sheets.spreadsheets.values.batchUpdate({
