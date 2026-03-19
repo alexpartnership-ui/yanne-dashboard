@@ -269,7 +269,10 @@ if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages 
 if (!SLACK_TOKEN) console.warn('Missing SLACK_BOT_TOKEN — Slack reporting data will not work')
 
 // Google Sheets service account (for CEO Scorecard bidirectional sync)
-const GOOGLE_SHEETS_PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY
+// Private key stored as base64 to avoid Docker build-arg newline issues
+const GOOGLE_SHEETS_PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY_B64
+  ? Buffer.from(process.env.GOOGLE_SHEETS_PRIVATE_KEY_B64, 'base64').toString('utf-8')
+  : process.env.GOOGLE_SHEETS_PRIVATE_KEY
 const GOOGLE_SHEETS_CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL
 const CEO_SCORECARD_SPREADSHEET_ID = process.env.CEO_SCORECARD_SPREADSHEET_ID || '1kS3K2rVXpXbqhrlCeBU8PEu5CnaOtFPGY_XfvE7G0mo'
 if (!GOOGLE_SHEETS_PRIVATE_KEY || !GOOGLE_SHEETS_CLIENT_EMAIL) console.warn('Missing GOOGLE_SHEETS_PRIVATE_KEY or GOOGLE_SHEETS_CLIENT_EMAIL — Google Sheets sync will not work')
