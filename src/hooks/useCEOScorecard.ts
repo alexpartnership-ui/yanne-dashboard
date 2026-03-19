@@ -76,6 +76,7 @@ export interface CEOScorecardData {
   monthlyTrend: { month: string; amount: number }[]
   funnel: FunnelStage[]
   outbound: ScorecardMetric[]
+  linkedin: ScorecardMetric[]
   setters: ScorecardMetric[]
   setterBreakdown: SetterRow[]
   sales: ScorecardMetric[]
@@ -90,6 +91,7 @@ export interface CEOScorecardData {
   weeklyComparison: WeeklyComparison[]
   weekRange: string
   lastRefreshed: string
+  dataFreshness: Record<string, 'live' | 'stale' | 'unavailable'>
 }
 
 // ─── Helpers ────────────────────────────────────────────
@@ -111,14 +113,47 @@ function daysAgo(n: number): string {
   return d.toISOString()
 }
 
-function metric(name: string, owner: string, target: string, actual: string, rawActual: number, rawTarget: number, inverted = false): ScorecardMetric {
-  const met = inverted ? rawActual <= rawTarget : rawActual >= rawTarget
-  return {
-    name, owner, target, actual, rawActual, rawTarget,
-    status: met ? 'green' : 'red',
-    trend: 'flat',
-    inverted,
+function metric(name: string, owner: string, target: string, actual: string, rawActual: number, rawTarget: number, inverted = false, prevActual?: number): ScorecardMetric {
+  // Yellow band: >= 75% of target but below target
+  const ratio = inverted
+    ? (rawTarget / Math.max(rawActual, 0.01))
+    : (rawActual / Math.max(rawTarget, 0.01))
+  const status: 'green' | 'yellow' | 'red' = ratio >= 1 ? 'green' : ratio >= 0.75 ? 'yellow' : 'red'
+
+  // Real trend: compare to previous value if available
+  let trend: 'up' | 'down' | 'flat' = 'flat'
+  if (prevActual !== undefined && prevActual !== 0) {
+    const changePct = ((rawActual - prevActual) / Math.abs(prevActual)) * 100
+    if (inverted) {
+      trend = changePct <= -5 ? 'up' : changePct >= 5 ? 'down' : 'flat'
+    } else {
+      trend = changePct >= 5 ? 'up' : changePct <= -5 ? 'down' : 'flat'
+    }
   }
+
+  return { name, owner, target, actual, rawActual, rawTarget, status, trend, inverted }
+}
+
+// Parse Google Sheet rows into a lookup map
+function parseSheetData(rows: unknown[][] | null): Map<string, { weekValues: (number | string)[], monthlyActual: number | string, monthlyTarget: number | string, status: string, owner: string, source: string }> {
+  const map = new Map()
+  if (!rows) return map
+  for (let i = 3; i < rows.length; i++) { // Skip header rows (0-2)
+    const row = rows[i] as (string | number)[]
+    const name = row[0]
+    if (!name || typeof name !== 'string') continue
+    // Section headers (all caps, no data in other columns) — skip
+    if (name === name.toUpperCase() && !row[1] && !row[7]) continue
+    map.set(name, {
+      weekValues: [row[1], row[2], row[3], row[4], row[5]].filter(v => v !== undefined && v !== ''),
+      monthlyActual: row[7] ?? '',  // Column H
+      monthlyTarget: row[8] ?? '',  // Column I
+      status: String(row[9] ?? ''), // Column J
+      owner: String(row[10] ?? ''), // Column K
+      source: String(row[11] ?? ''), // Column L
+    })
+  }
+  return map
 }
 
 // ─── Hook ───────────────────────────────────────────────
@@ -130,12 +165,11 @@ export function useCEOScorecard() {
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      // Use batch endpoint — single request, all data pre-parsed server-side
       const res = await apiFetch('/api/scorecard/data')
       if (!res.ok) throw new Error('Failed to fetch scorecard data')
       const raw = await res.json()
 
-      // ── Parse sources (batch returns clean data) ───
+      // ── Parse sources ───
       const campaignList = Array.isArray(raw.bison) ? raw.bison : []
       const inboxRecords = raw.inbox?.records || []
       const slackMeetings = raw.meetings || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
@@ -146,6 +180,10 @@ export function useCEOScorecard() {
       const deals = (raw.deals || []) as Array<Record<string, unknown>>
       const reps = (raw.reps || []) as Array<Record<string, unknown>>
       const twoWeekCalls = raw.allCalls || []
+      const sheetData = parseSheetData(raw.googleSheet)
+      const linkedinRecords = raw.linkedin?.records || []
+      const lastSnapshot = raw.snapshots?.[0]?.snapshot_data || null
+      const dataFreshness = raw.dataFreshness || {}
 
       // ── EmailBison aggregates ──────────────────────
       let totalSent = 0, totalReplies = 0, totalBounced = 0, activeCampaigns = 0
@@ -211,16 +249,24 @@ export function useCEOScorecard() {
       })
       const proposalDeals = activeDeals.filter(d => d.current_stage === 'Call 3' || d.current_stage === 'Call 4')
 
-      // Rep leaderboard
-      const repCallMap: Record<string, { calls: number; totalScore: number }> = {}
+      // Rep leaderboard — enhanced with deals advanced
+      const repCallMap: Record<string, { calls: number; totalScore: number; dealsAdvanced: number }> = {}
       for (const c of weekCalls) {
         const rep = (c as { rep: string }).rep
-        if (!repCallMap[rep]) repCallMap[rep] = { calls: 0, totalScore: 0 }
+        if (!repCallMap[rep]) repCallMap[rep] = { calls: 0, totalScore: 0, dealsAdvanced: 0 }
         repCallMap[rep].calls++
         repCallMap[rep].totalScore += (c as { score_percentage: number }).score_percentage
       }
+      // Count deals advanced per rep
+      for (const d of deals) {
+        const rep = d.rep_name as string
+        if (rep && repCallMap[rep]) {
+          const stage = d.current_stage as string
+          if (stage && stage !== 'Call 1') repCallMap[rep].dealsAdvanced++
+        }
+      }
       const repLeaderboard: RepRow[] = Object.entries(repCallMap)
-        .map(([name, s]) => ({ name, calls: s.calls, avgScore: Math.round(s.totalScore / s.calls), dealsAdvanced: 0 }))
+        .map(([name, s]) => ({ name, calls: s.calls, avgScore: Math.round(s.totalScore / s.calls), dealsAdvanced: s.dealsAdvanced }))
         .sort((a, b) => b.avgScore - a.avgScore)
 
       // Coaching theme
@@ -234,7 +280,7 @@ export function useCEOScorecard() {
       }
       const topCoachingTheme = Object.entries(coachingFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None this week'
 
-      // Weakest category from rep_performance
+      // Weakest category
       const catFreq: Record<string, number> = {}
       for (const r of reps) {
         const wc = r.weakest_category as string
@@ -255,6 +301,36 @@ export function useCEOScorecard() {
       const wonDeals = hubspotDeals.filter((d: { properties: Record<string, string> }) => d.properties?.dealstage === 'closedwon')
       for (const d of wonDeals) {
         revenueCollected += parseFloat((d as { properties: Record<string, string> }).properties.amount || '0')
+      }
+
+      // ── Google Sheet manual data ───────────────────
+      // Finance from Sheet
+      const sheetRetainers = Number(sheetData.get('Revenue')?.monthlyActual) || 0
+      const sheetSuccessFees = Number(sheetData.get('Cash Collected')?.monthlyActual) || 0
+      const sheetDistributable = Number(sheetData.get('Distributable Cash Balance')?.monthlyActual) || 0
+      const sheetBurnRate = Number(sheetData.get('Monthly Burn Rate')?.monthlyActual) || 0
+      const sheetHeadcount = 15 // default headcount
+      const revenuePerEmployee = revenueCollected > 0 ? Math.round(revenueCollected / sheetHeadcount) : 0
+
+      // ── LinkedIn/HeyReach aggregates ───────────────
+      const liAgg = { messagesSent: 0, connectionsSent: 0, connectionsAccepted: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, totalReplies: 0, meetingsBooked: 0 }
+      for (const r of linkedinRecords) {
+        const f = r.fields || {}
+        liAgg.messagesSent += Number(f.messagesSent) || 0
+        liAgg.connectionsSent += Number(f.connectionsSent) || 0
+        liAgg.connectionsAccepted += Number(f.connectionsAccepted) || 0
+        liAgg.totalReplies += Number(f.totalMessageReplies) || 0
+        liAgg.meetingsBooked += Number(f['Meeting Booked']) || 0
+        if (f.connectionAcceptanceRate) liAgg.connectionAcceptanceRate = Number(f.connectionAcceptanceRate) || 0
+        if (f.messageReplyRate) liAgg.messageReplyRate = Number(f.messageReplyRate) || 0
+      }
+
+      // ── Previous snapshot values for trends ────────
+      const prevOutbound = lastSnapshot?.outbound || []
+      const prevSales = lastSnapshot?.sales || []
+      function prevValue(arr: { name: string; rawActual: number }[], name: string): number | undefined {
+        const m = arr.find((x: { name: string }) => x.name === name)
+        return m?.rawActual
       }
 
       // ── Monday.com clients ─────────────────────────
@@ -289,13 +365,22 @@ export function useCEOScorecard() {
       ]
 
       const outbound: ScorecardMetric[] = [
-        metric('Emails Sent / Week', 'Outreachify', '350K', `${(totalSent / 1000).toFixed(0)}K`, totalSent, 350000),
-        metric('Active Campaigns', 'Outreachify', '30+', String(activeCampaigns), activeCampaigns, 30),
-        metric('Reply Rate', 'Outreachify', '0.8%', `${avgReplyRate.toFixed(2)}%`, avgReplyRate, 0.8),
-        metric('Bounce Rate', 'Outreachify', '<1.0%', `${avgBounceRate.toFixed(2)}%`, avgBounceRate, 1.0, true),
-        metric('Interested / Week', 'Outreachify', '50', String(totalInterested), totalInterested, 50),
-        metric('Connected Senders', 'Outreachify', '100+', String(connectedSenders), connectedSenders, 100),
-        metric('Burnt Senders', 'Outreachify', '<10', String(burntSenders), burntSenders, 10, true),
+        metric('Emails Sent / Week', 'Outreachify', '350K', `${(totalSent / 1000).toFixed(0)}K`, totalSent, 350000, false, prevValue(prevOutbound, 'Emails Sent / Week')),
+        metric('Active Campaigns', 'Outreachify', '30+', String(activeCampaigns), activeCampaigns, 30, false, prevValue(prevOutbound, 'Active Campaigns')),
+        metric('Reply Rate', 'Outreachify', '0.8%', `${avgReplyRate.toFixed(2)}%`, avgReplyRate, 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
+        metric('Bounce Rate', 'Outreachify', '<1.0%', `${avgBounceRate.toFixed(2)}%`, avgBounceRate, 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
+        metric('Interested / Week', 'Outreachify', '50', String(totalInterested), totalInterested, 50, false, prevValue(prevOutbound, 'Interested / Week')),
+        metric('Connected Senders', 'Outreachify', '100+', String(connectedSenders), connectedSenders, 100, false, prevValue(prevOutbound, 'Connected Senders')),
+        metric('Burnt Senders', 'Outreachify', '<10', String(burntSenders), burntSenders, 10, true, prevValue(prevOutbound, 'Burnt Senders')),
+      ]
+
+      // LinkedIn outbound section
+      const linkedin: ScorecardMetric[] = [
+        metric('Messages Sent', 'Outreachify', '500', String(liAgg.messagesSent), liAgg.messagesSent, 500),
+        metric('Message Reply Rate', 'Outreachify', '10%', `${liAgg.messageReplyRate.toFixed(1)}%`, liAgg.messageReplyRate, 10),
+        metric('Connections Sent', 'Outreachify', '1000', String(liAgg.connectionsSent), liAgg.connectionsSent, 1000),
+        metric('Connection Accept Rate', 'Outreachify', '25%', `${liAgg.connectionAcceptanceRate.toFixed(1)}%`, liAgg.connectionAcceptanceRate, 25),
+        metric('LinkedIn Meetings Booked', 'Outreachify', '5', String(liAgg.meetingsBooked), liAgg.meetingsBooked, 5),
       ]
 
       const setters: ScorecardMetric[] = [
@@ -316,24 +401,34 @@ export function useCEOScorecard() {
         .sort((a, b) => b.meetings - a.meetings)
 
       const sales: ScorecardMetric[] = [
-        metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40),
-        metric('Team Avg Score', 'VACANT', '70%', `${weekAvgScore}%`, weekAvgScore, 70),
-        metric('Call 1 → Call 2 Rate', 'VACANT', '35%', `${c1to2Rate}%`, c1to2Rate, 35),
-        metric('Call 2 → Call 3 Rate', 'VACANT', '50%', `${c2to3Rate}%`, c2to3Rate, 50),
-        metric('Qualification Rate', 'VACANT', '15%', `${qualRate}%`, qualRate, 15),
+        metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40, false, prevValue(prevSales, 'Calls Scored / Week')),
+        metric('Team Avg Score', 'VACANT', '70%', `${weekAvgScore}%`, weekAvgScore, 70, false, prevValue(prevSales, 'Team Avg Score')),
+        metric('Call 1 → Call 2 Rate', 'VACANT', '35%', `${c1to2Rate}%`, c1to2Rate, 35, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
+        metric('Call 2 → Call 3 Rate', 'VACANT', '50%', `${c2to3Rate}%`, c2to3Rate, 50, false, prevValue(prevSales, 'Call 2 → Call 3 Rate')),
+        metric('Qualification Rate', 'VACANT', '15%', `${qualRate}%`, qualRate, 15, false, prevValue(prevSales, 'Qualification Rate')),
         metric('Proposals Sent', 'VACANT', '5', String(proposalDeals.length), proposalDeals.length, 5),
         metric('Close Rate', 'VACANT', '15%', `${closeRate}%`, closeRate, 15),
         metric('Stalled Deals (14d+)', 'VACANT', '<5', String(stalledDeals.length), stalledDeals.length, 5, true),
         metric('Pipeline Inflation', 'VACANT', '0', String(inflationCount), inflationCount, 0, true),
       ]
 
+      // Fulfillment — enhanced with Sheet data
+      const sheetMeetingsPerClient = sheetData.get('Meetings/Client/Week') || sheetData.get('Meetings Per Client Per Week')
+      const sheetTestimonials = sheetData.get('Testimonials')
+      const sheetDealMovement = sheetData.get('Deal Stage Movement') || sheetData.get('Deal Movement')
+
       const fulfillment: ScorecardMetric[] = [
         metric('Active Clients', 'Philip / Mukul', '10+', String(clientStatus.length), clientStatus.length, 10),
+        ...(sheetMeetingsPerClient ? [metric('Meetings / Client / Week', 'Philip / Mukul', String(sheetMeetingsPerClient.monthlyTarget || '3'), String(sheetMeetingsPerClient.monthlyActual || '0'), Number(sheetMeetingsPerClient.monthlyActual) || 0, Number(sheetMeetingsPerClient.monthlyTarget) || 3)] : []),
+        ...(sheetTestimonials ? [metric('Testimonials', 'Philip / Mukul', String(sheetTestimonials.monthlyTarget || '2'), String(sheetTestimonials.monthlyActual || '0'), Number(sheetTestimonials.monthlyActual) || 0, Number(sheetTestimonials.monthlyTarget) || 2)] : []),
+        ...(sheetDealMovement ? [metric('Deal Stage Movement', 'Philip / Mukul', String(sheetDealMovement.monthlyTarget || '5'), String(sheetDealMovement.monthlyActual || '0'), Number(sheetDealMovement.monthlyActual) || 0, Number(sheetDealMovement.monthlyTarget) || 5)] : []),
       ]
 
       const finance: ScorecardMetric[] = [
         metric('Cash Collected MTD', 'Alex', '$833K', `$${(revenueCollected / 1000).toFixed(0)}K`, revenueCollected, 833000),
-        metric('Revenue Per Employee', 'Alex', '$55K/mo', `$${(revenueCollected / 45000).toFixed(0)}K`, revenueCollected / 45, 55000),
+        metric('Revenue Per Employee', 'Alex', '$55K/mo', `$${(revenuePerEmployee / 1000).toFixed(0)}K`, revenuePerEmployee, 55000),
+        ...(sheetDistributable ? [metric('Distributable Cash', 'Alex', '$200K', `$${(sheetDistributable / 1000).toFixed(0)}K`, sheetDistributable, 200000)] : []),
+        ...(sheetBurnRate ? [metric('Monthly Burn Rate', 'Alex', '<$50K', `$${(sheetBurnRate / 1000).toFixed(0)}K`, sheetBurnRate, 50000, true)] : []),
       ]
 
       // ── Bottleneck ─────────────────────────────────
@@ -365,10 +460,20 @@ export function useCEOScorecard() {
       if (avgReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${avgReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
       if (weekAvgScore < 70) alerts.push({ level: 'warning', message: `Team avg call score ${weekAvgScore}% (target 70%)`, link: '/reps' })
       if (stalledDeals.length > 3) alerts.push({ level: 'warning', message: `${stalledDeals.length} deals stalled 14+ days`, link: '/deals' })
+      // LinkedIn alerts
+      if (liAgg.messageReplyRate > 0 && liAgg.messageReplyRate < 5) alerts.push({ level: 'warning', message: `LinkedIn reply rate ${liAgg.messageReplyRate.toFixed(1)}% (below 5%)` })
+      // Google Sheet manual red overrides
+      for (const [metricName, sheetRow] of sheetData.entries()) {
+        if (sheetRow.status.toLowerCase() === 'red' && sheetRow.source === 'Manual') {
+          alerts.push({ level: 'warning', message: `${metricName} manually flagged RED by ${sheetRow.owner}` })
+        }
+      }
+      // Wins
       if (weekCallCount > 30) alerts.push({ level: 'win', message: `${weekCallCount} calls scored this week` })
       for (const r of repLeaderboard) {
         if (r.avgScore >= 70) { alerts.push({ level: 'win', message: `${r.name} averaging ${r.avgScore}% this week` }); break }
       }
+      if (liAgg.meetingsBooked > 0) alerts.push({ level: 'win', message: `${liAgg.meetingsBooked} meetings booked from LinkedIn` })
 
       // ── Weekly comparison ──────────────────────────
       const thisWeekCalls = twoWeekCalls.filter((c: { date: string }) => c.date && new Date(c.date) >= new Date(daysAgo(7)))
@@ -385,22 +490,28 @@ export function useCEOScorecard() {
         return c >= 0 ? `+${c}%` : `${c}%`
       }
 
+      // Use snapshot for last week comparison when available
+      const prevMeetings = lastSnapshot?.funnel?.find((f: { label: string }) => f.label === 'Meetings')?.value
+      const prevInterested = lastSnapshot?.outbound?.find((m: { name: string }) => m.name === 'Interested / Week')?.rawActual
+
       const weeklyComparison: WeeklyComparison[] = [
         { metric: 'Calls Scored', thisWeek: thisWeekCalls.length, lastWeek: lastWeekCalls.length, change: pctChange(thisWeekCalls.length, lastWeekCalls.length) },
         { metric: 'Team Avg Score', thisWeek: `${twAvg}%`, lastWeek: `${lwAvg}%`, change: `${twAvg - lwAvg >= 0 ? '+' : ''}${twAvg - lwAvg}pts` },
-        { metric: 'Meetings Booked', thisWeek: totalMeetingsBooked, lastWeek: '—', change: '—' },
-        { metric: 'Interested Replies', thisWeek: totalInterested, lastWeek: '—', change: '—' },
+        { metric: 'Meetings Booked', thisWeek: totalMeetingsBooked, lastWeek: prevMeetings ?? '—', change: prevMeetings != null ? pctChange(totalMeetingsBooked, prevMeetings) : '—' },
+        { metric: 'Interested Replies', thisWeek: totalInterested, lastWeek: prevInterested ?? '—', change: prevInterested != null ? pctChange(totalInterested, prevInterested) : '—' },
+        { metric: 'LinkedIn Messages', thisWeek: liAgg.messagesSent, lastWeek: '—', change: '—' },
       ]
 
       setData({
         revenueCollected,
         revenueTarget: 833000,
-        retainers: 0,
-        successFees: 0,
+        retainers: sheetRetainers || 0,
+        successFees: sheetSuccessFees || 0,
         outstanding: 0,
         monthlyTrend: [],
         funnel,
         outbound,
+        linkedin,
         setters,
         setterBreakdown,
         sales,
@@ -415,6 +526,7 @@ export function useCEOScorecard() {
         weeklyComparison,
         weekRange: getWeekRange(),
         lastRefreshed: new Date().toLocaleTimeString(),
+        dataFreshness,
       })
     } catch (err) {
       console.error('Scorecard fetch error:', err)

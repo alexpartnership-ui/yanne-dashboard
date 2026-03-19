@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
 import crypto from 'crypto'
+import { google } from 'googleapis'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -267,6 +268,12 @@ if (!MONDAY_KEY) console.warn('Missing MONDAY_API_KEY — client project pages w
 if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages will not work')
 if (!SLACK_TOKEN) console.warn('Missing SLACK_BOT_TOKEN — Slack reporting data will not work')
 
+// Google Sheets service account (for CEO Scorecard bidirectional sync)
+const GOOGLE_SHEETS_PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY
+const GOOGLE_SHEETS_CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL
+const CEO_SCORECARD_SPREADSHEET_ID = process.env.CEO_SCORECARD_SPREADSHEET_ID || '1kS3K2rVXpXbqhrlCeBU8PEu5CnaOtFPGY_XfvE7G0mo'
+if (!GOOGLE_SHEETS_PRIVATE_KEY || !GOOGLE_SHEETS_CLIENT_EMAIL) console.warn('Missing GOOGLE_SHEETS_PRIVATE_KEY or GOOGLE_SHEETS_CLIENT_EMAIL — Google Sheets sync will not work')
+
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
 
 // ─── Phase 3.2: Server-side TTL cache ──────────────────
@@ -333,6 +340,84 @@ async function airtableFetch(baseId, tableId, params = {}) {
   })
   if (!res.ok) return { error: await res.text(), data: null }
   return { data: await res.json(), error: null }
+}
+
+// ─── Supabase INSERT helper ─────────────────────────────
+
+async function supaInsert(table, rows) {
+  const body = Array.isArray(rows) ? rows : [rows]
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  return { data: await res.json(), error: null }
+}
+
+// ─── Google Sheets helpers (CEO Scorecard sync) ─────────
+
+function getGoogleSheetsClient() {
+  if (!GOOGLE_SHEETS_PRIVATE_KEY || !GOOGLE_SHEETS_CLIENT_EMAIL) return null
+  try {
+    const auth = new google.auth.JWT(
+      GOOGLE_SHEETS_CLIENT_EMAIL,
+      null,
+      GOOGLE_SHEETS_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      ['https://www.googleapis.com/auth/spreadsheets']
+    )
+    return google.sheets({ version: 'v4', auth })
+  } catch (err) {
+    console.error('Google Sheets auth error:', err.message)
+    return null
+  }
+}
+
+async function readSheetTab(tabName, range = 'A:M') {
+  const sheets = getGoogleSheetsClient()
+  if (!sheets) return null
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: CEO_SCORECARD_SPREADSHEET_ID,
+      range: `${tabName}!${range}`,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    })
+    return res.data.values || []
+  } catch (err) {
+    console.error(`Google Sheets read error (${tabName}):`, err.message)
+    return null
+  }
+}
+
+async function writeSheetCells(tabName, updates) {
+  const sheets = getGoogleSheetsClient()
+  if (!sheets || !updates.length) return false
+  try {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: CEO_SCORECARD_SPREADSHEET_ID,
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: updates.map(u => ({
+          range: `${tabName}!${u.cell}`,
+          values: [[u.value]],
+        })),
+      },
+    })
+    return true
+  } catch (err) {
+    console.error(`Google Sheets write error (${tabName}):`, err.message)
+    return false
+  }
+}
+
+function getCurrentMonthTab() {
+  const now = new Date()
+  return now.toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
 
 // ─── Phase 1.7: Supabase proxy routes ──────────────────
@@ -1354,11 +1439,30 @@ function loadTargets() {
   return { ...DEFAULT_TARGETS }
 }
 
-app.get('/api/scorecard/targets', (_req, res) => {
+app.get('/api/scorecard/targets', async (_req, res) => {
+  // Try reading targets from Google Sheet column I first
+  try {
+    const tab = getCurrentMonthTab()
+    const sheetRows = await readSheetTab(tab, 'A:I')
+    if (sheetRows && sheetRows.length > 3) {
+      const sheetTargets = {}
+      for (const row of sheetRows) {
+        const metricName = row[0]
+        const target = row[8] // Column I = Monthly Target
+        if (metricName && target !== undefined && target !== '') {
+          sheetTargets[metricName] = target
+        }
+      }
+      if (Object.keys(sheetTargets).length > 0) {
+        const local = loadTargets()
+        return res.json({ ...local, _sheetTargets: sheetTargets })
+      }
+    }
+  } catch { /* fall through to local */ }
   res.json(loadTargets())
 })
 
-app.post('/api/scorecard/targets', (req, res) => {
+app.post('/api/scorecard/targets', async (req, res) => {
   const current = loadTargets()
   const updated = { ...current, ...req.body }
   writeFileSync(TARGETS_FILE, JSON.stringify(updated, null, 2))
@@ -1990,33 +2094,134 @@ app.get('/api/coaching-adherence', async (_req, res) => {
   }
 })
 
-// ─── Scorecard Snapshots (Goal Tracking) ────────────────
+// ─── Scorecard Snapshots (Supabase with local fallback) ──
 
 const SNAPSHOTS_FILE = join(__dirname, 'scorecard_snapshots.json')
 
-function loadSnapshots() {
+function loadSnapshotsLocal() {
   try {
     if (existsSync(SNAPSHOTS_FILE)) return JSON.parse(readFileSync(SNAPSHOTS_FILE, 'utf-8'))
   } catch { /* empty */ }
   return []
 }
 
-app.get('/api/scorecard/snapshots', (_req, res) => {
-  res.json(loadSnapshots())
+app.get('/api/scorecard/snapshots', async (_req, res) => {
+  try {
+    // Try Supabase first
+    const { data, error } = await supaQuery('ceo_dashboard_snapshots', 'select=*&order=created_at.desc&limit=52')
+    if (!error && data && data.length > 0) {
+      return res.json(data.map(s => ({ ...s.snapshot_data, created_at: s.created_at, created_by: s.created_by, weekRange: s.week_range })))
+    }
+    // Fallback to local
+    res.json(loadSnapshotsLocal())
+  } catch {
+    res.json(loadSnapshotsLocal())
+  }
 })
 
 app.post('/api/scorecard/snapshot', async (req, res) => {
   try {
     const snapshot = req.body
-    snapshot.created_at = new Date().toISOString()
-    snapshot.created_by = req.user?.name || 'system'
-    const snapshots = loadSnapshots()
-    snapshots.push(snapshot)
-    // Keep last 52 weeks
-    if (snapshots.length > 52) snapshots.splice(0, snapshots.length - 52)
-    writeFileSync(SNAPSHOTS_FILE, JSON.stringify(snapshots, null, 2))
+    const created_by = req.user?.name || 'system'
+    const week_range = snapshot.weekRange || ''
+
+    // Try Supabase first
+    const { error } = await supaInsert('ceo_dashboard_snapshots', {
+      week_range,
+      snapshot_data: snapshot,
+      created_by,
+    })
+
+    if (error) {
+      // Fallback to local file
+      snapshot.created_at = new Date().toISOString()
+      snapshot.created_by = created_by
+      const snapshots = loadSnapshotsLocal()
+      snapshots.push(snapshot)
+      if (snapshots.length > 52) snapshots.splice(0, snapshots.length - 52)
+      writeFileSync(SNAPSHOTS_FILE, JSON.stringify(snapshots, null, 2))
+    }
+
     auditLog(req.user?.id, 'create_snapshot', 'scorecard', {}, req.ip)
     res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Scorecard Sync (write API values to Google Sheet) ──
+
+app.post('/api/scorecard/sync', async (req, res) => {
+  try {
+    const tab = getCurrentMonthTab()
+    const sheetRows = await readSheetTab(tab, 'A:M')
+    if (!sheetRows) return res.status(503).json({ error: 'Google Sheets not available' })
+
+    // Fetch API-derived values
+    const daysAgoFn = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
+    const [bisonRes, linkedinRes, hubspotDeals, callsRes] = await Promise.all([
+      fetchAllBisonCampaigns().catch(() => []),
+      AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
+      fetchAllHubSpotDeals().catch(() => ({ results: [] })),
+      supaQuery('call_logs', `select=rep,call_type,qualification_result&scored_at=gte.${daysAgoFn(30)}`).catch(() => ({ data: [] })),
+    ])
+
+    // Compute API values
+    let totalSent = 0, totalReplies = 0, rateCount = 0, replyRateSum = 0
+    for (const c of bisonRes) {
+      const sent = Number(c.emails_sent) || 0
+      const replied = Number(c.replied) || Number(c.unique_replies) || 0
+      totalSent += sent; totalReplies += replied
+      if (sent > 0) { replyRateSum += (replied / sent) * 100; rateCount++ }
+    }
+
+    // LinkedIn from HeyReach Airtable
+    const liRecords = linkedinRes?.records || []
+    const liAgg = { messagesSent: 0, connectionsSent: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, meetingsBooked: 0 }
+    for (const r of liRecords) {
+      const f = r.fields || {}
+      liAgg.messagesSent += Number(f.messagesSent) || 0
+      liAgg.connectionsSent += Number(f.connectionsSent) || 0
+      liAgg.meetingsBooked += Number(f['Meeting Booked']) || 0
+      if (f.connectionAcceptanceRate) liAgg.connectionAcceptanceRate = Number(f.connectionAcceptanceRate) || 0
+      if (f.messageReplyRate) liAgg.messageReplyRate = Number(f.messageReplyRate) || 0
+    }
+
+    // Build updates array — only write API-sourced rows
+    const updates = []
+    const rowMap = {}
+    sheetRows.forEach((row, i) => { if (row[0]) rowMap[row[0]] = i + 1 })
+
+    // Helper to queue update if source matches API
+    function queueUpdate(metricName, column, value) {
+      const rowNum = rowMap[metricName]
+      if (!rowNum) return
+      const source = sheetRows[rowNum - 1]?.[11] // Column L = Source
+      if (source && !['Email Bison', 'Email Bison CA', 'HeyReach AT', 'HubSpot', 'Calculated', 'Inbox Mgr AT'].includes(source)) return
+      updates.push({ cell: `${column}${rowNum}`, value })
+    }
+
+    // Email metrics (Monthly Actual = column H)
+    queueUpdate('Emails Sent', 'H', totalSent)
+    queueUpdate('Reply Rate', 'H', rateCount > 0 ? Math.round((replyRateSum / rateCount) * 100) / 100 : 0)
+
+    // LinkedIn metrics
+    queueUpdate('LinkedIn Messages Sent', 'H', liAgg.messagesSent)
+    queueUpdate('Connection Requests Sent', 'H', liAgg.connectionsSent)
+    queueUpdate('Connection Acceptance Rate', 'H', liAgg.connectionAcceptanceRate)
+    queueUpdate('LinkedIn Reply Rate', 'H', liAgg.messageReplyRate)
+    queueUpdate('Meetings Booked from LinkedIn', 'H', liAgg.meetingsBooked)
+
+    // Qualification rate from HubSpot/Supabase
+    const calls = callsRes.data || []
+    const call1s = calls.filter(c => c.call_type === 'Call 1')
+    const qualified = call1s.filter(c => c.qualification_result === 'QUALIFIED').length
+    const qualRate = call1s.length > 0 ? Math.round((qualified / call1s.length) * 100) : 0
+    queueUpdate('Qualification Rate (Call 1 → Call 2)', 'H', `${qualRate}%`)
+
+    const written = updates.length > 0 ? await writeSheetCells(tab, updates) : true
+    auditLog(req.user?.id, 'sync_scorecard', 'scorecard', { cellsWritten: updates.length }, req.ip)
+    res.json({ ok: true, cellsWritten: updates.length, written, tab, syncedAt: new Date().toISOString() })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2334,93 +2539,92 @@ app.patch('/api/deals/:id/stage', async (req, res) => {
   }
 })
 
+// ─── Scorecard data fetch helpers ────────────────────────
+
+async function fetchAllBisonCampaigns() {
+  if (!EMAILBISON_KEY) return []
+  const all = []
+  let page = 1, lastPage = 1
+  while (page <= lastPage && page <= 10) {
+    try {
+      const r = await fetch(`${BISON_BASE}/campaigns?per_page=50&page=${page}`, { headers: { Authorization: `Bearer ${EMAILBISON_KEY}` } })
+      if (!r.ok) break
+      const data = await r.json()
+      const items = data?.data || (Array.isArray(data) ? data : [])
+      if (items.length === 0) break
+      all.push(...items)
+      if (data?.meta?.last_page) lastPage = data.meta.last_page
+      page++
+    } catch { break }
+  }
+  return all
+}
+
+async function fetchMeetingsParsed() {
+  if (!SLACK_TOKEN) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
+  const messages = []
+  let cursor = undefined
+  let pg = 0
+  while (pg < 10) {
+    const params = { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 90 * 86400) }
+    if (cursor) params.cursor = cursor
+    const { data, error } = await slackFetch('conversations.history', params)
+    if (error || !data) break
+    messages.push(...(data.messages || []))
+    cursor = data.response_metadata?.next_cursor
+    if (!cursor) break
+    pg++
+  }
+  const dailyReports = []
+  let todayIndividual = 0
+  for (const m of messages) {
+    const text = m.text || ''
+    const eodMatch = text.match(/Total Meetings Booked Today:\*?\s*(\d+)/)
+    if (eodMatch) {
+      const ts = parseFloat(m.ts)
+      const date = new Date(ts * 1000).toISOString().slice(0, 10)
+      dailyReports.push({ date, count: parseInt(eodMatch[1]) })
+    }
+    if (text.includes('New Meeting Booked')) {
+      const ts = parseFloat(m.ts)
+      const msgDate = new Date(ts * 1000).toISOString().slice(0, 10)
+      const today = new Date().toISOString().slice(0, 10)
+      if (msgDate === today) todayIndividual++
+    }
+  }
+  const thisWeek = dailyReports.reduce((s, r) => s + r.count, 0) + todayIndividual
+  return { thisWeek, todaySoFar: todayIndividual, dailyReports: dailyReports.sort((a, b) => b.date.localeCompare(a.date)) }
+}
+
+async function fetchAllHubSpotDeals() {
+  if (!HUBSPOT_KEY) return { results: [] }
+  const allDeals = []
+  let after = '', pages = 0
+  while (pages < 10) {
+    const pagination = after ? `&after=${after}` : ''
+    const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate${pagination}`)
+    if (error) break
+    const results = data.results || []
+    const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+    allDeals.push(...salesOnly.map(d => ({ ...d, properties: { ...d.properties, stageName: HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage || 'Unknown' } })))
+    const nextAfter = data.paging?.next?.after
+    if (!nextAfter) break
+    after = nextAfter
+    pages++
+  }
+  return { results: allDeals }
+}
+
 // ─── Phase 3.3: Batch scorecard endpoint ────────────────
 app.get('/api/scorecard/data', async (_req, res) => {
   try {
     const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
 
-    // Fetch all Bison campaigns (paginated)
-    async function fetchAllBisonCampaigns() {
-      if (!EMAILBISON_KEY) return []
-      const all = []
-      let page = 1, lastPage = 1
-      while (page <= lastPage && page <= 10) {
-        try {
-          const r = await fetch(`${BISON_BASE}/campaigns?per_page=50&page=${page}`, { headers: { Authorization: `Bearer ${EMAILBISON_KEY}` } })
-          if (!r.ok) break
-          const data = await r.json()
-          const items = data?.data || (Array.isArray(data) ? data : [])
-          if (items.length === 0) break
-          all.push(...items)
-          if (data?.meta?.last_page) lastPage = data.meta.last_page
-          page++
-        } catch { break }
-      }
-      return all
-    }
-
-    // Parse Slack meetings (paginated)
-    async function fetchMeetingsParsed() {
-      if (!SLACK_TOKEN) return { thisWeek: 0, todaySoFar: 0, dailyReports: [] }
-      const messages = []
-      let cursor = undefined
-      let pg = 0
-      while (pg < 10) {
-        const params = { channel: MEETINGS_CHANNEL, limit: 200, oldest: String(Math.floor(Date.now() / 1000) - 90 * 86400) }
-        if (cursor) params.cursor = cursor
-        const { data, error } = await slackFetch('conversations.history', params)
-        if (error || !data) break
-        messages.push(...(data.messages || []))
-        cursor = data.response_metadata?.next_cursor
-        if (!cursor) break
-        pg++
-      }
-      const dailyReports = []
-      let todayIndividual = 0
-      for (const m of messages) {
-        const text = m.text || ''
-        const eodMatch = text.match(/Total Meetings Booked Today:\*?\s*(\d+)/)
-        if (eodMatch) {
-          const ts = parseFloat(m.ts)
-          const date = new Date(ts * 1000).toISOString().slice(0, 10)
-          dailyReports.push({ date, count: parseInt(eodMatch[1]) })
-        }
-        if (text.includes('New Meeting Booked')) {
-          const ts = parseFloat(m.ts)
-          const msgDate = new Date(ts * 1000).toISOString().slice(0, 10)
-          const today = new Date().toISOString().slice(0, 10)
-          if (msgDate === today) todayIndividual++
-        }
-      }
-      const thisWeek = dailyReports.reduce((s, r) => s + r.count, 0) + todayIndividual
-      return { thisWeek, todaySoFar: todayIndividual, dailyReports: dailyReports.sort((a, b) => b.date.localeCompare(a.date)) }
-    }
-
-    // Fetch all HubSpot deals (paginated, Sales Pipeline only)
-    async function fetchAllHubSpotDeals() {
-      if (!HUBSPOT_KEY) return { results: [] }
-      const allDeals = []
-      let after = '', pages = 0
-      while (pages < 10) {
-        const pagination = after ? `&after=${after}` : ''
-        const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,createdate,hs_lastmodifieddate${pagination}`)
-        if (error) break
-        const results = data.results || []
-        const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
-        allDeals.push(...salesOnly.map(d => ({ ...d, properties: { ...d.properties, stageName: HUBSPOT_STAGE_MAP[d.properties?.dealstage] || d.properties?.dealstage || 'Unknown' } })))
-        const nextAfter = data.paging?.next?.after
-        if (!nextAfter) break
-        after = nextAfter
-        pages++
-      }
-      return { results: allDeals }
-    }
-
     const [
       bisonCampaigns, inboxRes, meetingsParsed, sendersRes,
       mondayRes, hubspotParsed,
       callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
-      targetsData,
+      targetsData, googleSheetRes, linkedinRes, snapshotsRes,
     ] = await Promise.all([
       fetchAllBisonCampaigns(),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
@@ -2434,7 +2638,23 @@ app.get('/api/scorecard/data', async (_req, res) => {
       supaQuery('rep_performance', 'select=*'),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,date,coaching_priority&scored_at=gte.${daysAgo(14)}`),
       Promise.resolve(loadTargets()),
+      // Google Sheet — current month tab
+      readSheetTab(getCurrentMonthTab()).catch(() => null),
+      // HeyReach LinkedIn from Airtable
+      AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
+      // Recent snapshots for weekly comparison
+      supaQuery('ceo_dashboard_snapshots', 'select=snapshot_data,week_range,created_at&order=created_at.desc&limit=2').catch(() => ({ data: null })),
     ])
+
+    // Build data freshness indicators
+    const dataFreshness = {
+      bison: bisonCampaigns.length > 0 ? 'live' : 'unavailable',
+      googleSheet: googleSheetRes ? 'live' : 'unavailable',
+      linkedin: linkedinRes?.records?.length > 0 ? 'live' : 'unavailable',
+      hubspot: hubspotParsed?.results?.length > 0 ? 'live' : 'unavailable',
+      supabase: callsWeekRes.data ? 'live' : 'unavailable',
+      slack: meetingsParsed.dailyReports ? 'live' : 'unavailable',
+    }
 
     res.json({
       bison: bisonCampaigns,
@@ -2449,6 +2669,10 @@ app.get('/api/scorecard/data', async (_req, res) => {
       reps: repsRes.data,
       allCalls: allCallsRes.data,
       targets: targetsData,
+      googleSheet: googleSheetRes,
+      linkedin: linkedinRes,
+      snapshots: snapshotsRes.data,
+      dataFreshness,
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
