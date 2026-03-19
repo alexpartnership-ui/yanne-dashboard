@@ -777,15 +777,54 @@ async function heyreachFetch(endpoint, { method = 'GET', body = null } = {}) {
   return { data: JSON.parse(text), error: null }
 }
 
+// HeyReach sender account name mapping
+// The public API only returns numeric IDs — no sender names endpoint exists.
+// This map is loaded from heyreach_senders.json (auto-populated on first campaign fetch).
+const HEYREACH_SENDERS_FILE = join(__dirname, 'heyreach_senders.json')
+
+function loadSenderMap() {
+  try {
+    if (existsSync(HEYREACH_SENDERS_FILE)) return JSON.parse(readFileSync(HEYREACH_SENDERS_FILE, 'utf-8'))
+  } catch { /* empty */ }
+  return {}
+}
+
+function saveSenderMap(map) {
+  writeFileSync(HEYREACH_SENDERS_FILE, JSON.stringify(map, null, 2))
+}
+
 // ─── HeyReach API routes ───────────────────────────────
 
-// All campaigns with progress stats
+// All campaigns with progress stats + sender name map
 app.get('/api/heyreach/campaigns', async (_req, res) => {
   if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
   try {
     const { data, error } = await heyreachFetch('/campaign/GetAll', { method: 'POST', body: {} })
     if (error) return res.status(500).json({ error })
-    res.json(data)
+    const senderMap = loadSenderMap()
+    res.json({ ...data, senderMap })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Update sender name mapping (admin endpoint)
+app.post('/api/heyreach/senders', async (req, res) => {
+  try {
+    const existing = loadSenderMap()
+    const updates = req.body // { "65067": "Alex Partnership", "118261": "John Smith" }
+    const merged = { ...existing, ...updates }
+    saveSenderMap(merged)
+    res.json({ success: true, count: Object.keys(merged).length, senderMap: merged })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Get sender name mapping
+app.get('/api/heyreach/senders', async (_req, res) => {
+  try {
+    res.json(loadSenderMap())
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -322,11 +322,11 @@ function CampaignsTab({ campaigns }: { campaigns: HeyReachCampaign[] }) {
 // ─── Senders Tab ───────────────────────────────────────
 
 function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaigns: HeyReachCampaign[] }) {
-  const [sortBy, setSortBy] = useState<'campaigns' | 'leads' | 'id'>('campaigns')
+  const [sortBy, setSortBy] = useState<'campaigns' | 'leads' | 'name'>('campaigns')
 
   const sorted = [...senders].sort((a, b) => {
     if (sortBy === 'leads') return b.totalLeadsAssigned - a.totalLeadsAssigned
-    if (sortBy === 'id') return a.id - b.id
+    if (sortBy === 'name') return a.name.localeCompare(b.name)
     return b.campaignCount - a.campaignCount
   })
 
@@ -377,7 +377,7 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
           <h3 className="text-sm font-semibold text-zinc-800 mb-3">Campaign Load per Account</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={sorted.slice(0, 20).map(s => ({
-              id: `#${s.id}`,
+              id: s.name,
               campaigns: s.campaignCount,
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
@@ -396,7 +396,7 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
           <h3 className="text-sm font-semibold text-zinc-800">All Sender Accounts ({senders.length})</h3>
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
             <span>Sort:</span>
-            {(['campaigns', 'leads', 'id'] as const).map(s => (
+            {(['campaigns', 'leads', 'name'] as const).map(s => (
               <button key={s} onClick={() => setSortBy(s)}
                 className={`px-2 py-0.5 rounded ${sortBy === s ? 'bg-zinc-200 text-zinc-800 font-medium' : 'hover:bg-zinc-100'}`}
               >{s}</button>
@@ -407,7 +407,7 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 bg-zinc-50 border-b border-zinc-100">
               <tr>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Account ID</th>
+                <th className="px-4 py-2 font-semibold text-zinc-600">Account</th>
                 <th className="px-4 py-2 font-semibold text-zinc-600">Status</th>
                 <th className="px-4 py-2 font-semibold text-zinc-600 text-right">Campaigns</th>
                 <th className="px-4 py-2 font-semibold text-zinc-600 text-right">~Leads Assigned</th>
@@ -417,7 +417,7 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
             <tbody className="divide-y divide-zinc-50">
               {sorted.map(s => (
                 <tr key={s.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-2 font-mono text-zinc-700">#{s.id}</td>
+                  <td className="px-4 py-2 font-medium text-zinc-800">{s.name}</td>
                   <td className="px-4 py-2">
                     {activeAccountIds.has(s.id) ? (
                       <span className="inline-flex items-center gap-1 text-emerald-600">

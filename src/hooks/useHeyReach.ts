@@ -34,6 +34,7 @@ export interface HeyReachList {
 
 export interface SenderAccount {
   id: number
+  name: string
   campaignCount: number
   campaignNames: string[]
   totalLeadsAssigned: number
@@ -85,6 +86,7 @@ export function useHeyReach() {
 
         const campaignsJson = await campaignsRes.json()
         const campaigns: HeyReachCampaign[] = campaignsJson?.items || []
+        const senderNameMap: Record<string, string> = campaignsJson?.senderMap || {}
 
         const listsJson = listsRes.ok ? await listsRes.json() : { items: [] }
         const lists: HeyReachList[] = listsJson?.items || []
@@ -120,7 +122,7 @@ export function useHeyReach() {
         }
 
         const senders: SenderAccount[] = Array.from(senderMap.entries())
-          .map(([id, s]) => ({ id, ...s }))
+          .map(([id, s]) => ({ id, name: senderNameMap[String(id)] || `Account #${id}`, ...s }))
           .sort((a, b) => b.campaignCount - a.campaignCount)
 
         const totalListLeads = lists.reduce((sum, l) => sum + l.totalItemsCount, 0)
