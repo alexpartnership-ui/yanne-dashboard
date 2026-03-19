@@ -423,6 +423,26 @@ function getCurrentMonthTab() {
   return now.toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
 
+// Try current month tab first, then next month, then previous
+async function findBestSheetTab() {
+  const now = new Date()
+  const candidates = []
+  // Current month
+  candidates.push(now.toLocaleString('en-US', { month: 'long', year: 'numeric' }))
+  // Next month
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  candidates.push(next.toLocaleString('en-US', { month: 'long', year: 'numeric' }))
+  // Previous month
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  candidates.push(prev.toLocaleString('en-US', { month: 'long', year: 'numeric' }))
+
+  for (const tab of candidates) {
+    const data = await readSheetTab(tab, 'A1:A3')
+    if (data && data.length > 0) return tab
+  }
+  return candidates[0] // fallback to current month name even if it fails
+}
+
 // ─── Phase 1.7: Supabase proxy routes ──────────────────
 
 // Call logs with filters
@@ -1445,7 +1465,7 @@ function loadTargets() {
 app.get('/api/scorecard/targets', async (_req, res) => {
   // Try reading targets from Google Sheet column I first
   try {
-    const tab = getCurrentMonthTab()
+    const tab = await findBestSheetTab()
     const sheetRows = await readSheetTab(tab, 'A:I')
     if (sheetRows && sheetRows.length > 3) {
       const sheetTargets = {}
@@ -2156,7 +2176,7 @@ app.post('/api/scorecard/snapshot', async (req, res) => {
 
 app.post('/api/scorecard/sync', async (req, res) => {
   try {
-    const tab = getCurrentMonthTab()
+    const tab = await findBestSheetTab()
     const sheetRows = await readSheetTab(tab, 'A:M')
     if (!sheetRows) return res.status(503).json({ error: 'Google Sheets not available' })
 
@@ -2641,8 +2661,8 @@ app.get('/api/scorecard/data', async (_req, res) => {
       supaQuery('rep_performance', 'select=*'),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,date,coaching_priority&scored_at=gte.${daysAgo(14)}`),
       Promise.resolve(loadTargets()),
-      // Google Sheet — current month tab
-      readSheetTab(getCurrentMonthTab()).catch(() => null),
+      // Google Sheet — best available month tab
+      findBestSheetTab().then(tab => readSheetTab(tab)).catch(() => null),
       // HeyReach LinkedIn from Airtable
       AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       // Recent snapshots for weekly comparison
