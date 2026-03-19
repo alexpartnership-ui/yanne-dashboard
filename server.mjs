@@ -2197,25 +2197,29 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const sheetRows = await readSheetTab(tab, 'A:M')
     if (!sheetRows) return res.status(503).json({ error: 'Google Sheets not available' })
 
-    // Fetch API-derived values
+    // Fetch ALL API-derived values
     const daysAgoFn = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
-    const [bisonRes, linkedinRes, hubspotDeals, callsRes] = await Promise.all([
+    const [bisonRes, linkedinRes, hubspotDeals, callsRes, dealsRes, inboxRes, meetingsRes] = await Promise.all([
       fetchAllBisonCampaigns().catch(() => []),
       AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       fetchAllHubSpotDeals().catch(() => ({ results: [] })),
-      supaQuery('call_logs', `select=rep,call_type,qualification_result&scored_at=gte.${daysAgoFn(30)}`).catch(() => ({ data: [] })),
+      supaQuery('call_logs', `select=rep,call_type,qualification_result,date&scored_at=gte.${daysAgoFn(30)}`).catch(() => ({ data: [] })),
+      supaQuery('deals_with_calls', 'select=rep_name,deal_status,current_stage,created_at,updated_at').catch(() => ({ data: [] })),
+      AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
+      fetchMeetingsParsed().catch(() => ({ thisWeek: 0, thisMonth: 0 })),
     ])
 
-    // Compute API values
-    let totalSent = 0, totalReplies = 0, rateCount = 0, replyRateSum = 0
+    // ── EmailBison ──
+    let totalSent = 0, totalReplies = 0, rateCount = 0, replyRateSum = 0, activeCampaigns = 0
     for (const c of bisonRes) {
+      if (c.status === 'active' || c.status === 'launching') activeCampaigns++
       const sent = Number(c.emails_sent) || 0
       const replied = Number(c.replied) || Number(c.unique_replies) || 0
       totalSent += sent; totalReplies += replied
       if (sent > 0) { replyRateSum += (replied / sent) * 100; rateCount++ }
     }
 
-    // LinkedIn from HeyReach Airtable
+    // ── LinkedIn/HeyReach ──
     const liRecords = linkedinRes?.records || []
     const liAgg = { messagesSent: 0, connectionsSent: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, meetingsBooked: 0 }
     for (const r of liRecords) {
@@ -2227,37 +2231,90 @@ app.post('/api/scorecard/sync', async (req, res) => {
       if (f.messageReplyRate) liAgg.messageReplyRate = Number(f.messageReplyRate) || 0
     }
 
-    // Build updates array — only write API-sourced rows
+    // ── Supabase calls per rep ──
+    const calls = callsRes.data || []
+    const deals = dealsRes.data || []
+    const repNames = ['Stanley', 'Thomas', 'Tahawar', 'Jake']
+    const repCalls = {}
+    for (const rep of repNames) {
+      const repCallsArr = calls.filter(c => c.rep === rep)
+      const call1s = repCallsArr.filter(c => c.call_type === 'Call 1')
+      const call2plus = deals.filter(d => d.rep_name === rep && d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active')
+      const mandates = deals.filter(d => d.rep_name === rep && d.deal_status === 'signed')
+      repCalls[rep] = {
+        callsBooked: repCallsArr.length,
+        progressedToQualified: call2plus.length,
+        mandatesSigned: mandates.length,
+      }
+    }
+    // Team totals
+    const teamCalls = calls.length
+    const teamQualified = deals.filter(d => d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active').length
+    const teamMandates = deals.filter(d => d.deal_status === 'signed').length
+    const allCall1s = calls.filter(c => c.call_type === 'Call 1')
+    const qualRate = allCall1s.length > 0 ? Math.round((allCall1s.filter(c => c.qualification_result === 'QUALIFIED').length / allCall1s.length) * 100) : 0
+    const closeRate = deals.length > 0 ? Math.round((teamMandates / deals.length) * 100) : 0
+
+    // ── Inbox interested ──
+    const inboxRecords = inboxRes?.records || []
+    const totalInterested = inboxRecords.filter(r => r.fields?.['Lead Category'] === 'Interested').length
+    const interestedReplyRate = totalReplies > 0 ? Math.round((totalInterested / totalReplies) * 100) : 0
+
+    // ── Meetings ──
+    const totalMeetingsMonth = meetingsRes.thisMonth || meetingsRes.thisWeek || 0
+    const interestedToMeeting = totalInterested > 0 ? Math.round((totalMeetingsMonth / totalInterested) * 100) : 0
+
+    // Build updates — write column H (Monthly Actual)
     const updates = []
     const rowMap = {}
-    sheetRows.forEach((row, i) => { if (row[0]) rowMap[row[0]] = i + 1 })
+    // Build map: key = metric name, but for per-closer rows we need section context
+    // Use exact row numbers since metric names repeat (Calls Booked appears 4x)
+    sheetRows.forEach((row, i) => { if (row[0]) rowMap[String(row[0]).trim()] = rowMap[String(row[0]).trim()] || []; rowMap[String(row[0]).trim()]?.push(i + 1) })
 
-    // Helper to queue update if source matches API
-    function queueUpdate(metricName, column, value) {
-      const rowNum = rowMap[metricName]
-      if (!rowNum) return
-      const source = sheetRows[rowNum - 1]?.[11] // Column L = Source
-      if (source && !['Email Bison', 'Email Bison CA', 'HeyReach AT', 'HubSpot', 'Calculated', 'Inbox Mgr AT'].includes(source)) return
+    // Helper: write to a specific row number
+    function writeRow(rowNum, column, value) {
+      if (!rowNum || value === undefined) return
       updates.push({ cell: `${column}${rowNum}`, value })
     }
 
-    // Email metrics (Monthly Actual = column H)
-    queueUpdate('Emails Sent', 'H', totalSent)
-    queueUpdate('Reply Rate', 'H', rateCount > 0 ? Math.round((replyRateSum / rateCount) * 100) / 100 : 0)
+    // ── Email metrics ──
+    writeRow(rowMap['Emails Sent']?.[0], 'H', totalSent)
+    writeRow(rowMap['Reply Rate']?.[0], 'H', rateCount > 0 ? `${(replyRateSum / rateCount).toFixed(2)}%` : '0%')
+    writeRow(rowMap['Interested Reply Rate (% of replies)']?.[0], 'H', `${interestedReplyRate}%`)
 
-    // LinkedIn metrics
-    queueUpdate('LinkedIn Messages Sent', 'H', liAgg.messagesSent)
-    queueUpdate('Connection Requests Sent', 'H', liAgg.connectionsSent)
-    queueUpdate('Connection Acceptance Rate', 'H', liAgg.connectionAcceptanceRate)
-    queueUpdate('LinkedIn Reply Rate', 'H', liAgg.messageReplyRate)
-    queueUpdate('Meetings Booked from LinkedIn', 'H', liAgg.meetingsBooked)
+    // ── LinkedIn metrics ──
+    writeRow(rowMap['LinkedIn Messages Sent']?.[0], 'H', liAgg.messagesSent)
+    writeRow(rowMap['Connection Requests Sent']?.[0], 'H', liAgg.connectionsSent)
+    writeRow(rowMap['Connection Acceptance Rate']?.[0], 'H', liAgg.connectionAcceptanceRate ? `${liAgg.connectionAcceptanceRate}%` : '')
+    writeRow(rowMap['LinkedIn Reply Rate']?.[0], 'H', liAgg.messageReplyRate ? `${liAgg.messageReplyRate}%` : '')
+    writeRow(rowMap['Meetings Booked from LinkedIn']?.[0], 'H', liAgg.meetingsBooked)
 
-    // Qualification rate from HubSpot/Supabase
-    const calls = callsRes.data || []
-    const call1s = calls.filter(c => c.call_type === 'Call 1')
-    const qualified = call1s.filter(c => c.qualification_result === 'QUALIFIED').length
-    const qualRate = call1s.length > 0 ? Math.round((qualified / call1s.length) * 100) : 0
-    queueUpdate('Qualification Rate (Call 1 → Call 2)', 'H', `${qualRate}%`)
+    // ── Inbox/Meetings aggregate ──
+    writeRow(rowMap['Total Meetings Booked (Email + LinkedIn)']?.[0], 'H', totalMeetingsMonth)
+    writeRow(rowMap['Interested Leads → Meetings Conversion']?.[0], 'H', `${interestedToMeeting}%`)
+
+    // ── Qualification Rate ──
+    writeRow(rowMap['Qualification Rate (Call 1 → Call 2)']?.[0], 'H', `${qualRate}%`)
+
+    // ── Per-closer: Calls Booked, Progressed to Qualified, Mandates ──
+    // Sheet rows: Stanley=30, Thomas=37, Tahawar=44, Jake=51 (subheaders)
+    // Their metrics are offset +1 to +6 from the subheader
+    const closerStartRows = { Stanley: 31, Thomas: 38, Tahawar: 45, Jake: 52 }
+    for (const [rep, startRow] of Object.entries(closerStartRows)) {
+      const rd = repCalls[rep] || { callsBooked: 0, progressedToQualified: 0, mandatesSigned: 0 }
+      writeRow(startRow, 'H', rd.callsBooked)          // Calls Booked
+      writeRow(startRow + 2, 'H', rd.progressedToQualified) // Progressed to Qualified
+      writeRow(startRow + 5, 'H', rd.mandatesSigned)    // Mandates Signed
+    }
+
+    // ── Team aggregate ──
+    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamCalls)
+    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', `${qualRate}%`)
+    writeRow(rowMap['Total Mandates Signed']?.[0], 'H', teamMandates)
+    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', `${closeRate}%`)
+
+    // ── Fulfillment ──
+    writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
 
     const written = updates.length > 0 ? await writeSheetCells(tab, updates) : true
     auditLog(req.user?.id, 'sync_scorecard', 'scorecard', { cellsWritten: updates.length }, req.ip)
