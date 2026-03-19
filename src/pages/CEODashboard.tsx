@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '../hooks/useAuth'
 import { useToast } from '../components/Toast'
-import { useCEOScorecard, type CEOScorecardData } from '../hooks/useCEOScorecard'
+import { useCEOScorecard, type SheetRow } from '../hooks/useCEOScorecard'
 
 // ─── Targets Editor ─────────────────────────────────────
 
@@ -86,27 +86,16 @@ function TargetsModal({ open, onClose, onSaved }: { open: boolean; onClose: () =
   )
 }
 
-// ─── Status dot ─────────────────────────────────────────
+// ─── Status helpers ─────────────────────────────────────
 
-function StatusDot({ status }: { status: 'green' | 'red' | 'yellow' }) {
-  const colors = { green: 'bg-emerald-500', red: 'bg-red-500', yellow: 'bg-amber-400' }
-  return <div className={`h-2.5 w-2.5 rounded-full ${colors[status]}`} />
+function StatusDot({ status }: { status: string }) {
+  const s = status?.toLowerCase?.() ?? ''
+  const color = s.includes('green') || s === 'g' ? 'bg-emerald-500'
+    : s.includes('red') || s === 'r' ? 'bg-red-500'
+    : s.includes('yellow') || s === 'y' ? 'bg-amber-400'
+    : 'bg-zinc-300'
+  return <div className={`h-2.5 w-2.5 rounded-full ${color} mx-auto`} />
 }
-
-function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
-  if (trend === 'up') return <span className="text-emerald-500 text-xs font-bold">{'\u2191'}</span>
-  if (trend === 'down') return <span className="text-red-500 text-xs font-bold">{'\u2193'}</span>
-  return <span className="text-zinc-400 text-xs">{'\u2192'}</span>
-}
-
-// ─── Stale Data Badge ───────────────────────────────────
-
-function StaleBadge({ freshness, sourceKey }: { freshness: Record<string, string>; sourceKey: string }) {
-  if (!freshness || freshness[sourceKey] === 'live') return null
-  return <span className="text-[9px] text-amber-500 ml-2 font-medium">&#9888; stale data</span>
-}
-
-// ─── Skeleton Loader ────────────────────────────────────
 
 function SkeletonCard() {
   return (
@@ -119,86 +108,81 @@ function SkeletonCard() {
   )
 }
 
-// ─── Department Card ────────────────────────────────────
+// ─── Editable Cell ──────────────────────────────────────
 
-interface DeptCardProps {
-  icon: string
-  title: string
-  owner: string
-  accent: string
-  metrics: CEOScorecardData['outbound']
-  children?: React.ReactNode
-  defaultOpen?: boolean
-  freshness?: Record<string, string>
-  sourceKey?: string
+const COL_MAP: Record<string, string> = {
+  week1: 'B', week2: 'C', week3: 'D', week4: 'E',
+  monthlyActual: 'H', monthlyTarget: 'I', status: 'J',
 }
 
-function DeptCard({ icon, title, owner, accent, metrics, children, defaultOpen = true, freshness, sourceKey }: DeptCardProps) {
-  const [open, setOpen] = useState(defaultOpen)
-  const greens = metrics.filter(m => m.status === 'green').length
-  const yellows = metrics.filter(m => m.status === 'yellow').length
-  const total = metrics.length
+function EditableCell({
+  value, rowIndex, column, tab, editable, onSaved,
+}: {
+  value: string | number
+  rowIndex: number
+  column: string
+  tab: string
+  editable: boolean
+  onSaved: (newVal: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(String(value ?? ''))
+  const { toast } = useToast()
+
+  const colLetter = COL_MAP[column]
+
+  if (!editable || !colLetter) {
+    return (
+      <td className="py-1.5 px-2 text-xs tabular-nums bg-blue-50/30 text-zinc-700 text-right">
+        {value || <span className="text-zinc-300">&mdash;</span>}
+      </td>
+    )
+  }
+
+  async function save() {
+    setEditing(false)
+    if (val === String(value ?? '')) return
+    try {
+      const res = await apiFetch('/api/scorecard/cell', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tab, cell: `${colLetter}${rowIndex}`, value: val }),
+      })
+      if (res.ok) {
+        onSaved(val)
+        toast('Cell updated', 'success')
+      } else {
+        setVal(String(value ?? ''))
+        toast('Failed to save cell', 'error')
+      }
+    } catch {
+      setVal(String(value ?? ''))
+      toast('Failed to save cell', 'error')
+    }
+  }
+
+  if (editing) {
+    return (
+      <td className="py-0.5 px-1">
+        <input
+          autoFocus
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => { if (e.key === 'Enter') save() }}
+          className="w-full bg-white border border-yanne rounded px-1 py-0.5 text-xs outline-none tabular-nums"
+        />
+      </td>
+    )
+  }
 
   return (
-    <div className="rounded-xl border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-5 py-4 hover:bg-zinc-50 transition-colors"
-        style={{ borderLeft: `4px solid ${accent}` }}
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-lg">{icon}</span>
-          <div className="text-left">
-            <h3 className="text-sm font-bold text-zinc-900">
-              {title}
-              {freshness && sourceKey && <StaleBadge freshness={freshness} sourceKey={sourceKey} />}
-            </h3>
-            <span className="text-[10px] text-zinc-400">Owner: {owner}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-zinc-400">
-            {greens}/{total} on target
-            {yellows > 0 && <span className="text-amber-500 ml-1">({yellows} close)</span>}
-          </span>
-          <svg className={`w-4 h-4 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </div>
-      </button>
-
-      {open && (
-        <div className="px-5 pb-4">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-100">
-                  <th className="text-left pb-2 pr-2">Metric</th>
-                  <th className="text-left pb-2 pr-2">Owner</th>
-                  <th className="text-right pb-2 pr-2">Target</th>
-                  <th className="text-right pb-2 pr-2">Actual</th>
-                  <th className="text-center pb-2 pr-2">Status</th>
-                  <th className="text-center pb-2">Trend</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-50">
-                {metrics.map(m => (
-                  <tr key={m.name} className={m.status === 'red' ? 'bg-red-50/30' : m.status === 'yellow' ? 'bg-amber-50/30' : ''}>
-                    <td className="py-2 pr-2 text-xs text-zinc-700">{m.name}</td>
-                    <td className="py-2 pr-2 text-xs text-zinc-400">{m.owner}</td>
-                    <td className="py-2 pr-2 text-xs text-zinc-500 text-right tabular-nums">{m.target}</td>
-                    <td className="py-2 pr-2 text-xs font-semibold text-zinc-900 text-right tabular-nums">{m.actual}</td>
-                    <td className="py-2 pr-2 text-center"><StatusDot status={m.status} /></td>
-                    <td className="py-2 text-center"><TrendArrow trend={m.trend} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {children}
-        </div>
-      )}
-    </div>
+    <td
+      onClick={() => { setEditing(true); setVal(String(value ?? '')) }}
+      className="py-1.5 px-2 text-xs tabular-nums text-zinc-700 text-right cursor-pointer hover:bg-amber-50 border-b border-dashed border-transparent hover:border-zinc-300"
+    >
+      {value || <span className="text-zinc-300">&mdash;</span>}
+    </td>
   )
 }
 
@@ -208,7 +192,12 @@ export function CEODashboard() {
   const { data, loading, refresh } = useCEOScorecard()
   const [showTargets, setShowTargets] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [localRows, setLocalRows] = useState<SheetRow[]>([])
   const { toast } = useToast()
+
+  useEffect(() => {
+    if (data?.sheetRows) setLocalRows(data.sheetRows)
+  }, [data?.sheetRows])
 
   const saveSnapshot = useCallback(async () => {
     if (!data) return
@@ -247,7 +236,7 @@ export function CEODashboard() {
 
   if (loading && !data) {
     return (
-      <div className="max-w-[1200px] mx-auto space-y-4">
+      <div className="max-w-[1400px] mx-auto space-y-4">
         <div className="skeleton h-8 w-64 mb-6" />
         <SkeletonCard />
         <SkeletonCard />
@@ -260,8 +249,16 @@ export function CEODashboard() {
   const revPct = data.revenueTarget > 0 ? Math.round((data.revenueCollected / data.revenueTarget) * 100) : 0
   const revBarColor = revPct >= 70 ? 'bg-emerald-500' : revPct >= 40 ? 'bg-amber-400' : 'bg-red-500'
 
+  function updateLocalRow(idx: number, column: string, newVal: string) {
+    setLocalRows(prev => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [column]: newVal }
+      return next
+    })
+  }
+
   return (
-    <div className="max-w-[1200px] mx-auto print:max-w-none">
+    <div className="max-w-[1400px] mx-auto print:max-w-none">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -323,155 +320,70 @@ export function CEODashboard() {
         </div>
       </div>
 
-      {/* ── PIPELINE FUNNEL ────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {data.funnel.map((stage, i) => {
-            const atTarget = stage.conversionTarget !== null && stage.conversionRate !== null
-              ? stage.conversionRate >= stage.conversionTarget
-              : stage.value >= stage.target
-            const nearTarget = !atTarget && (stage.value / Math.max(stage.target, 1)) >= 0.75
-            const bgTint = atTarget ? 'bg-emerald-50' : nearTarget ? 'bg-amber-50' : 'bg-red-50/50'
+      {/* ── SHEET TABLE ────────────────────────────── */}
+      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-200 bg-zinc-50">
+                <th className="text-left py-2.5 px-3 w-[280px]">Metric</th>
+                <th className="text-right py-2.5 px-2 w-[60px]">W1</th>
+                <th className="text-right py-2.5 px-2 w-[60px]">W2</th>
+                <th className="text-right py-2.5 px-2 w-[60px]">W3</th>
+                <th className="text-right py-2.5 px-2 w-[60px]">W4</th>
+                <th className="text-right py-2.5 px-2 w-[100px]">Actual</th>
+                <th className="text-right py-2.5 px-2 w-[100px]">Target</th>
+                <th className="text-center py-2.5 px-2 w-[60px]">Status</th>
+                <th className="text-left py-2.5 px-2 w-[100px]">Owner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {localRows.map((row, idx) => {
+                if (row.isSection) {
+                  return (
+                    <tr key={`section-${idx}`}>
+                      <td colSpan={9} className="bg-yanne text-white font-bold text-xs uppercase tracking-wider py-2 px-3">
+                        {row.metric}
+                      </td>
+                    </tr>
+                  )
+                }
 
-            return (
-              <div key={stage.label} className="flex items-center flex-1 min-w-0">
-                <div className={`text-center flex-1 rounded-lg px-2 py-2 ${bgTint}`}>
-                  <div className="text-lg font-bold text-zinc-900 tabular-nums">
-                    {stage.label === 'Cash' ? `$${(stage.value / 1000).toFixed(0)}K` : stage.value >= 1000 ? `${(stage.value / 1000).toFixed(0)}K` : stage.value}
-                  </div>
-                  <div className="text-[9px] text-zinc-400 uppercase tracking-wider mt-0.5">{stage.label}</div>
-                </div>
-                {i < data.funnel.length - 1 && (
-                  <div className="flex flex-col items-center mx-1 shrink-0">
-                    <svg className="w-5 h-5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                    </svg>
-                    {stage.conversionRate !== null && (
-                      <span className={`text-[9px] font-semibold ${
-                        stage.conversionTarget !== null && stage.conversionRate >= stage.conversionTarget ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {stage.conversionRate}%
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                if (row.isSubheader) {
+                  return (
+                    <tr key={`sub-${idx}`}>
+                      <td colSpan={9} className="bg-zinc-100 font-semibold text-xs text-zinc-700 py-1.5 px-3 italic">
+                        {row.metric}
+                      </td>
+                    </tr>
+                  )
+                }
+
+                return (
+                  <tr key={`row-${idx}`} className="border-b border-zinc-100 hover:bg-zinc-50/50">
+                    <td className="py-1.5 px-3 text-xs text-zinc-800 font-medium">{row.metric}</td>
+                    <EditableCell value={row.week1} rowIndex={row.rowIndex} column="week1" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week1', v)} />
+                    <EditableCell value={row.week2} rowIndex={row.rowIndex} column="week2" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week2', v)} />
+                    <EditableCell value={row.week3} rowIndex={row.rowIndex} column="week3" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week3', v)} />
+                    <EditableCell value={row.week4} rowIndex={row.rowIndex} column="week4" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week4', v)} />
+                    <EditableCell value={row.monthlyActual} rowIndex={row.rowIndex} column="monthlyActual" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'monthlyActual', v)} />
+                    <EditableCell value={row.monthlyTarget} rowIndex={row.rowIndex} column="monthlyTarget" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'monthlyTarget', v)} />
+                    <td className="py-1.5 px-2 text-center">
+                      <StatusDot status={row.status} />
+                    </td>
+                    <td className="py-1.5 px-2 text-xs text-zinc-500">{row.owner}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      {/* ── DEPARTMENT CARDS ───────────────────────── */}
-      <div className="space-y-4 mb-6">
-        {/* Email Outbound */}
-        <DeptCard icon={'\uD83D\uDCE7'} title="OUTBOUND — EMAIL" owner="Outreachify" accent="#3B82F6" metrics={data.outbound} freshness={data.dataFreshness} sourceKey="bison" />
-
-        {/* LinkedIn Outbound */}
-        <DeptCard icon={'\uD83D\uDD17'} title="OUTBOUND — LINKEDIN" owner="Outreachify" accent="#0A66C2" metrics={data.linkedin} freshness={data.dataFreshness} sourceKey="linkedin" />
-
-        {/* Setters */}
-        <DeptCard icon={'\uD83D\uDC64'} title="SETTERS" owner="Alex" accent="#8B5CF6" metrics={data.setters}>
-          {data.setterBreakdown.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-zinc-100">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Setter Breakdown</div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">
-                      <th className="text-left pb-1">Setter</th>
-                      <th className="text-right pb-1">Assigned</th>
-                      <th className="text-right pb-1">Unactioned</th>
-                      <th className="text-right pb-1">Meetings</th>
-                      <th className="text-right pb-1">Conv %</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50">
-                    {data.setterBreakdown.map(s => (
-                      <tr key={s.name}>
-                        <td className="py-1.5 text-xs text-zinc-700">{s.name}</td>
-                        <td className="py-1.5 text-xs text-zinc-600 text-right tabular-nums">{s.assigned}</td>
-                        <td className={`py-1.5 text-xs font-semibold text-right tabular-nums ${s.unactioned > 10 ? 'text-red-600' : 'text-zinc-600'}`}>{s.unactioned}</td>
-                        <td className="py-1.5 text-xs text-zinc-600 text-right tabular-nums">{s.meetings}</td>
-                        <td className="py-1.5 text-xs text-zinc-600 text-right tabular-nums">{s.conversionRate}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </DeptCard>
-
-        {/* Sales / Closers */}
-        <DeptCard icon={'\uD83D\uDCDE'} title="SALES / CLOSERS" owner={'\u26A0\uFE0F VACANT'} accent="#EF4444" metrics={data.sales}>
-          {data.repLeaderboard.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-zinc-100">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Rep Leaderboard (This Week)</div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">
-                      <th className="text-left pb-1">#</th>
-                      <th className="text-left pb-1">Rep</th>
-                      <th className="text-right pb-1">Calls</th>
-                      <th className="text-right pb-1">Avg Score</th>
-                      <th className="text-right pb-1">Deals Adv.</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-50">
-                    {data.repLeaderboard.map((r, i) => {
-                      const medal = i === 0 ? '\uD83E\uDD47' : i === 1 ? '\uD83E\uDD48' : i === 2 ? '\uD83E\uDD49' : `#${i + 1}`
-                      const rowBg = r.avgScore >= 70 ? 'bg-emerald-50/40' : r.avgScore >= 55 ? 'bg-amber-50/40' : 'bg-red-50/40'
-                      return (
-                        <tr key={r.name} className={rowBg}>
-                          <td className="py-1.5 text-xs text-zinc-400">{medal}</td>
-                          <td className="py-1.5 text-xs font-medium text-zinc-800">{r.name}</td>
-                          <td className="py-1.5 text-xs text-zinc-600 text-right tabular-nums">{r.calls}</td>
-                          <td className={`py-1.5 text-xs font-semibold text-right tabular-nums ${r.avgScore >= 70 ? 'text-emerald-600' : r.avgScore >= 55 ? 'text-amber-600' : 'text-red-600'}`}>{r.avgScore}%</td>
-                          <td className="py-1.5 text-xs text-zinc-600 text-right tabular-nums">{r.dealsAdvanced}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-2 flex gap-4 text-xs">
-                <div><span className="text-zinc-400">Top Coaching Theme:</span> <span className="text-zinc-700">{data.topCoachingTheme}</span></div>
-                <div><span className="text-zinc-400">Worst Category:</span> <span className="text-zinc-700">{data.worstCategory}</span></div>
-              </div>
-            </div>
-          )}
-        </DeptCard>
-
-        {/* Fulfillment */}
-        <DeptCard icon={'\uD83E\uDD1D'} title="FULFILLMENT" owner="Philip / Mukul" accent="#22C55E" metrics={data.fulfillment} freshness={data.dataFreshness} sourceKey="googleSheet">
-          {data.clientStatus.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-zinc-100">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-2">Client Status</div>
-              <div className="space-y-1">
-                {data.clientStatus.map(c => (
-                  <div key={c.name} className="flex items-center justify-between py-1">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                      <span className="text-xs font-medium text-zinc-800">{c.name}</span>
-                    </div>
-                    <span className="text-[10px] text-zinc-400">{c.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DeptCard>
-
-        {/* Finance */}
-        <DeptCard icon={'\uD83D\uDCB0'} title="FINANCE" owner="Alex" accent="#F59E0B" metrics={data.finance} freshness={data.dataFreshness} sourceKey="hubspot" />
       </div>
 
       {/* ── BOTTLENECK ─────────────────────────────── */}
       {data.bottleneck && (
         <div className="mb-6 rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">{'\uD83C\uDFAF'}</span>
             <h3 className="text-sm font-bold text-amber-900">This Week's Bottleneck (Theory of Constraints)</h3>
           </div>
           <div className="text-sm text-amber-800 mb-2">
@@ -483,7 +395,7 @@ export function CEODashboard() {
             <div>Root cause: {data.bottleneck.rootCause}</div>
           </div>
           <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-amber-900">
-            <span>{'\u26A1'}</span> Recommended action: {data.bottleneck.action}
+            Recommended action: {data.bottleneck.action}
           </div>
         </div>
       )}
@@ -492,7 +404,6 @@ export function CEODashboard() {
       <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <h3 className="text-sm font-bold text-zinc-700 mb-3">Alerts</h3>
         <div className="space-y-4">
-          {/* Critical */}
           {data.alerts.filter(a => a.level === 'critical').length > 0 && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-red-500 mb-1.5">Critical</div>
@@ -506,8 +417,6 @@ export function CEODashboard() {
               </div>
             </div>
           )}
-
-          {/* Warning */}
           {data.alerts.filter(a => a.level === 'warning').length > 0 && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-1.5">Warning</div>
@@ -521,8 +430,6 @@ export function CEODashboard() {
               </div>
             </div>
           )}
-
-          {/* Wins */}
           {data.alerts.filter(a => a.level === 'win').length > 0 && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 mb-1.5">Wins</div>

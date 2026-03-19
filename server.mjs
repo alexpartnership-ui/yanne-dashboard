@@ -2175,6 +2175,20 @@ app.post('/api/scorecard/snapshot', async (req, res) => {
   }
 })
 
+// ─── Scorecard Cell Edit (single cell write to Google Sheet) ──
+
+app.post('/api/scorecard/cell', async (req, res) => {
+  try {
+    const { tab, cell, value } = req.body
+    if (!tab || !cell) return res.status(400).json({ error: 'tab and cell are required' })
+    await writeSheetCells(tab, [{ cell, value: value ?? '' }])
+    auditLog(req.user?.id, 'edit_sheet_cell', 'scorecard', { tab, cell, value }, req.ip)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ─── Scorecard Sync (write API values to Google Sheet) ──
 
 app.post('/api/scorecard/sync', async (req, res) => {

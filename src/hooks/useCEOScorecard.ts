@@ -67,6 +67,24 @@ interface WeeklyComparison {
   change: string
 }
 
+export interface SheetRow {
+  rowIndex: number
+  metric: string
+  isSection: boolean
+  isSubheader: boolean
+  week1: string | number
+  week2: string | number
+  week3: string | number
+  week4: string | number
+  type: string
+  monthlyActual: string | number
+  monthlyTarget: string | number
+  status: string
+  owner: string
+  source: string
+  editable: boolean
+}
+
 export interface CEOScorecardData {
   revenueCollected: number
   revenueTarget: number
@@ -92,6 +110,8 @@ export interface CEOScorecardData {
   weekRange: string
   lastRefreshed: string
   dataFreshness: Record<string, 'live' | 'stale' | 'unavailable'>
+  sheetRows: SheetRow[]
+  sheetTab: string
 }
 
 // ─── Helpers ────────────────────────────────────────────
@@ -181,6 +201,45 @@ export function useCEOScorecard() {
       const reps = (raw.reps || []) as Array<Record<string, unknown>>
       const twoWeekCalls = raw.allCalls || []
       const sheetData = parseSheetData(raw.googleSheet)
+
+      // Build sheetRows from raw Google Sheet data
+      const NON_EDITABLE_SOURCES = ['Email Bison', 'Email Bison CA', 'HeyReach Airtable', 'HubSpot', 'Calculated']
+      const rawSheetRows: unknown[][] = Array.isArray(raw.googleSheet) ? raw.googleSheet : []
+      // Extract tab name from row 1 if available, fallback
+      const extractedTabName: string = (rawSheetRows[0]?.[0] as string)?.includes('202')
+        ? String(rawSheetRows[0][0]).trim()
+        : (rawSheetRows[1]?.[0] as string)?.includes('202')
+          ? String(rawSheetRows[1][0]).trim()
+          : 'April 2026'
+      const parsedSheetRows: SheetRow[] = []
+      for (let i = 3; i < rawSheetRows.length; i++) {
+        const row = rawSheetRows[i] as (string | number)[]
+        const metricName = String(row[0] ?? '').trim()
+        if (!metricName) continue
+        const hasNoData = !row[1] && !row[2] && !row[3] && !row[4] && !row[7]
+        const isSection = metricName === metricName.toUpperCase() && hasNoData && metricName.length > 2
+        const isSubheader = typeof row[0] === 'string' && row[0].startsWith('    ')
+        const source = String(row[12] ?? row[11] ?? '')
+        const editable = !NON_EDITABLE_SOURCES.includes(source.trim())
+        parsedSheetRows.push({
+          rowIndex: i + 1, // 1-indexed for Google Sheets API
+          metric: metricName,
+          isSection,
+          isSubheader,
+          week1: row[1] ?? '',
+          week2: row[2] ?? '',
+          week3: row[3] ?? '',
+          week4: row[4] ?? '',
+          type: String(row[6] ?? ''),
+          monthlyActual: row[7] ?? '',
+          monthlyTarget: row[8] ?? '',
+          status: String(row[9] ?? ''),
+          owner: String(row[10] ?? ''),
+          source,
+          editable,
+        })
+      }
+
       const linkedinRecords = raw.linkedin?.records || []
       const lastSnapshot = raw.snapshots?.[0]?.snapshot_data || null
       const dataFreshness = raw.dataFreshness || {}
@@ -554,6 +613,8 @@ export function useCEOScorecard() {
         weekRange: getWeekRange(),
         lastRefreshed: new Date().toLocaleTimeString(),
         dataFreshness,
+        sheetRows: parsedSheetRows,
+        sheetTab: extractedTabName,
       })
     } catch (err) {
       console.error('Scorecard fetch error:', err)
