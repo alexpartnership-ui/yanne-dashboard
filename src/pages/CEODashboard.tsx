@@ -515,7 +515,6 @@ export function CEODashboard() {
               <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-200">
                 <th className="text-left pb-2">Setter</th>
                 <th className="text-right pb-2">Assigned</th>
-                <th className="text-right pb-2">Unactioned</th>
                 <th className="text-right pb-2">Meetings</th>
                 <th className="text-right pb-2">Conv %</th>
               </tr>
@@ -525,7 +524,6 @@ export function CEODashboard() {
                 <tr key={s.name} className="border-b border-zinc-100">
                   <td className="py-2 text-xs font-medium text-zinc-800">{s.name}</td>
                   <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.assigned}</td>
-                  <td className={`py-2 text-xs font-semibold text-right tabular-nums ${s.unactioned > 10 ? 'text-red-600' : 'text-zinc-600'}`}>{s.unactioned}</td>
                   <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.meetings}</td>
                   <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.conversionRate}%</td>
                 </tr>

@@ -299,7 +299,6 @@ export function useCEOScorecard() {
 
       const totalInterested = categoryCounts['Interested'] || 0
       const totalMeetingsBooked = slackMeetings.thisWeek || 0
-      const totalUnactioned = Object.values(setterMap).reduce((s, v) => s + v.unactioned, 0)
       const meetingsThisMonth = slackMeetings.thisMonth || slackMeetings.thisWeek || 0
 
       // ── Supabase call aggregates ───────────────────
@@ -463,10 +462,8 @@ export function useCEOScorecard() {
       ]
 
       const setters: ScorecardMetric[] = [
-        metric('Unactioned Replies', 'Alex', '<10', String(totalUnactioned), totalUnactioned, 10, true),
         metric('Interested → Meeting %', 'Alex', '60%', `${interestedToMeeting}%`, interestedToMeeting, 60),
         metric('Meetings Booked / Week', 'Alex', '15', String(totalMeetingsBooked), totalMeetingsBooked, 15),
-        metric('Orphaned Replies', 'Alex', '0', String(orphanedReplies), orphanedReplies, 0, true),
       ]
 
       const setterBreakdown: SetterRow[] = Object.entries(setterMap)
@@ -532,16 +529,13 @@ export function useCEOScorecard() {
         target: worstGap.target,
         owner: worstGap.stage.includes('Interested') ? 'Alex (Setters)' : worstGap.stage.includes('Email') ? 'Outreachify' : 'Sales Team',
         impact: `~${Math.round(worstGap.gap * 0.5)}% revenue upside if fixed`,
-        rootCause: worstGap.stage.includes('Interested') ? `${totalUnactioned} unactioned replies across setters` : `Conversion below target`,
+        rootCause: worstGap.stage.includes('Interested') ? 'Setter response time or follow-up quality' : 'Conversion below target',
         action: worstGap.stage.includes('Interested') ? 'Promote lead setter to own the queue' : 'Review and optimize this stage',
       } : null
 
       // ── Alerts ─────────────────────────────────────
       const alerts: Alert[] = []
       alerts.push({ level: 'critical', message: 'Sales Manager role VACANT — no one enforcing coaching directives' })
-      for (const [name, s] of Object.entries(setterMap)) {
-        if (s.unactioned > 10) alerts.push({ level: 'critical', message: `${name}: ${s.unactioned} unactioned replies`, link: '/outbound/setters' })
-      }
       if (inflationCount > 5) alerts.push({ level: 'critical', message: `${inflationCount} deals flagged for pipeline inflation`, link: '/deals' })
       if (avgReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${avgReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
       if (weekAvgScore < 70) alerts.push({ level: 'warning', message: `Team avg call score ${weekAvgScore}% (target 70%)`, link: '/reps' })
