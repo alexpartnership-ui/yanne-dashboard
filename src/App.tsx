@@ -30,6 +30,7 @@ const TrackersPage = lazy(() => import('./pages/TrackersPage').then(m => ({ defa
 const CallSearchPage = lazy(() => import('./pages/CallSearchPage').then(m => ({ default: m.CallSearchPage })))
 const BenchmarksPage = lazy(() => import('./pages/BenchmarksPage').then(m => ({ default: m.BenchmarksPage })))
 const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ default: m.DealsAIPage })))
+const LinkedInOutboundPage = lazy(() => import('./pages/LinkedInOutboundPage').then(m => ({ default: m.LinkedInOutboundPage })))
 
 function PageLoader() {
   return (
@@ -76,6 +77,7 @@ export default function App() {
                 <Route path="/outbound/copy" element={<CopyLibraryPage />} />
                 <Route path="/outbound/setters" element={<SetterPerformancePage />} />
                 <Route path="/outbound/leads" element={<LeadQualityPage />} />
+                <Route path="/outbound/linkedin" element={<LinkedInOutboundPage />} />
 
                 {/* CEO Dashboard */}
                 <Route path="/ceo" element={<CEODashboard />} />

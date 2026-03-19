@@ -253,6 +253,7 @@ const AIRTABLE_KEY = process.env.AIRTABLE_API_KEY
 const MONDAY_KEY = process.env.MONDAY_API_KEY
 const HUBSPOT_KEY = process.env.HUBSPOT_API_KEY
 const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN
+const HEYREACH_KEY = process.env.HEYREACH_API_KEY || 'REDACTED_HEYREACH_KEY'
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
@@ -267,6 +268,7 @@ if (!AIRTABLE_KEY) console.warn('Missing AIRTABLE_API_KEY — client pages will 
 if (!MONDAY_KEY) console.warn('Missing MONDAY_API_KEY — client project pages will not work')
 if (!HUBSPOT_KEY) console.warn('Missing HUBSPOT_API_KEY — deal pipeline pages will not work')
 if (!SLACK_TOKEN) console.warn('Missing SLACK_BOT_TOKEN — Slack reporting data will not work')
+if (!HEYREACH_KEY) console.warn('Missing HEYREACH_API_KEY — LinkedIn outbound pages will not work')
 
 // Google Sheets service account (for CEO Scorecard bidirectional sync)
 // Private key stored as base64 to avoid Docker build-arg newline issues
@@ -747,6 +749,53 @@ app.get('/api/bison/senders', async (_req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
     const { data, error } = await bisonFetch('/sender-emails', { per_page: 100 })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── HeyReach helper ───────────────────────────────────
+
+const HEYREACH_BASE = 'https://api.heyreach.io/api/public'
+
+async function heyreachFetch(endpoint, { method = 'GET', body = null } = {}) {
+  const opts = {
+    method,
+    headers: {
+      'X-API-KEY': HEYREACH_KEY,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  }
+  if (body) opts.body = JSON.stringify(body)
+  const res = await fetch(`${HEYREACH_BASE}${endpoint}`, opts)
+  if (!res.ok) return { error: `HeyReach ${res.status}: ${await res.text()}`, data: null }
+  const text = await res.text()
+  if (!text) return { data: null, error: null }
+  return { data: JSON.parse(text), error: null }
+}
+
+// ─── HeyReach API routes ───────────────────────────────
+
+// All campaigns with progress stats
+app.get('/api/heyreach/campaigns', async (_req, res) => {
+  if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
+  try {
+    const { data, error } = await heyreachFetch('/campaign/GetAll', { method: 'POST', body: {} })
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Single campaign detail
+app.get('/api/heyreach/campaigns/:id', async (req, res) => {
+  if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
+  try {
+    const { data, error } = await heyreachFetch(`/campaign/GetById?campaignId=${req.params.id}`)
     if (error) return res.status(500).json({ error })
     res.json(data)
   } catch (err) {
