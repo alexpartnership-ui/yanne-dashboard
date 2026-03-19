@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useHeyReach, type HeyReachCampaign, type HeyReachList, type SenderAccount } from '../hooks/useHeyReach'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ComposedChart, Area, Line } from 'recharts'
 
 // ─── Helpers ───────────────────────────────────────────
 
@@ -61,6 +61,25 @@ function OverviewTab({ campaigns, totals, senders }: {
       pending: c.progressStats!.totalUsersPending,
     }))
 
+  // Campaign timeline — cumulative leads over time
+  const timelineData = (() => {
+    const sorted = [...campaigns]
+      .filter(c => c.progressStats && c.startedAt)
+      .sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''))
+    let cumLeads = 0
+    let cumCampaigns = 0
+    return sorted.map(c => {
+      cumLeads += c.progressStats!.totalUsers
+      cumCampaigns++
+      return {
+        date: new Date(c.startedAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        cumLeads,
+        cumCampaigns,
+        name: c.name,
+      }
+    })
+  })()
+
   // Active senders
   const activeAccountIds = new Set<number>()
   for (const c of campaigns) {
@@ -99,25 +118,47 @@ function OverviewTab({ campaigns, totals, senders }: {
         </div>
       </div>
 
-      {/* Top Campaigns Bar Chart */}
-      {topCampaigns.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Top Campaigns by Size</h3>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={topCampaigns} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmt} />
-              <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={fmtTooltip} labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''} />
-              <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="finished" stackId="a" fill="#10b981" name="Finished" />
-              <Bar dataKey="inProgress" stackId="a" fill="#3b82f6" name="In Progress" />
-              <Bar dataKey="pending" stackId="a" fill="#f59e0b" name="Pending" />
-              <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Top Campaigns Bar Chart */}
+        {topCampaigns.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
+            <h3 className="text-sm font-semibold text-zinc-800 mb-4">Top Campaigns by Size</h3>
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={topCampaigns} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmt} />
+                <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={fmtTooltip} labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''} />
+                <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="finished" stackId="a" fill="#10b981" name="Finished" />
+                <Bar dataKey="inProgress" stackId="a" fill="#3b82f6" name="In Progress" />
+                <Bar dataKey="pending" stackId="a" fill="#f59e0b" name="Pending" />
+                <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
       )}
+
+        {/* Campaign Timeline */}
+        {timelineData.length > 1 && (
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
+            <h3 className="text-sm font-semibold text-zinc-800 mb-4">Campaign Growth Timeline</h3>
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={timelineData} margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 10 }} tickFormatter={fmt} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
+                <Tooltip formatter={fmtTooltip} />
+                <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                <Area yAxisId="left" type="monotone" dataKey="cumLeads" fill="#0d9488" fillOpacity={0.12} stroke="#0d9488" name="Cumulative Leads" />
+                <Line yAxisId="right" type="stepAfter" dataKey="cumCampaigns" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="Campaigns Launched" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
