@@ -130,6 +130,7 @@ export function EmailIntelligencePage() {
                       <Area yAxisId="left" type="monotone" dataKey="Emails Sent" stroke="#1A3C34" fill="#1A3C34" fillOpacity={0.08} strokeWidth={2} />
                       <Line yAxisId="right" type="monotone" dataKey="Replies" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
                       <Line yAxisId="right" type="monotone" dataKey="Interested" stroke="#22C55E" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="Bounced" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : <p className="text-xs text-zinc-400 text-center pt-20">No data for this period</p>}
@@ -207,25 +208,27 @@ export function EmailIntelligencePage() {
           </div>
 
           {/* Top campaigns chart */}
-          {filteredCampaigns.length > 0 && (
-            <div className="mb-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 10 by Reply Rate</h3>
-              <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={filteredCampaigns.filter(c => c.emails_sent > 100).sort((a, b) => b.reply_rate - a.reply_rate).slice(0, 10)
-                      .map(c => ({ name: c.name.length > 30 ? c.name.slice(0, 30) + '...' : c.name, 'Reply %': Math.round(c.reply_rate * 100) / 100 }))}
-                    layout="vertical" margin={{ left: 130 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={130} />
-                    <Tooltip formatter={(v) => `${v}%`} />
-                    <Bar dataKey="Reply %" fill="#1A3C34" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
+          <div className="mb-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 10 by Reply Rate</h3>
+            {(() => {
+              const topData = filteredCampaigns.filter(c => c.emails_sent > 100).sort((a, b) => b.reply_rate - a.reply_rate).slice(0, 10)
+                .map(c => ({ name: c.name.length > 30 ? c.name.slice(0, 30) + '...' : c.name, 'Reply %': Math.round(c.reply_rate * 100) / 100 }))
+              if (topData.length === 0) return <p className="text-xs text-zinc-400 text-center py-16">No campaigns with 100+ emails sent</p>
+              return (
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topData} layout="vertical" margin={{ left: 130 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                      <XAxis type="number" tick={{ fontSize: 10 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={130} />
+                      <Tooltip formatter={(v) => `${v}%`} />
+                      <Bar dataKey="Reply %" fill="#1A3C34" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )
+            })()}
+          </div>
 
           {/* Campaign table */}
           <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">

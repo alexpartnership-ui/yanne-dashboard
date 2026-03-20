@@ -121,9 +121,9 @@ function OverviewTab({ campaigns, totals, senders }: {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top Campaigns Bar Chart */}
-        {topCampaigns.length > 0 && (
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-zinc-800 mb-4">Top Campaigns by Size</h3>
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Top Campaigns by Size</h3>
+          {topCampaigns.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={topCampaigns} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
@@ -137,13 +137,13 @@ function OverviewTab({ campaigns, totals, senders }: {
                 <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-      )}
+          ) : <p className="text-xs text-zinc-400 text-center py-16">No campaign data available</p>}
+        </div>
 
         {/* Campaign Timeline */}
-        {timelineData.length > 1 && (
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <h3 className="text-sm font-semibold text-zinc-800 mb-4">Campaign Growth Timeline</h3>
+        <div className="rounded-lg border border-zinc-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Campaign Growth Timeline</h3>
+          {timelineData.length > 1 ? (
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={timelineData} margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
@@ -156,8 +156,8 @@ function OverviewTab({ campaigns, totals, senders }: {
                 <Line yAxisId="right" type="stepAfter" dataKey="cumCampaigns" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="Campaigns Launched" />
               </ComposedChart>
             </ResponsiveContainer>
-          </div>
-        )}
+          ) : <p className="text-xs text-zinc-400 text-center py-16">Need 2+ campaigns with start dates</p>}
+        </div>
       </div>
     </div>
   )
@@ -401,9 +401,9 @@ function ListsTab({ lists, campaigns }: { lists: HeyReachList[]; campaigns: HeyR
       </div>
 
       {/* Bar chart */}
-      {topLists.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Lists by Size</h3>
+      <div className="rounded-lg border border-zinc-200 bg-white p-5">
+        <h3 className="text-sm font-semibold text-zinc-800 mb-4">Lists by Size</h3>
+        {topLists.length > 0 ? (
           <ResponsiveContainer width="100%" height={Math.max(topLists.length * 32, 200)}>
             <BarChart data={topLists} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
@@ -413,8 +413,8 @@ function ListsTab({ lists, campaigns }: { lists: HeyReachList[]; campaigns: HeyR
               <Bar dataKey="leads" fill="#0d9488" name="Leads" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        ) : <p className="text-xs text-zinc-400 text-center py-16">No lists available</p>}
+      </div>
 
       {/* Table */}
       <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">

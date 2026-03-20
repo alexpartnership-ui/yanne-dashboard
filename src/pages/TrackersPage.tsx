@@ -90,7 +90,7 @@ export function TrackersPage() {
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line yAxisId="left" type="monotone" dataKey="avgScore" name="Avg Score" stroke="#1A3C34" strokeWidth={2} dot={{ r: 3 }} />
             <Line yAxisId="right" type="monotone" dataKey="calls" name="Calls" stroke="#A8C4BB" strokeWidth={2} dot={{ r: 3 }} />
-            <Line yAxisId="left" type="monotone" dataKey="avgObjections" name="Avg Objections" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 2 }} />
+            <Line yAxisId="right" type="monotone" dataKey="avgObjections" name="Avg Objections" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
         )}
