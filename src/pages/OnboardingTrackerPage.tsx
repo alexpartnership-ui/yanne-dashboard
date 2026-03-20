@@ -3,6 +3,7 @@ import { apiFetch } from '../hooks/useAuth'
 import { useMondayOnboarding } from '../hooks/useMondayOnboarding'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
+import { useToast } from '../components/Toast'
 
 interface OnboardedClient {
   id: string
@@ -27,6 +28,9 @@ export function OnboardingTrackerPage() {
   const { data: projects, loading: loadingP, error: errorP } = useMondayOnboarding()
   const [clients, setClients] = useState<OnboardedClient[]>([])
   const [loadingC, setLoadingC] = useState(true)
+  const [newCompany, setNewCompany] = useState('')
+  const [creating, setCreating] = useState(false)
+  const toast = useToast()
 
   useEffect(() => {
     apiFetch('/api/monday/onboarding-form')
@@ -35,6 +39,29 @@ export function OnboardingTrackerPage() {
       .finally(() => setLoadingC(false))
   }, [])
 
+  async function createBoard() {
+    if (!newCompany.trim()) return
+    setCreating(true)
+    try {
+      const res = await apiFetch('/api/monday/create-onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: newCompany.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Created board: ${data.boardName}`)
+        setNewCompany('')
+        window.location.reload()
+      } else {
+        toast.error(data.error || 'Failed to create board')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setCreating(false)
+  }
+
   if (loadingP || loadingC) return <Spinner />
 
   const totalProjects = projects.length
@@ -42,6 +69,7 @@ export function OnboardingTrackerPage() {
   const totalTasks = projects.reduce((s, p) => s + p.tasks.length, 0)
   const doneTasks = projects.reduce((s, p) => s + p.tasks.filter(t => t.status === 'Done' || t.status === 'Completed').length, 0)
   const stuckTasks = projects.reduce((s, p) => s + p.tasks.filter(t => t.status === 'Stuck' || t.status === 'Blocked').length, 0)
+  const overdueTasks = projects.reduce((s, p) => s + p.tasks.filter(t => t.daysOverdue !== null && t.daysOverdue > 0).length, 0)
 
   // Recent onboarding form submissions
   const recentClients = [...clients].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5)
@@ -52,13 +80,33 @@ export function OnboardingTrackerPage() {
 
       {errorP && <p className="mb-4 text-sm text-red-600">Error: {errorP}</p>}
 
-      <div className="mb-6 grid grid-cols-6 gap-4">
+      <div className="mb-6 grid grid-cols-7 gap-4">
         <MetricCard label="Active Projects" value={totalProjects} />
         <MetricCard label="Avg Completion" value={`${avgCompletion}%`} />
         <MetricCard label="Total Tasks" value={totalTasks} />
         <MetricCard label="Completed" value={doneTasks} />
         <MetricCard label="Stuck" value={stuckTasks} />
+        <MetricCard label="Overdue" value={overdueTasks} subtitle={overdueTasks > 0 ? 'Needs attention' : 'On track'} />
         <MetricCard label="Onboarding Forms" value={clients.length} subtitle="All time" />
+      </div>
+
+      {/* Create new onboarding board */}
+      <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm flex items-center gap-3">
+        <input
+          type="text"
+          value={newCompany}
+          onChange={e => setNewCompany(e.target.value)}
+          placeholder="Company name..."
+          className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 placeholder-zinc-400 focus:border-blue-400 focus:outline-none"
+          onKeyDown={e => e.key === 'Enter' && createBoard()}
+        />
+        <button
+          onClick={createBoard}
+          disabled={creating || !newCompany.trim()}
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        >
+          {creating ? 'Creating...' : 'Create Onboarding Board'}
+        </button>
       </div>
 
       {/* Recent onboarding submissions */}
@@ -131,8 +179,13 @@ export function OnboardingTrackerPage() {
                     .slice(0, 6)
                     .map(t => (
                       <div key={t.id} className="flex items-center justify-between py-1">
-                        <span className="text-xs text-zinc-700 truncate max-w-[60%]">{t.name}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColor(t.status)}`}>{t.status}</span>
+                        <span className="text-xs text-zinc-700 truncate max-w-[50%]">{t.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          {t.daysOverdue !== null && t.daysOverdue > 0 && (
+                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{t.daysOverdue}d overdue</span>
+                          )}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusColor(t.status)}`}>{t.status}</span>
+                        </div>
                       </div>
                     ))}
                 </div>

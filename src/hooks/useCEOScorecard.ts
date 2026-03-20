@@ -44,6 +44,24 @@ interface ClientRow {
   campaigns: number
 }
 
+interface OnboardingProgress {
+  name: string
+  completionRate: number
+  totalTasks: number
+  doneTasks: number
+  overdueTasks: number
+  groups: { title: string; total: number; done: number }[]
+}
+
+interface OverdueTask {
+  taskName: string
+  projectName: string
+  group: string
+  dueDate: string
+  daysOverdue: number
+  owner: string
+}
+
 interface Alert {
   level: 'critical' | 'warning' | 'win'
   message: string
@@ -112,6 +130,8 @@ export interface CEOScorecardData {
   dataFreshness: Record<string, 'live' | 'stale' | 'unavailable'>
   sheetRows: SheetRow[]
   sheetTab: string
+  onboardingProjects: OnboardingProgress[]
+  overdueTasks: OverdueTask[]
 }
 
 // ─── Helpers ────────────────────────────────────────────
@@ -196,6 +216,12 @@ export function useCEOScorecard() {
       const senderRecords = raw.senders?.records || []
       const mondayBoards = raw.monday?.boards || []
       const hubspotDeals = raw.hubspot?.results || []
+      // Onboarding task data
+      const onboardingBoards = raw.onboardingTasks?.boards || []
+      const rawOverdue: OverdueTask[] = (raw.onboardingTasks?.overdue || []).map((t: { taskName: string; projectName: string; group: string; dueDate: string; daysOverdue: number; owner: string }) => ({
+        taskName: t.taskName, projectName: t.projectName, group: t.group,
+        dueDate: t.dueDate, daysOverdue: t.daysOverdue, owner: t.owner,
+      }))
       const weekCalls = raw.callsWeek || []
       const deals = (raw.deals || []) as Array<Record<string, unknown>>
       const reps = (raw.reps || []) as Array<Record<string, unknown>>
@@ -418,6 +444,39 @@ export function useCEOScorecard() {
         campaigns: 0,
       }))
 
+      // ── Onboarding progress ────────────────────────
+      const onboardingProjects: OnboardingProgress[] = onboardingBoards.map((b: {
+        id: string; name: string;
+        groups?: Array<{ id: string; title: string }>;
+        items_page?: { items: Array<{ id: string; name: string; group: { title: string }; column_values: Array<{ id: string; text: string }> }> }
+      }) => {
+        const items = b.items_page?.items || []
+        const totalTasks = items.length
+        const doneTasks = items.filter(i => {
+          const status = i.column_values?.find(cv => cv.id === 'status')?.text || ''
+          return status === 'Done' || status === 'Completed'
+        }).length
+        const overdueTasks = rawOverdue.filter(t => t.projectName === b.name.replace('Project ', '')).length
+        const groupMap: Record<string, { total: number; done: number }> = {}
+        for (const g of b.groups || []) groupMap[g.title] = { total: 0, done: 0 }
+        for (const item of items) {
+          const grp = item.group?.title || ''
+          if (groupMap[grp]) {
+            groupMap[grp].total++
+            const st = item.column_values?.find(cv => cv.id === 'status')?.text || ''
+            if (st === 'Done' || st === 'Completed') groupMap[grp].done++
+          }
+        }
+        return {
+          name: b.name.replace('Project ', ''),
+          completionRate: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0,
+          totalTasks,
+          doneTasks,
+          overdueTasks,
+          groups: Object.entries(groupMap).map(([title, s]) => ({ title, ...s })),
+        }
+      })
+
       // ── Senders ────────────────────────────────────
       const connectedSenders = senderRecords.length
       const burntSenders = senderRecords.filter((r: { fields: Record<string, unknown> }) => {
@@ -540,6 +599,8 @@ export function useCEOScorecard() {
       if (avgReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${avgReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
       if (weekAvgScore < 70) alerts.push({ level: 'warning', message: `Team avg call score ${weekAvgScore}% (target 70%)`, link: '/reps' })
       if (stalledDeals.length > 3) alerts.push({ level: 'warning', message: `${stalledDeals.length} deals stalled 14+ days`, link: '/deals' })
+      // Onboarding overdue alerts
+      if (rawOverdue.length > 0) alerts.push({ level: rawOverdue.length > 5 ? 'critical' : 'warning', message: `${rawOverdue.length} onboarding tasks overdue across ${new Set(rawOverdue.map(t => t.projectName)).size} projects`, link: '/onboarding' })
       // LinkedIn alerts
       if (liAgg.messageReplyRate > 0 && liAgg.messageReplyRate < 5) alerts.push({ level: 'warning', message: `LinkedIn reply rate ${liAgg.messageReplyRate.toFixed(1)}% (below 5%)` })
       // Google Sheet manual red overrides
@@ -609,6 +670,8 @@ export function useCEOScorecard() {
         dataFreshness,
         sheetRows: parsedSheetRows,
         sheetTab: extractedTabName,
+        onboardingProjects,
+        overdueTasks: rawOverdue,
       })
     } catch (err) {
       console.error('Scorecard fetch error:', err)

@@ -8,6 +8,8 @@ export interface OnboardingTask {
   status: string
   owner: string
   projectName: string
+  dueDate: string | null
+  daysOverdue: number | null
 }
 
 export interface OnboardingProject {
@@ -47,10 +49,29 @@ export function useMondayOnboarding() {
 
           const tasks: OnboardingTask[] = items.map(item => {
             const cols: Record<string, string> = {}
+            const rawVals: Record<string, string> = {}
             for (const cv of item.column_values || []) {
               cols[cv.id] = cv.text || ''
               cols[cv.title] = cv.text || ''
+              rawVals[cv.id] = (cv as { value?: string }).value || ''
             }
+            // Parse timeline for due date
+            let dueDate: string | null = null
+            let daysOverdue: number | null = null
+            try {
+              const tl = rawVals['timeline'] ? JSON.parse(rawVals['timeline']) : null
+              if (tl?.to) {
+                dueDate = tl.to
+                const due = new Date(tl.to)
+                due.setHours(0, 0, 0, 0)
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const status = cols['status'] || ''
+                if (due < today && status !== 'Done' && status !== 'Completed') {
+                  daysOverdue = Math.round((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24))
+                }
+              }
+            } catch { /* skip */ }
             return {
               id: item.id,
               name: item.name,
@@ -58,6 +79,8 @@ export function useMondayOnboarding() {
               status: cols['status'] || cols['Status'] || '',
               owner: cols['person'] || cols['Owner'] || '',
               projectName,
+              dueDate,
+              daysOverdue,
             }
           })
 

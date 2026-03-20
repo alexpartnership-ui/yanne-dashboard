@@ -1156,6 +1156,161 @@ app.get('/api/monday/onboarding', async (_req, res) => {
   }
 })
 
+// ─── Monday: Overdue tasks ──────────────────────────────
+
+function parseMondayOverdue(boards) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const overdue = []
+  for (const b of boards) {
+    const projectName = b.name.replace('Project ', '')
+    for (const item of b.items_page?.items || []) {
+      const cols = {}
+      for (const cv of item.column_values || []) {
+        cols[cv.id] = cv
+      }
+      const status = cols['status']?.text || ''
+      if (status === 'Done' || status === 'Completed') continue
+      // Parse timeline column (JSON value like {"from":"2026-03-01","to":"2026-03-15"})
+      const timelineVal = cols['timeline']?.value
+      if (!timelineVal) continue
+      try {
+        const tl = JSON.parse(timelineVal)
+        if (!tl.to) continue
+        const dueDate = new Date(tl.to)
+        dueDate.setHours(0, 0, 0, 0)
+        if (dueDate < today) {
+          const daysOverdue = Math.round((today - dueDate) / (1000 * 60 * 60 * 24))
+          overdue.push({
+            taskName: item.name,
+            projectName,
+            group: item.group?.title || '',
+            dueDate: tl.to,
+            daysOverdue,
+            status,
+            owner: cols['person']?.text || 'Unassigned',
+          })
+        }
+      } catch { /* skip bad timeline */ }
+    }
+  }
+  return overdue.sort((a, b) => b.daysOverdue - a.daysOverdue)
+}
+
+app.get('/api/monday/overdue', async (_req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${PROJECT_TASK_IDS.join(',')}]) {
+        id name
+        items_page(limit: 50) {
+          items {
+            id name group { id title }
+            column_values(ids: ["status", "person", "timeline"]) { id type text value column { title } }
+          }
+        }
+      }
+    }`)
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
+    const boards = data?.boards || []
+    // Normalize column_values
+    for (const board of boards) {
+      for (const item of board.items_page?.items || []) {
+        for (const cv of item.column_values || []) {
+          cv.title = cv.column?.title || cv.id
+          delete cv.column
+        }
+      }
+    }
+    const overdue = parseMondayOverdue(boards)
+    res.json({ overdue, total: overdue.length })
+  } catch (err) {
+    serverError(res, err)
+  }
+})
+
+app.post('/api/monday/overdue/notify', verifyToken, requireRole('admin'), async (req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
+  try {
+    const { data, error } = await mondayQuery(`{
+      boards(ids: [${PROJECT_TASK_IDS.join(',')}]) {
+        id name
+        items_page(limit: 50) {
+          items {
+            id name group { id title }
+            column_values(ids: ["status", "person", "timeline"]) { id type text value column { title } }
+          }
+        }
+      }
+    }`)
+    if (error) return res.status(500).json({ error: 'Internal server error' })
+    const boards = data?.boards || []
+    for (const board of boards) {
+      for (const item of board.items_page?.items || []) {
+        for (const cv of item.column_values || []) {
+          cv.title = cv.column?.title || cv.id
+          delete cv.column
+        }
+      }
+    }
+    const overdue = parseMondayOverdue(boards)
+    if (overdue.length === 0) return res.json({ ok: true, message: 'No overdue tasks' })
+
+    // Group by project
+    const byProject = {}
+    for (const t of overdue) {
+      if (!byProject[t.projectName]) byProject[t.projectName] = []
+      byProject[t.projectName].push(t)
+    }
+
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    let text = `:rotating_light: *Overdue Onboarding Tasks — ${today}*\n\n`
+    for (const [project, tasks] of Object.entries(byProject)) {
+      text += `*${project}* (${tasks.length} overdue):\n`
+      for (const t of tasks.slice(0, 5)) {
+        text += `  • ${t.group} > ${t.taskName} — ${t.daysOverdue}d overdue (${t.owner})\n`
+      }
+      if (tasks.length > 5) text += `  • ...and ${tasks.length - 5} more\n`
+      text += '\n'
+    }
+
+    const ALEX_CHANNEL = 'C0AK9CF0BU1'
+    const { error: slackErr } = await slackFetch('chat.postMessage', { channel: ALEX_CHANNEL, text })
+    if (slackErr) return res.status(500).json({ error: 'Failed to post to Slack' })
+    auditLog('monday_overdue_notify', req.user, { count: overdue.length })
+    res.json({ ok: true, count: overdue.length })
+  } catch (err) {
+    serverError(res, err)
+  }
+})
+
+// ─── Monday: Auto-create onboarding board from template ─
+
+const ONBOARDING_TEMPLATE_BOARD_ID = PROJECT_TASK_IDS[0] // Use Project AIR as template
+
+app.post('/api/monday/create-onboarding', verifyToken, requireRole('admin'), async (req, res) => {
+  if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  const { companyName } = req.body || {}
+  if (!companyName || typeof companyName !== 'string' || companyName.length > 100) {
+    return res.status(400).json({ error: 'companyName required (max 100 chars)' })
+  }
+  try {
+    const boardName = `Project ${companyName.trim()}`
+    const { data, error } = await mondayQuery(`mutation { duplicate_board(board_id: ${ONBOARDING_TEMPLATE_BOARD_ID}, duplicate_type: duplicate_board_with_structure_and_pulses, board_name: "${boardName.replace(/"/g, '\\"')}") { board { id name } } }`)
+    if (error) { console.error('[api] Monday duplicate_board error:', error); return res.status(500).json({ error: 'Failed to create board' }) }
+    const newBoard = data?.duplicate_board?.board
+    if (!newBoard) return res.status(500).json({ error: 'Board creation returned no result' })
+    // Add to runtime list so it appears immediately
+    const newId = parseInt(newBoard.id, 10)
+    if (!PROJECT_TASK_IDS.includes(newId)) PROJECT_TASK_IDS.push(newId)
+    auditLog('monday_create_board', req.user, { boardId: newBoard.id, boardName: newBoard.name, companyName })
+    res.json({ ok: true, boardId: newBoard.id, boardName: newBoard.name })
+  } catch (err) {
+    serverError(res, err)
+  }
+})
+
 // ─── HubSpot API routes ─────────────────────────────────
 
 const HUBSPOT_STAGE_MAP = {
@@ -2931,6 +3086,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       mondayRes, hubspotParsed,
       callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
       targetsData, googleSheetRes, linkedinRes, snapshotsRes,
+      onboardingTasksRes,
     ] = await Promise.all([
       fetchAllBisonCampaigns(),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
@@ -2950,6 +3106,20 @@ app.get('/api/scorecard/data', async (_req, res) => {
       AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       // Recent snapshots for weekly comparison
       supaQuery('ceo_dashboard_snapshots', 'select=snapshot_data,week_range,created_at&order=created_at.desc&limit=2').catch(() => ({ data: null })),
+      // Onboarding task boards for progress + overdue
+      MONDAY_KEY ? mondayQuery(`{ boards(ids: [${PROJECT_TASK_IDS.join(',')}]) { id name groups { id title } items_page(limit: 50) { items { id name group { id title } column_values(ids: ["status", "person", "timeline"]) { id type text value column { title } } } } } }`).then(r => {
+        // Normalize + compute overdue
+        const boards = r.data?.boards || []
+        for (const board of boards) {
+          for (const item of board.items_page?.items || []) {
+            for (const cv of item.column_values || []) {
+              cv.title = cv.column?.title || cv.id
+              delete cv.column
+            }
+          }
+        }
+        return { boards, overdue: parseMondayOverdue(boards) }
+      }).catch(() => null) : Promise.resolve(null),
     ])
 
     // Build data freshness indicators
@@ -2978,6 +3148,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       googleSheet: googleSheetRes,
       linkedin: linkedinRes,
       snapshots: snapshotsRes.data,
+      onboardingTasks: onboardingTasksRes,
       dataFreshness,
     })
   } catch (err) {

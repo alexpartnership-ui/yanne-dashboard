@@ -3,6 +3,43 @@ import { apiFetch } from '../hooks/useAuth'
 import { useToast } from '../components/Toast'
 import { useCEOScorecard, type SheetRow } from '../hooks/useCEOScorecard'
 
+// ─── Notify Slack Button ────────────────────────────────
+
+function NotifySlackButton() {
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const toast = useToast()
+
+  async function notify() {
+    setSending(true)
+    try {
+      const res = await apiFetch('/api/monday/overdue/notify', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setSent(true)
+        toast.success(`Posted ${data.count} overdue tasks to Slack`)
+      } else {
+        toast.error(data.error || 'Failed to notify')
+      }
+    } catch {
+      toast.error('Network error')
+    }
+    setSending(false)
+  }
+
+  if (sent) return <span className="text-[10px] text-emerald-600 font-medium">Sent to Slack</span>
+
+  return (
+    <button
+      onClick={notify}
+      disabled={sending}
+      className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+    >
+      {sending ? 'Sending...' : 'Notify Slack'}
+    </button>
+  )
+}
+
 // ─── Targets Editor ─────────────────────────────────────
 
 interface Targets { [key: string]: number }
@@ -587,6 +624,70 @@ export function CEODashboard() {
           )}
         </div>
       </div>
+
+      {/* ── ONBOARDING PROGRESS ─────────────────────── */}
+      {data.onboardingProjects.length > 0 && (
+        <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-zinc-700">Client Onboarding</h3>
+            <span className="text-[10px] text-zinc-400">{data.onboardingProjects.length} active projects</span>
+          </div>
+          <div className="space-y-2">
+            {data.onboardingProjects.map(p => (
+              <div key={p.name} className="flex items-center gap-3 py-1.5">
+                <span className="text-xs font-medium text-zinc-800 w-32 truncate" title={p.name}>{p.name}</span>
+                <div className="flex-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${p.completionRate >= 80 ? 'bg-emerald-500' : p.completionRate >= 40 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                    style={{ width: `${p.completionRate}%` }}
+                  />
+                </div>
+                <span className="text-xs font-semibold text-zinc-700 w-10 text-right">{p.completionRate}%</span>
+                <div className="flex gap-1">
+                  {p.groups.map(g => (
+                    <div key={g.title} className="w-6 text-center" title={`${g.title}: ${g.done}/${g.total}`}>
+                      <div className={`text-[9px] font-bold ${g.done === g.total ? 'text-emerald-600' : g.done > 0 ? 'text-blue-600' : 'text-zinc-400'}`}>
+                        {g.done}/{g.total}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {p.overdueTasks > 0 && (
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{p.overdueTasks} late</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── OVERDUE TASKS ───────────────────────────── */}
+      {data.overdueTasks.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-red-700">Overdue Onboarding Tasks</h3>
+            <NotifySlackButton />
+          </div>
+          <div className="space-y-1">
+            {data.overdueTasks.slice(0, 8).map((t, i) => (
+              <div key={i} className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-800">{t.projectName}</span>
+                  <span className="text-[10px] text-zinc-400">{t.group}</span>
+                  <span className="text-xs text-zinc-600">{t.taskName}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-400">{t.owner}</span>
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{t.daysOverdue}d</span>
+                </div>
+              </div>
+            ))}
+            {data.overdueTasks.length > 8 && (
+              <p className="text-[10px] text-zinc-400 pt-1">...and {data.overdueTasks.length - 8} more</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── WEEKLY COMPARISON ──────────────────────── */}
       <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
