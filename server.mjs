@@ -243,6 +243,23 @@ app.delete('/api/users/:id', verifyToken, requireRole('admin'), (req, res) => {
   res.json({ ok: true })
 })
 
+// ─── Password change ────────────────────────────────────
+app.post('/api/auth/change-password', verifyToken, (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' })
+  if (typeof newPassword !== 'string' || newPassword.length < 12) return res.status(400).json({ error: 'New password must be at least 12 characters' })
+
+  const users = loadUsers()
+  const user = users.find(u => u.id === req.user.id)
+  if (!user) return res.status(404).json({ error: 'User not found' })
+  if (!bcrypt.compareSync(currentPassword, user.password_hash)) return res.status(401).json({ error: 'Current password is incorrect' })
+
+  user.password_hash = bcrypt.hashSync(newPassword, 12)
+  saveUsers(users)
+  auditLog(req.user.id, 'change_password', 'auth', {}, req.ip)
+  res.json({ ok: true })
+})
+
 // ─── Phase 5.1: Audit log endpoint ─────────────────────
 
 app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
