@@ -10,7 +10,8 @@ ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 RUN npm run build
 
 FROM node:24.1.0-alpine
-RUN apk add --no-cache nginx curl
+RUN apk add --no-cache nginx curl \
+    && addgroup -S app && adduser -S app -G app
 
 # Copy built frontend
 COPY --from=build /app/dist /usr/share/nginx/html
@@ -22,6 +23,9 @@ COPY --from=build /app/server.mjs ./
 COPY --from=build /app/copy_library.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
+
+# Data directory with correct permissions
+RUN mkdir -p /app/data && chown -R app:app /app/data
 
 # Start script
 COPY start.sh /start.sh

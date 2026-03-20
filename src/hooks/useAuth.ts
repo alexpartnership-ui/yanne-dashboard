@@ -16,7 +16,7 @@ const STORAGE_KEY = 'yanne_user'
 let authState: AuthState = {
   user: (() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = sessionStorage.getItem(STORAGE_KEY)
       return stored ? JSON.parse(stored) : null
     } catch { return null }
   })(),
@@ -43,7 +43,7 @@ async function apiFetch(url: string, opts: RequestInit = {}) {
   })
   if (res.status === 401) {
     authState = { user: null, loading: false }
-    localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
     notify()
     throw new Error('Session expired')
   }
@@ -68,14 +68,14 @@ export function useAuth() {
     }
     const data = await res.json()
     authState = { user: data.user, loading: false }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.user))
     notify()
   }, [])
 
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
     authState = { user: null, loading: false }
-    localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
     notify()
   }, [])
 

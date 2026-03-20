@@ -45,11 +45,19 @@ const chatLimiter = rateLimit({
 app.use('/api/', globalLimiter)
 
 // ─── Phase 1.1: JWT Auth ───────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex')
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  console.error('FATAL: Missing JWT_SECRET environment variable')
+  process.exit(1)
+}
 const JWT_EXPIRES = '24h'
 
 // ─── Phase 1.8: Client API key encryption ──────────────
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex')
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
+if (!ENCRYPTION_KEY) {
+  console.error('FATAL: Missing ENCRYPTION_KEY environment variable')
+  process.exit(1)
+}
 
 function encrypt(text) {
   const iv = crypto.randomBytes(16)
@@ -80,10 +88,14 @@ function loadUsers() {
   try {
     if (existsSync(USERS_FILE)) return JSON.parse(readFileSync(USERS_FILE, 'utf-8'))
   } catch { /* use defaults */ }
-  // Default admin user
-  const defaultHash = bcrypt.hashSync('REDACTED_PASSWORD', 10)
+  // Default admin user — password MUST come from env var
+  const adminPass = process.env.ADMIN_INITIAL_PASSWORD
+  if (!adminPass) {
+    console.error('FATAL: No users.json found and ADMIN_INITIAL_PASSWORD not set')
+    process.exit(1)
+  }
   const defaults = [
-    { id: '1', email: 'alex@yannetr.net', name: 'Alex Ozdemir', role: 'admin', password_hash: defaultHash, created_at: new Date().toISOString() },
+    { id: '1', email: 'alex@yannetr.net', name: 'Alex Ozdemir', role: 'admin', password_hash: bcrypt.hashSync(adminPass, 12), created_at: new Date().toISOString() },
   ]
   writeFileSync(USERS_FILE, JSON.stringify(defaults, null, 2))
   return defaults
@@ -171,7 +183,6 @@ app.post('/api/auth/login', loginLimiter, (req, res) => {
   res.setHeader('Set-Cookie', `token=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400${process.env.NODE_ENV !== 'development' ? '; Secure' : ''}`)
   res.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    token,
   })
 })
 
@@ -183,7 +194,7 @@ app.post('/api/auth/logout', (req, res) => {
       auditLog(decoded.id, 'logout', 'auth', {}, req.ip)
     } catch { /* expired token, fine */ }
   }
-  res.setHeader('Set-Cookie', `token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`)
+  res.setHeader('Set-Cookie', `token=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`)
   res.json({ ok: true })
 })
 
@@ -201,6 +212,7 @@ app.get('/api/users', verifyToken, requireRole('admin'), (_req, res) => {
 app.post('/api/users', verifyToken, requireRole('admin'), (req, res) => {
   const { email, name, role, password } = req.body
   if (!email || !name || !password) return res.status(400).json({ error: 'email, name, and password required' })
+  if (typeof password !== 'string' || password.length < 12) return res.status(400).json({ error: 'Password must be at least 12 characters' })
   if (!['admin', 'manager', 'rep', 'finance'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
 
   const users = loadUsers()
@@ -211,7 +223,7 @@ app.post('/api/users', verifyToken, requireRole('admin'), (req, res) => {
     email,
     name,
     role,
-    password_hash: bcrypt.hashSync(password, 10),
+    password_hash: bcrypt.hashSync(password, 12),
     created_at: new Date().toISOString(),
   }
   users.push(newUser)
@@ -253,7 +265,7 @@ const AIRTABLE_KEY = process.env.AIRTABLE_API_KEY
 const MONDAY_KEY = process.env.MONDAY_API_KEY
 const HUBSPOT_KEY = process.env.HUBSPOT_API_KEY
 const SLACK_TOKEN = process.env.SLACK_BOT_TOKEN
-const HEYREACH_KEY = process.env.HEYREACH_API_KEY || 'REDACTED_HEYREACH_KEY'
+const HEYREACH_KEY = process.env.HEYREACH_API_KEY
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY')
@@ -296,7 +308,7 @@ function cached(key, ttlMs, fetcher) {
       cache.set(cacheKey, { data, time: Date.now() })
       res.json(data)
     } catch (err) {
-      res.status(500).json({ error: err.message })
+      serverError(res, err)
     }
   }
 }
@@ -448,33 +460,54 @@ async function findBestSheetTab() {
   return candidates[0] // fallback to current month name even if it fails
 }
 
+// ─── Security: input sanitizers ─────────────────────────
+// Strip characters that could inject PostgREST operators or SQL
+// Generic error response — never leak internal details to client
+function serverError(res, err, context = '') {
+  console.error(`[${context}]`, err?.message || err)
+  return res.status(500).json({ error: 'Internal server error' })
+}
+
+function sanitizePostgrest(val) {
+  if (typeof val !== 'string') return ''
+  return val.replace(/[&|();,\\<>]/g, '').slice(0, 200)
+}
+function sanitizeId(val) {
+  if (typeof val !== 'string') return ''
+  return val.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100)
+}
+function sanitizeDate(val) {
+  if (typeof val !== 'string') return ''
+  return val.replace(/[^0-9T:Z.+-]/g, '').slice(0, 30)
+}
+
 // ─── Phase 1.7: Supabase proxy routes ──────────────────
 
 // Call logs with filters
 app.get('/api/calls', async (req, res) => {
   try {
     const parts = ['select=*', 'order=scored_at.desc', 'limit=1000']
-    if (req.query.rep) parts.push(`rep=eq.${req.query.rep}`)
-    if (req.query.call_type) parts.push(`call_type=eq.${req.query.call_type}`)
-    if (req.query.grade) parts.push(`grade=eq.${req.query.grade}`)
-    if (req.query.scored_after) parts.push(`scored_at=gte.${req.query.scored_after}`)
+    if (req.query.rep) parts.push(`rep=eq.${sanitizePostgrest(req.query.rep)}`)
+    if (req.query.call_type) parts.push(`call_type=eq.${sanitizePostgrest(req.query.call_type)}`)
+    if (req.query.grade) parts.push(`grade=eq.${sanitizePostgrest(req.query.grade)}`)
+    if (req.query.scored_after) parts.push(`scored_at=gte.${sanitizeDate(req.query.scored_after)}`)
     const { data, error } = await supaQuery('call_logs', parts.join('&'))
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
 // Single call detail
 app.get('/api/calls/:id', async (req, res) => {
   try {
-    const { data, error } = await supaQuery('call_logs', `id=eq.${req.params.id}&limit=1`)
-    if (error) return res.status(500).json({ error })
+    const { data, error } = await supaQuery('call_logs', `id=eq.${sanitizeId(req.params.id)}&limit=1`)
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     if (!data || data.length === 0) return res.status(404).json({ error: 'Call not found' })
     res.json(data[0])
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -482,10 +515,10 @@ app.get('/api/calls/:id', async (req, res) => {
 app.get('/api/deals', async (_req, res) => {
   try {
     const { data, error } = await supaQuery('deals_with_calls', 'select=*&order=updated_at.desc')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -493,10 +526,10 @@ app.get('/api/deals', async (_req, res) => {
 app.get('/api/reps', async (_req, res) => {
   try {
     const { data, error } = await supaQuery('rep_performance', 'select=*&order=rep')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -566,7 +599,7 @@ app.get('/api/dashboard-stats', async (_req, res) => {
 
     res.json({ totalCalls: calls.length, avgScore, activeDeals, gradeDistribution, callsPerDay, coachingThemes, repQuickStats })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -624,7 +657,7 @@ app.get('/api/ceo-stats', async (_req, res) => {
 
     res.json({ callsThisWeek, avgScore, bestRep, activeDeals, closeRate, alerts })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -632,7 +665,7 @@ app.get('/api/ceo-stats', async (_req, res) => {
 app.get('/api/rep-call-history', async (_req, res) => {
   try {
     const { data, error } = await supaQuery('call_logs', 'select=rep,date,score_percentage,call_type&order=scored_at.desc&limit=2000')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     const rows = data || []
     const grouped = {}
     for (const row of rows) {
@@ -644,7 +677,7 @@ app.get('/api/rep-call-history', async (_req, res) => {
     for (const rep of Object.keys(grouped)) grouped[rep].reverse()
     res.json(grouped)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -653,12 +686,12 @@ app.post('/api/deal-staleness', async (req, res) => {
   try {
     const { callIds } = req.body
     if (!callIds || !Array.isArray(callIds) || callIds.length === 0) return res.json([])
-    const ids = callIds.slice(0, 100).map(id => `"${id}"`).join(',')
+    const ids = callIds.slice(0, 100).map(id => `"${sanitizeId(String(id))}"`).join(',')
     const { data, error } = await supaQuery('call_logs', `select=id,date&id=in.(${ids})`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data || [])
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -673,7 +706,7 @@ app.get('/api/bison/campaigns', async (_req, res) => {
     let lastPage = 1
     while (page <= lastPage && page <= 30) {
       const { data, error } = await bisonFetch('/campaigns', { per_page: 50, page })
-      if (error) return res.status(500).json({ error })
+      if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
       const items = data?.data || (Array.isArray(data) ? data : [])
       if (items.length === 0) break
       allCampaigns.push(...items)
@@ -683,7 +716,7 @@ app.get('/api/bison/campaigns', async (_req, res) => {
     }
     res.json(allCampaigns)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -692,10 +725,10 @@ app.get('/api/bison/campaigns/:id/sequence', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
     const { data, error } = await bisonFetch(`/campaigns/v1.1/${req.params.id}/sequence-steps`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data?.data || data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -704,10 +737,10 @@ app.get('/api/bison/campaigns/:id/stats', async (req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
     const { data, error } = await bisonFetch(`/campaigns/${req.params.id}/statistics`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -720,10 +753,10 @@ app.get('/api/bison/leads', async (req, res) => {
       page: req.query.page || 1,
       lead_campaign_status: req.query.status,
     })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -737,10 +770,10 @@ app.get('/api/bison/replies', async (req, res) => {
       folder: req.query.folder || 'inbox',
       status: req.query.status,
     })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -749,10 +782,10 @@ app.get('/api/bison/senders', async (_req, res) => {
   if (!EMAILBISON_KEY) return res.status(503).json({ error: 'EmailBison not configured' })
   try {
     const { data, error } = await bisonFetch('/sender-emails', { per_page: 100 })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -800,16 +833,16 @@ app.get('/api/heyreach/campaigns', async (_req, res) => {
   if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
   try {
     const { data, error } = await heyreachFetch('/campaign/GetAll', { method: 'POST', body: {} })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     const senderMap = loadSenderMap()
     res.json({ ...data, senderMap })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
-// Update sender name mapping (admin endpoint)
-app.post('/api/heyreach/senders', async (req, res) => {
+// Update sender name mapping (admin only)
+app.post('/api/heyreach/senders', requireRole('admin'), async (req, res) => {
   try {
     const existing = loadSenderMap()
     const updates = req.body // { "65067": "Alex Partnership", "118261": "John Smith" }
@@ -817,7 +850,7 @@ app.post('/api/heyreach/senders', async (req, res) => {
     saveSenderMap(merged)
     res.json({ success: true, count: Object.keys(merged).length, senderMap: merged })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -826,7 +859,7 @@ app.get('/api/heyreach/senders', async (_req, res) => {
   try {
     res.json(loadSenderMap())
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -835,10 +868,10 @@ app.get('/api/heyreach/campaigns/:id', async (req, res) => {
   if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
   try {
     const { data, error } = await heyreachFetch(`/campaign/GetById?campaignId=${req.params.id}`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -847,10 +880,10 @@ app.get('/api/heyreach/lists', async (_req, res) => {
   if (!HEYREACH_KEY) return res.status(503).json({ error: 'HeyReach not configured' })
   try {
     const { data, error } = await heyreachFetch('/list/GetAll', { method: 'POST', body: {} })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -864,10 +897,10 @@ app.get('/api/heyreach/lists/:id/leads', async (req, res) => {
       method: 'POST',
       body: { listId: parseInt(req.params.id), offset, limit },
     })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -877,15 +910,14 @@ app.get('/api/heyreach/lists/:id/leads', async (req, res) => {
 app.get('/api/airtable/inbox', async (req, res) => {
   if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
   try {
-    const params = { pageSize: '100', view: req.query.view }
-    if (req.query.formula) params.filterByFormula = req.query.formula
-    if (req.query.sort) params['sort[0][field]'] = req.query.sort
-    if (req.query.direction) params['sort[0][direction]'] = req.query.direction
+    const allowedViews = ['Grid view', 'All', 'Active', 'Inbox']
+    const view = allowedViews.includes(req.query.view) ? req.query.view : undefined
+    const params = { pageSize: '100', ...(view && { view }) }
     const { data, error } = await airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', params)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -894,12 +926,11 @@ app.get('/api/airtable/senders', async (req, res) => {
   if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
   try {
     const params = { pageSize: '100' }
-    if (req.query.formula) params.filterByFormula = req.query.formula
     const { data, error } = await airtableFetch('app70IAsUKudzw5UI', 'tblIWs6XXXdBW4OdP', params)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -908,14 +939,13 @@ app.get('/api/airtable/meetings', async (req, res) => {
   if (!AIRTABLE_KEY) return res.status(503).json({ error: 'Airtable not configured' })
   try {
     const params = { pageSize: '100' }
-    if (req.query.formula) params.filterByFormula = req.query.formula
     params['sort[0][field]'] = 'Start Time'
     params['sort[0][direction]'] = 'desc'
     const { data, error } = await airtableFetch('appzvZe6ctSCK79zj', 'tblsRnOQbDiAa64nD', params)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -969,7 +999,7 @@ app.get('/api/monday/onboarding-form', async (_req, res) => {
         }
       }
     }`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     const items = data?.boards?.[0]?.items_page?.items || []
     const clients = items.map(item => {
       const cols = {}
@@ -988,7 +1018,7 @@ app.get('/api/monday/onboarding-form', async (_req, res) => {
     })
     res.json({ clients })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1003,7 +1033,7 @@ app.get('/api/bison/workspaces', async (_req, res) => {
     const data = await r.json()
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1021,19 +1051,21 @@ app.get('/api/monday/projects', async (_req, res) => {
         }
       }
     }`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
 // Task boards for onboarding tracking
 app.get('/api/monday/tasks/:boardId', async (req, res) => {
   if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
+  const boardId = parseInt(req.params.boardId, 10)
+  if (isNaN(boardId) || boardId <= 0) return res.status(400).json({ error: 'Invalid board ID' })
   try {
     const { data, error } = await mondayQuery(`{
-      boards(ids: [${req.params.boardId}]) {
+      boards(ids: [${boardId}]) {
         id name
         groups { id title }
         items_page(limit: 100) {
@@ -1044,10 +1076,10 @@ app.get('/api/monday/tasks/:boardId', async (req, res) => {
         }
       }
     }`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1067,10 +1099,10 @@ app.get('/api/monday/onboarding', async (_req, res) => {
         }
       }
     }`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1099,7 +1131,7 @@ app.get('/api/hubspot/deals', async (_req, res) => {
     while (pages < 10) {
       const pagination = after ? `&after=${after}` : ''
       const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline,hubspot_owner_id,createdate,hs_lastmodifieddate,notes_last_updated,hs_lastactivity_date,hs_deal_stage_probability,hs_forecast_amount,hs_deal_score${pagination}`)
-      if (error) return res.status(500).json({ error })
+      if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
       const results = data.results || []
       // Filter to Sales Pipeline only
       const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
@@ -1120,7 +1152,7 @@ app.get('/api/hubspot/deals', async (_req, res) => {
     }))
     res.json({ results: enriched })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1128,10 +1160,10 @@ app.get('/api/hubspot/pipeline', async (_req, res) => {
   if (!HUBSPOT_KEY) return res.status(503).json({ error: 'HubSpot not configured' })
   try {
     const { data, error } = await hubspotFetch('/crm/v3/pipelines/deals')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     res.json(data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1217,7 +1249,7 @@ app.get('/api/clients/:id/campaigns', async (req, res) => {
     }
     res.json(allCampaigns)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1236,7 +1268,7 @@ app.get('/api/clients/:id/campaigns/:campaignId/sequence', async (req, res) => {
     const data = await r.json()
     res.json(data?.data || data)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1341,7 +1373,7 @@ app.get('/api/rep-checkins', async (req, res) => {
 
     res.json({ checkins, byDate, byRep: repMap })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1456,7 +1488,7 @@ app.get('/api/setter-checkins', async (req, res) => {
 
     res.json({ checkins, bySetter: setterMap, byDate })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1493,7 +1525,7 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
       const params = { channel: MEETINGS_CHANNEL, limit: 200, oldest }
       if (cursor) params.cursor = cursor
       const { data, error } = await slackFetch('conversations.history', params)
-      if (error) return res.status(500).json({ error })
+      if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
       messages.push(...(data.messages || []))
       cursor = data.response_metadata?.next_cursor
       if (!cursor) break
@@ -1545,7 +1577,7 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
       byHost: hostCounts,
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -1630,7 +1662,7 @@ app.get('/api/slack/email-reports', async (req, res) => {
       const params = { channel: EMAILS_REPORT_CHANNEL, limit: 200, oldest }
       if (cursor) params.cursor = cursor
       const { data, error } = await slackFetch('conversations.history', params)
-      if (error) return res.status(500).json({ error })
+      if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
       messages.push(...(data.messages || []))
       cursor = data.response_metadata?.next_cursor
       if (!cursor) break
@@ -1695,7 +1727,7 @@ app.get('/api/slack/email-reports', async (req, res) => {
 
     res.json({ dailyReports, totals })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2054,7 +2086,7 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
   } catch (err) {
     console.error('Chat error:', err)
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message })
+      serverError(res, err)
     } else {
       res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`)
       res.end()
@@ -2193,7 +2225,7 @@ app.get('/api/forecast', async (_req, res) => {
       },
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2233,7 +2265,7 @@ app.get('/api/coaching-adherence', async (_req, res) => {
 
     res.json(repAdherence)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2288,7 +2320,7 @@ app.post('/api/scorecard/snapshot', async (req, res) => {
     auditLog(req.user?.id, 'create_snapshot', 'scorecard', {}, req.ip)
     res.json({ ok: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2302,7 +2334,7 @@ app.post('/api/scorecard/cell', async (req, res) => {
     auditLog(req.user?.id, 'edit_sheet_cell', 'scorecard', { tab, cell, value }, req.ip)
     res.json({ ok: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2437,7 +2469,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
     auditLog(req.user?.id, 'sync_scorecard', 'scorecard', { cellsWritten: updates.length }, req.ip)
     res.json({ ok: true, cellsWritten: updates.length, written, tab, syncedAt: new Date().toISOString() })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2485,12 +2517,12 @@ app.post('/api/digest/send', verifyToken, requireRole('admin'), async (req, res)
     // Send to #alex-daily-brief
     const ALEX_CHANNEL = 'C0AK9CF0BU1'
     const { error } = await slackFetch('chat.postMessage', { channel: ALEX_CHANNEL, blocks, text: `Weekly CEO Digest — ${weekCalls} calls, ${avgScore}% avg` })
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
 
     auditLog(req.user.id, 'send_digest', 'slack', { calls: weekCalls, avgScore }, req.ip)
     res.json({ ok: true, calls: weekCalls, avgScore })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2501,7 +2533,7 @@ app.get('/api/trackers', async (req, res) => {
     const days = parseInt(req.query.days) || 90
     const floor = new Date(); floor.setDate(floor.getDate() - days)
     const { data, error } = await supaQuery('call_logs', `select=rep,call_type,date,score_percentage,grade,coaching_priority,biggest_miss,objections,red_flags,qualification_result,pipeline_inflation,next_step_flag,call_outcome&scored_at=gte.${floor.toISOString()}&order=scored_at.desc`)
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     const calls = data || []
 
     // Objection frequency
@@ -2594,7 +2626,7 @@ app.get('/api/trackers', async (req, res) => {
       })),
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2607,7 +2639,7 @@ app.get('/api/call-search', async (req, res) => {
 
     // Fetch calls with text fields
     const { data, error } = await supaQuery('call_logs', 'select=id,rep,call_type,prospect_company,prospect_contact,date,score_percentage,grade,coaching_priority,biggest_miss,objections,red_flags,strengths_top3,gaps_top3,qualification_result,pipeline_inflation,call_context,call_outcome&order=scored_at.desc&limit=2000')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
 
     function toArr(val) {
       if (Array.isArray(val)) return val
@@ -2644,7 +2676,7 @@ app.get('/api/call-search', async (req, res) => {
       query: q,
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2653,7 +2685,7 @@ app.get('/api/call-search', async (req, res) => {
 app.get('/api/benchmarks', async (_req, res) => {
   try {
     const { data, error } = await supaQuery('call_logs', 'select=rep,call_type,date,score_percentage,grade,category_scores&order=scored_at.asc&limit=5000')
-    if (error) return res.status(500).json({ error })
+    if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
     const calls = data || []
 
     // Weekly avg per rep
@@ -2725,7 +2757,7 @@ app.get('/api/benchmarks', async (_req, res) => {
       categoryBreakdown,
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2749,7 +2781,7 @@ app.patch('/api/deals/:id/stage', async (req, res) => {
     auditLog(req.user.id, 'update_deal_stage', 'deals', { deal_id: req.params.id, stage }, req.ip)
     res.json({ ok: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2899,7 +2931,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       dataFreshness,
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
@@ -2950,7 +2982,7 @@ app.get('/api/export/:type', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
     res.send(csvRows.join('\n'))
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    serverError(res, err)
   }
 })
 
