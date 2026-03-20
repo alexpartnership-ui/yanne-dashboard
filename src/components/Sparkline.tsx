@@ -24,7 +24,7 @@ export function Sparkline({ data, callType, rep = '' }: SparklineProps) {
   }
 
   const color = strokeColor(filtered)
-  const gradientId = `fill-${rep}-${callType}`.replace(/\s/g, '')
+  const gradientId = `fill-${rep}-${callType}-${filtered.length}`.replace(/\s/g, '')
 
   return (
     <div className="h-10 w-full mt-1">
@@ -37,12 +37,13 @@ export function Sparkline({ data, callType, rep = '' }: SparklineProps) {
             </linearGradient>
           </defs>
           <Tooltip
+            cursor={false}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null
               const pt = payload[0].payload as CallPoint
               return (
                 <div className="rounded bg-zinc-800 px-2 py-1 text-xs text-white shadow">
-                  {pt.score}% — {pt.date?.slice(5)}
+                  {pt.score}% — {pt.date?.slice(5) || 'N/A'}
                 </div>
               )
             }}
@@ -54,7 +55,8 @@ export function Sparkline({ data, callType, rep = '' }: SparklineProps) {
             strokeWidth={1.5}
             fill={`url(#${gradientId})`}
             dot={false}
-            activeDot={{ r: 3, fill: color }}
+            activeDot={{ r: 2, fill: color }}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ResponsiveContainer>

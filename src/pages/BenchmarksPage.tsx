@@ -25,7 +25,7 @@ export function BenchmarksPage() {
     apiFetch('/api/benchmarks')
       .then(r => r.ok ? r.json() : null)
       .then(setData)
-      .catch(() => {})
+      .catch(() => setData(null))
       .finally(() => setLoading(false))
   }, [])
 
@@ -63,11 +63,14 @@ export function BenchmarksPage() {
       <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm mb-5">
         <h4 className="text-sm font-bold text-zinc-800 mb-1">Weekly Score Trends</h4>
         <p className="text-[10px] text-zinc-400 mb-3">Average call score per rep by week</p>
+        {repChartData.length === 0 ? (
+          <p className="text-xs text-zinc-400 text-center py-12">No trend data available</p>
+        ) : (
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={repChartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f1f1" />
             <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={w => typeof w === 'string' ? w.slice(5) : ''} />
-            <YAxis domain={[40, 100]} tick={{ fontSize: 10 }} />
+            <YAxis domain={['auto', 100]} tick={{ fontSize: 10 }} />
             <Tooltip contentStyle={{ fontSize: 11 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {reps.map(rep => (
@@ -76,12 +79,16 @@ export function BenchmarksPage() {
             <Line type="monotone" dataKey="Team Avg" stroke="#A8C4BB" strokeWidth={2} strokeDasharray="8 4" dot={false} />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       {/* Grade Distribution Over Time */}
       <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm mb-5">
         <h4 className="text-sm font-bold text-zinc-800 mb-1">Grade Distribution Over Time</h4>
         <p className="text-[10px] text-zinc-400 mb-3">Monthly breakdown — are we trending toward more A/B grades?</p>
+        {data.monthlyGrades.length === 0 ? (
+          <p className="text-xs text-zinc-400 text-center py-12">No grade data available</p>
+        ) : (
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={data.monthlyGrades}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f1f1" />
@@ -96,6 +103,7 @@ export function BenchmarksPage() {
             <Bar dataKey="F" stackId="grades" fill="#EF4444" />
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       {/* Category Performance Heatmap */}

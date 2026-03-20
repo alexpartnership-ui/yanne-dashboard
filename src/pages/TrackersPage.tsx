@@ -51,7 +51,7 @@ export function TrackersPage() {
     apiFetch(`/api/trackers?days=${range}`)
       .then(r => r.ok ? r.json() : null)
       .then(setData)
-      .catch(() => {})
+      .catch(() => setData(null))
       .finally(() => setLoading(false))
   }, [range])
 
@@ -77,18 +77,23 @@ export function TrackersPage() {
       {/* Weekly trend chart */}
       <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm mb-5">
         <h4 className="text-xs font-bold text-zinc-800 mb-3">Weekly Trends</h4>
+        {data.weeklyTrends.length === 0 ? (
+          <p className="text-xs text-zinc-400 text-center py-16">No weekly trend data</p>
+        ) : (
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={data.weeklyTrends}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f1f1" />
-            <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={w => w.slice(5)} />
-            <YAxis tick={{ fontSize: 10 }} />
+            <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={w => typeof w === 'string' ? w.slice(5) : String(w)} />
+            <YAxis yAxisId="left" tick={{ fontSize: 10 }} domain={[0, 'auto']} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} domain={[0, 'auto']} />
             <Tooltip contentStyle={{ fontSize: 11 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line type="monotone" dataKey="avgScore" name="Avg Score" stroke="#1A3C34" strokeWidth={2} dot={{ r: 3 }} />
-            <Line type="monotone" dataKey="calls" name="Calls" stroke="#A8C4BB" strokeWidth={2} dot={{ r: 3 }} />
-            <Line type="monotone" dataKey="avgObjections" name="Avg Objections" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 2 }} />
+            <Line yAxisId="left" type="monotone" dataKey="avgScore" name="Avg Score" stroke="#1A3C34" strokeWidth={2} dot={{ r: 3 }} />
+            <Line yAxisId="right" type="monotone" dataKey="calls" name="Calls" stroke="#A8C4BB" strokeWidth={2} dot={{ r: 3 }} />
+            <Line yAxisId="left" type="monotone" dataKey="avgObjections" name="Avg Objections" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5 5" dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
 
       {/* Per-rep summary */}

@@ -24,8 +24,13 @@ interface SetterData {
 }
 
 const COLOR_PALETTE = ['#EF4444', '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#6366F1', '#14B8A6']
-function getSetterColor(_name: string, index: number): string {
-  return COLOR_PALETTE[index % COLOR_PALETTE.length]
+// Stable color mapping — ensures same setter always gets same color regardless of sort order
+const senderColorCache = new Map<string, string>()
+function getSetterColor(name: string, index: number): string {
+  if (senderColorCache.has(name)) return senderColorCache.get(name)!
+  const color = COLOR_PALETTE[index % COLOR_PALETTE.length]
+  senderColorCache.set(name, color)
+  return color
 }
 
 export function SetterPerformancePage() {
@@ -64,7 +69,7 @@ export function SetterPerformancePage() {
       <h2 className="mb-6 text-2xl font-bold text-zinc-900">Setter Performance</h2>
 
       {/* Top metrics */}
-      <div className="mb-6 grid grid-cols-5 gap-4">
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <MetricCard label="Total Bookings" value={totalBookings} subtitle="Last 30 days" />
         <MetricCard label="Avg / Day" value={avgBookingsPerDay} />
         <MetricCard label="Total Follow-ups" value={totalFollowups} />
@@ -76,10 +81,13 @@ export function SetterPerformancePage() {
       <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-zinc-700 mb-3">Bookings Per Day (30d)</h3>
         <div className="h-64">
+          {chartData.length === 0 ? (
+            <p className="text-xs text-zinc-400 text-center pt-24">No data for this period</p>
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.max(Math.floor(chartData.length / 10), 0)} />
               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
               <Tooltip />
               <Legend />
@@ -96,11 +104,12 @@ export function SetterPerformancePage() {
               ))}
             </LineChart>
           </ResponsiveContainer>
+          )}
         </div>
       </div>
 
       {/* Per-setter cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {setters
           .sort((a, b) => b[1].totalBookings - a[1].totalBookings)
           .map(([name, s], i) => {

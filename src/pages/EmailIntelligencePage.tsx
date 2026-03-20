@@ -73,7 +73,7 @@ export function EmailIntelligencePage() {
   }
   const sortArrow = (key: SortKey) => sortKey === key ? (sortDir === 'desc' ? ' \u2193' : ' \u2191') : ''
 
-  if (loadingS && loadingB) return <Spinner />
+  if (loadingS || loadingB) return <Spinner />
 
   const t = slackData?.totals
 
@@ -103,7 +103,7 @@ export function EmailIntelligencePage() {
       {tab === 'overview' && (
         <>
           {/* Metrics from Slack */}
-          <div className="mb-5 grid grid-cols-6 gap-3">
+          <div className="mb-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <MetricCard label="Emails Sent" value={(t?.emailsSent ?? 0).toLocaleString()} subtitle={`${days}d total`} />
             <MetricCard label="People Contacted" value={(t?.peopleContacted ?? 0).toLocaleString()} />
             <MetricCard label="Reply Rate" value={`${(t?.replyRate ?? 0).toFixed(2)}%`} />
@@ -146,7 +146,7 @@ export function EmailIntelligencePage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                       <YAxis tick={{ fontSize: 10 }} unit="%" />
-                      <Tooltip formatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(v: unknown) => `${v}%`} />
                       <Legend />
                       <Line type="monotone" dataKey="Reply Rate" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                       <Line type="monotone" dataKey="Bounce Rate" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} connectNulls />

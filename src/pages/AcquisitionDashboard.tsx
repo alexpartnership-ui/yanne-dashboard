@@ -74,7 +74,7 @@ export function AcquisitionDashboard() {
       <h2 className="mb-6 text-2xl font-bold text-zinc-900">Client Acquisition</h2>
 
       {/* Row 1: Metric Cards */}
-      <div className="mb-6 grid grid-cols-6 gap-4">
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <MetricCard
           label="Total Calls"
           value={totalActualCalls ?? data.totalCalls}
@@ -94,11 +94,11 @@ export function AcquisitionDashboard() {
           <h3 className="text-sm font-semibold text-zinc-700 mb-4">Grade Distribution (30d)</h3>
           <div className="mb-4">
             <GradeDistributionBar calls={[
-              ...Array(data.gradeDistribution.A).fill({ grade: 'A' }),
-              ...Array(data.gradeDistribution.B).fill({ grade: 'B' }),
-              ...Array(data.gradeDistribution.C).fill({ grade: 'C' }),
-              ...Array(data.gradeDistribution.D).fill({ grade: 'D' }),
-              ...Array(data.gradeDistribution.F).fill({ grade: 'F' }),
+              ...Array(Math.max(data.gradeDistribution.A || 0, 0)).fill({ grade: 'A' }),
+              ...Array(Math.max(data.gradeDistribution.B || 0, 0)).fill({ grade: 'B' }),
+              ...Array(Math.max(data.gradeDistribution.C || 0, 0)).fill({ grade: 'C' }),
+              ...Array(Math.max(data.gradeDistribution.D || 0, 0)).fill({ grade: 'D' }),
+              ...Array(Math.max(data.gradeDistribution.F || 0, 0)).fill({ grade: 'F' }),
             ]} />
           </div>
           <div className="h-48">
