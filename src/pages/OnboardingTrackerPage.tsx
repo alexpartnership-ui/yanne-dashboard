@@ -30,7 +30,7 @@ export function OnboardingTrackerPage() {
   const [loadingC, setLoadingC] = useState(true)
   const [newCompany, setNewCompany] = useState('')
   const [creating, setCreating] = useState(false)
-  const toast = useToast()
+  const { toast } = useToast()
 
   useEffect(() => {
     apiFetch('/api/monday/onboarding-form')
@@ -50,14 +50,14 @@ export function OnboardingTrackerPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        toast.success(`Created board: ${data.boardName}`)
+        toast(`Created board: ${data.boardName}`, 'success')
         setNewCompany('')
         window.location.reload()
       } else {
-        toast.error(data.error || 'Failed to create board')
+        toast(data.error || 'Failed to create board', 'error')
       }
     } catch {
-      toast.error('Network error')
+      toast('Network error', 'error')
     }
     setCreating(false)
   }

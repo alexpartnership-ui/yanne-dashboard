@@ -8,7 +8,7 @@ import { useCEOScorecard, type SheetRow } from '../hooks/useCEOScorecard'
 function NotifySlackButton() {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const toast = useToast()
+  const { toast } = useToast()
 
   async function notify() {
     setSending(true)
@@ -17,12 +17,12 @@ function NotifySlackButton() {
       const data = await res.json()
       if (res.ok) {
         setSent(true)
-        toast.success(`Posted ${data.count} overdue tasks to Slack`)
+        toast(`Posted ${data.count} overdue tasks to Slack`, 'success')
       } else {
-        toast.error(data.error || 'Failed to notify')
+        toast(data.error || 'Failed to notify', 'error')
       }
     } catch {
-      toast.error('Network error')
+      toast('Network error', 'error')
     }
     setSending(false)
   }
