@@ -1063,12 +1063,23 @@ app.get('/api/monday/projects', async (_req, res) => {
         items_page(limit: 5) {
           items {
             id name
-            column_values { id title text value }
+            column_values { id type text value column { title } }
           }
         }
       }
     }`)
     if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
+    // Normalize column_values: flatten column.title into top-level title for frontend compat
+    if (data?.boards) {
+      for (const board of data.boards) {
+        for (const item of board.items_page?.items || []) {
+          for (const cv of item.column_values || []) {
+            cv.title = cv.column?.title || cv.id
+            delete cv.column
+          }
+        }
+      }
+    }
     res.json(data)
   } catch (err) {
     serverError(res, err)
@@ -1088,12 +1099,23 @@ app.get('/api/monday/tasks/:boardId', async (req, res) => {
         items_page(limit: 100) {
           items {
             id name group { id title }
-            column_values { id title text value }
+            column_values { id type text value column { title } }
           }
         }
       }
     }`)
     if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
+    // Normalize column.title into top-level title for frontend compat
+    if (data?.boards) {
+      for (const board of data.boards) {
+        for (const item of board.items_page?.items || []) {
+          for (const cv of item.column_values || []) {
+            cv.title = cv.column?.title || cv.id
+            delete cv.column
+          }
+        }
+      }
+    }
     res.json(data)
   } catch (err) {
     serverError(res, err)
@@ -1111,12 +1133,23 @@ app.get('/api/monday/onboarding', async (_req, res) => {
         items_page(limit: 50) {
           items {
             id name group { id title }
-            column_values(ids: ["status", "person", "timeline", "numbers"]) { id title text value }
+            column_values(ids: ["status", "person", "timeline", "numbers"]) { id type text value column { title } }
           }
         }
       }
     }`)
     if (error) { console.error('[api]', error); return res.status(500).json({ error: 'Internal server error' }) }
+    // Normalize column.title into top-level title for frontend compat
+    if (data?.boards) {
+      for (const board of data.boards) {
+        for (const item of board.items_page?.items || []) {
+          for (const cv of item.column_values || []) {
+            cv.title = cv.column?.title || cv.id
+            delete cv.column
+          }
+        }
+      }
+    }
     res.json(data)
   } catch (err) {
     serverError(res, err)
@@ -1925,13 +1958,13 @@ async function gatherContext(question) {
   if (intents.includes('clients')) {
     if (MONDAY_KEY) {
       promises.push(
-        mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { name column_values { title text } } } } }`)
+        mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { name column_values { id type text value column { title } } } } } }`)
           .then(r => {
             const boards = r.data?.boards || []
             context.clients = boards.map(b => {
               const item = b.items_page?.items?.[0]
               const cols = {}
-              if (item) for (const cv of item.column_values || []) cols[cv.title] = cv.text
+              if (item) for (const cv of item.column_values || []) cols[cv.column?.title || cv.id] = cv.text
               return { name: b.name.replace('Project ', ''), health: cols['Project Health (RAG)'] || 'Unknown', stage: cols['Stage'] || 'Unknown' }
             })
           }).catch(() => {})
@@ -1940,7 +1973,7 @@ async function gatherContext(question) {
     // Also fetch onboarding data
     if (MONDAY_KEY) {
       promises.push(
-        mondayQuery(`{ boards(ids: [${PROJECT_TASK_IDS.join(',')}]) { name items_page(limit: 50) { items { name group { title } column_values(ids: ["status"]) { text } } } } }`)
+        mondayQuery(`{ boards(ids: [${PROJECT_TASK_IDS.join(',')}]) { name items_page(limit: 50) { items { name group { title } column_values(ids: ["status"]) { id type text value } } } } }`)
           .then(r => {
             const boards = r.data?.boards || []
             context.onboarding = boards.map(b => {
@@ -2903,7 +2936,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
       fetchMeetingsParsed(),
       AIRTABLE_KEY ? airtableFetch('app70IAsUKudzw5UI', 'tblIWs6XXXdBW4OdP', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
-      MONDAY_KEY ? mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { id name column_values { id title text value } } } } }`).then(r => r.data) : Promise.resolve(null),
+      MONDAY_KEY ? mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { id name column_values { id type text value column { title } } } } } }`).then(r => r.data) : Promise.resolve(null),
       fetchAllHubSpotDeals(),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,coaching_priority,pipeline_inflation,qualification_result,date&scored_at=gte.${daysAgo(7)}`),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,date&scored_at=gte.${daysAgo(30)}`),
