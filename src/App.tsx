@@ -31,6 +31,8 @@ const CallSearchPage = lazy(() => import('./pages/CallSearchPage').then(m => ({ 
 const BenchmarksPage = lazy(() => import('./pages/BenchmarksPage').then(m => ({ default: m.BenchmarksPage })))
 const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ default: m.DealsAIPage })))
 const LinkedInOutboundPage = lazy(() => import('./pages/LinkedInOutboundPage').then(m => ({ default: m.LinkedInOutboundPage })))
+const InvestorDatabasePage = lazy(() => import('./pages/InvestorDatabasePage').then(m => ({ default: m.InvestorDatabasePage })))
+const InvestorCadencePage = lazy(() => import('./pages/InvestorCadencePage').then(m => ({ default: m.InvestorCadencePage })))
 
 function PageLoader() {
   return (
@@ -78,6 +80,10 @@ export default function App() {
                 <Route path="/outbound/setters" element={<SetterPerformancePage />} />
                 <Route path="/outbound/leads" element={<LeadQualityPage />} />
                 <Route path="/outbound/linkedin" element={<LinkedInOutboundPage />} />
+
+                {/* Relationships */}
+                <Route path="/relationships/investors" element={<InvestorDatabasePage />} />
+                <Route path="/relationships/cadence" element={<InvestorCadencePage />} />
 
                 {/* CEO Dashboard */}
                 <Route path="/ceo" element={<CEODashboard />} />

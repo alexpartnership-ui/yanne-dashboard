@@ -3207,5 +3207,30 @@ app.get('/api/export/:type', async (req, res) => {
   }
 })
 
+// ─── Investor Relations ─────────────────────────────────
+
+app.get('/api/investors', async (req, res) => {
+  try {
+    const select = req.query.select || '*'
+    const { data, error } = await supaQuery('investor_profiles', `select=${select}&order=investor_name`)
+    if (error) return res.status(500).json({ error })
+    res.json(data)
+  } catch (err) {
+    serverError(res, err)
+  }
+})
+
+app.get('/api/investors/:name', async (req, res) => {
+  try {
+    const name = req.params.name
+    const { data, error } = await supaQuery('investor_profiles', `investor_name=eq.${encodeURIComponent(name)}&select=*`)
+    if (error) return res.status(500).json({ error })
+    if (!data || data.length === 0) return res.status(404).json({ error: 'Investor not found' })
+    res.json(data[0])
+  } catch (err) {
+    serverError(res, err)
+  }
+})
+
 const PORT = process.env.API_PORT || 3001
 app.listen(PORT, () => console.log(`API server on port ${PORT}`))
