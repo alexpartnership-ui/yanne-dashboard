@@ -37,6 +37,12 @@ function fmtDate(d: string | null): string {
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function ensureUrl(url: string | null): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  return 'https://' + url
+}
+
 const TYPE_ABBREV: Record<string, string> = {
   'Venture Capital': 'VC', 'Private Equity': 'PE', 'Private Credit': 'PC',
   'Family Office': 'FO', 'Sovereign Wealth': 'SW', 'Hedge Fund': 'HF', 'Corporate Venture': 'CV',
@@ -108,8 +114,8 @@ export function InvestorDatabasePage() {
 
   useEffect(() => {
     apiFetch('/api/investors')
-      .then(r => r.json())
-      .then((data: Investor[]) => { setInvestors(data); setLoading(false) })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load investors')))
+      .then(data => { setInvestors(Array.isArray(data) ? data : []); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
   }, [])
 
@@ -238,7 +244,7 @@ export function InvestorDatabasePage() {
                   {inv.primary_contact && <div className="text-[11px] text-zinc-400">{inv.primary_contact}</div>}
                   <div className="flex gap-2 mt-0.5">
                     {inv.website && <a href={inv.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-yanne hover:underline">{'\ud83c\udf10'}</a>}
-                    {inv.linkedin_page && <a href={inv.linkedin_page} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-600 hover:underline">in</a>}
+                    {inv.linkedin_page && <a href={ensureUrl(inv.linkedin_page)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-600 hover:underline">in</a>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">{typeBadge(inv.investor_type)}</td>
@@ -331,7 +337,7 @@ export function InvestorDatabasePage() {
                   <a href={`mailto:${expanded.primary_email}`} className="text-yanne hover:underline text-[12px] block">{expanded.primary_email}</a>
                 )}
                 {expanded.primary_linkedin && (
-                  <a href={expanded.primary_linkedin} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[12px] block">LinkedIn Profile</a>
+                  <a href={ensureUrl(expanded.primary_linkedin)} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-[12px] block">LinkedIn Profile</a>
                 )}
               </div>
               {expanded.notes && (
