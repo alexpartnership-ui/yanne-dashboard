@@ -243,7 +243,7 @@ export function InvestorDatabasePage() {
                   <div className="font-medium text-zinc-900">{inv.investor_name}</div>
                   {inv.primary_contact && <div className="text-[11px] text-zinc-400">{inv.primary_contact}</div>}
                   <div className="flex gap-2 mt-0.5">
-                    {inv.website && <a href={inv.website} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-yanne hover:underline">{'\ud83c\udf10'}</a>}
+                    {inv.website && <a href={ensureUrl(inv.website)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-yanne hover:underline">{'\ud83c\udf10'}</a>}
                     {inv.linkedin_page && <a href={ensureUrl(inv.linkedin_page)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-600 hover:underline">in</a>}
                   </div>
                 </td>
