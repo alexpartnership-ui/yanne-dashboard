@@ -371,7 +371,6 @@ export function InvestorDatabasePage() {
   }, [investors])
   const autoCapturedCount = useMemo(() => investors.filter(i => isAutoCaptured(i.source)).length, [investors])
   const recentCount = useMemo(() => investors.filter(i => isRecentlyAdded(i.last_contact_date)).length, [investors])
-  const contactedCount = useMemo(() => investors.filter(i => i.last_contact_date).length, [investors])
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
