@@ -395,7 +395,7 @@ export function InvestorDatabasePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-zinc-900">Investor Database</h1>
+      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold text-zinc-900">Investor Database</h1><a href="https://docs.google.com/spreadsheets/d/15SvA_bLQ_MaxKAkcECuPP_S9HiONYAeElfjx14JWEmQ/edit" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors">Open Google Sheet <span className="text-xs">↗</span></a></div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-6 gap-4">
