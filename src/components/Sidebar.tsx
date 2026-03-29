@@ -13,7 +13,7 @@ interface NavSection {
   items: NavItem[]
 }
 
-const lockIcon = <svg className="w-3.5 h-3.5 text-[#3d5e54]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+const lockIcon = <svg className="w-3 h-3 text-yanne-400/40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
 
 const settingsSection: NavSection = {
   title: 'Settings',
@@ -164,35 +164,35 @@ export function Sidebar() {
   const allSections = isAdmin ? [...sections, settingsSection] : sections
 
   return (
-    <aside className="flex h-screen w-56 flex-col bg-[#0f1f1b]">
+    <aside className="flex h-screen w-[220px] flex-col bg-yanne-950 border-r border-yanne-800/50">
       {/* Logo / Monogram */}
-      <div className="px-5 pt-6 pb-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-yanne font-bold text-white text-sm">
+      <div className="px-4 pt-5 pb-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-yanne-500 to-yanne-700 text-[11px] font-bold text-white tracking-tight shadow-sm shadow-yanne-900/50">
             YC
           </div>
           <div>
-            <div className="text-sm font-semibold text-white leading-tight">Yanne Capital</div>
-            <div className="text-[10px] text-[#5a8a7a]">Intelligence Platform</div>
+            <div className="text-[13px] font-semibold text-yanne-100 leading-tight tracking-tight">Yanne Capital</div>
+            <div className="text-[9px] font-medium text-gold-400 uppercase tracking-[0.15em]">Intelligence</div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto px-2 scrollbar-hide">
         {allSections.map((section, si) => (
           <div key={section.title}>
-            {si > 0 && <div className="my-3 border-t border-white/5" />}
-            <div className="mb-1.5 px-2 pt-1">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#4a7a6a]">{section.title}</span>
+            {si > 0 && <div className="my-2 mx-2 border-t border-yanne-800/30" />}
+            <div className="mb-1 px-2 pt-0.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-yanne-400">{section.title}</span>
             </div>
-            <nav className="space-y-0.5">
+            <nav className="space-y-px">
               {section.items.map(item =>
                 item.locked ? (
                   <div
                     key={item.to}
-                    className="flex items-center justify-between rounded-md px-2.5 py-2 text-[13px] font-medium text-[#3d5e54] cursor-default"
+                    className="flex items-center justify-between rounded-md px-2 py-[5px] text-[12px] font-medium text-yanne-700 cursor-default"
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       {item.icon}
                       {item.label}
                     </div>
@@ -203,10 +203,10 @@ export function Sidebar() {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors ${
+                      `flex items-center gap-2 rounded-md px-2 py-[5px] text-[12px] font-medium transition-all duration-150 ${
                         isActive
-                          ? 'bg-yanne/40 text-white border-l-2 border-yanne-light -ml-px'
-                          : 'text-[#7aa89a] hover:bg-white/5 hover:text-white'
+                          ? 'bg-yanne-800/60 text-gold-300 shadow-[inset_2px_0_0] shadow-gold-400'
+                          : 'text-yanne-300 hover:bg-yanne-800/30 hover:text-yanne-100'
                       }`
                     }
                   >
@@ -221,16 +221,16 @@ export function Sidebar() {
       </div>
 
       {/* User + Sign out */}
-      <div className="border-t border-white/5 px-3 py-3">
+      <div className="border-t border-yanne-800/30 px-2 py-2.5">
         {user && (
-          <div className="mb-2 px-2.5">
-            <div className="text-[12px] font-medium text-white truncate">{user.name}</div>
-            <div className="text-[10px] text-[#5a8a7a] capitalize">{user.role}</div>
+          <div className="mb-1.5 px-2">
+            <div className="text-[11px] font-medium text-yanne-200 truncate">{user.name}</div>
+            <div className="text-[9px] font-medium text-yanne-500 uppercase tracking-wider">{user.role}</div>
           </div>
         )}
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-[#5a8a7a] hover:bg-white/5 hover:text-white transition-colors"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-[5px] text-[12px] text-yanne-500 hover:bg-yanne-800/30 hover:text-yanne-300 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
           Sign out

@@ -1,17 +1,99 @@
 @import "tailwindcss";
 
 @theme {
-  --color-yanne: #1A3C34;
-  --color-yanne-light: #A8C4BB;
-  --color-yanne-bg: #FAFAFA;
+  /* ── Yanne Capital Design System ── */
+
+  /* Primary — Forest Green (the brand) */
+  --color-yanne-50: #f0f7f4;
+  --color-yanne-100: #d6ebe2;
+  --color-yanne-200: #a8c4bb;
+  --color-yanne-300: #7aa89a;
+  --color-yanne-400: #4d8c7a;
+  --color-yanne-500: #2d6b56;
+  --color-yanne-600: #1a3c34;
+  --color-yanne-700: #152f29;
+  --color-yanne-800: #10231e;
+  --color-yanne-900: #0b1814;
+  --color-yanne-950: #060e0b;
+
+  /* Gold — Wins, Revenue, Positive Deltas */
+  --color-gold-50: #fdf9ef;
+  --color-gold-100: #f8edd0;
+  --color-gold-200: #f0d89e;
+  --color-gold-300: #e4be64;
+  --color-gold-400: #c9a84c;
+  --color-gold-500: #a68930;
+  --color-gold-600: #7d6620;
+
+  /* Surfaces — green-tinted, never pure gray */
+  --color-surface: #ffffff;
+  --color-surface-raised: #f8faf9;
+  --color-surface-sunken: #f0f4f2;
+  --color-surface-overlay: #0b18140a;
+
+  /* Borders — green-tinted neutrals */
+  --color-border: #dfe7e2;
+  --color-border-strong: #c4d1c9;
+  --color-border-muted: #ecf0ed;
+
+  /* Text — green-tinted grays for cohesion */
+  --color-text-primary: #0f1f1b;
+  --color-text-secondary: #3d5e54;
+  --color-text-muted: #6b8f82;
+  --color-text-faint: #99b5ab;
+
+  /* Semantic */
+  --color-positive: #16a34a;
+  --color-negative: #dc2626;
+  --color-warning: #d97706;
+
+  /* Fonts */
+  --font-display: "Instrument Sans", "Inter", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
 }
+
+/* ── Base Styles ── */
 
 body {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text-primary);
+  background: var(--color-surface-sunken);
 }
 
-/* Tooltip */
+/* Data typography — all numbers get the monospace treatment */
+.font-data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ── Card System ── */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  position: relative;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-yanne-600);
+  border-radius: 8px 8px 0 0;
+}
+
+.card-gold::before {
+  background: linear-gradient(90deg, var(--color-gold-400), var(--color-gold-300));
+}
+
+/* ── Tooltip ── */
 .tooltip-text {
   visibility: hidden;
   opacity: 0;
@@ -22,7 +104,7 @@ body {
   opacity: 1;
 }
 
-/* Hide scrollbar but keep scrollable */
+/* ── Scrollbar ── */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -31,7 +113,7 @@ body {
   display: none;
 }
 
-/* Toast animation */
+/* ── Toast ── */
 @keyframes slide-up {
   from { transform: translateY(1rem); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -40,19 +122,48 @@ body {
   animation: slide-up 0.2s ease-out;
 }
 
-/* Tabular numbers for aligned data columns */
+/* ── Tabular numbers ── */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Skeleton loading animation */
+/* ── Skeleton ── */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, var(--color-surface-sunken) 25%, var(--color-border-muted) 50%, var(--color-surface-sunken) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
 }
+
+/* ── Live Pulse ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse-live {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Number Count-Up ── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-count {
+  animation: countUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Stagger children ── */
+.stagger > * {
+  animation: countUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }

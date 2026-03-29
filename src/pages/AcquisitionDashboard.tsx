@@ -63,7 +63,7 @@ export function AcquisitionDashboard() {
   }, [data])
 
   if (loading) return <Spinner />
-  if (!data) return <p className="text-sm text-zinc-400">No data available</p>
+  if (!data) return <p className="text-sm text-text-muted">No data available</p>
 
   const totalActualCalls = checkins
     ? Object.values(checkins.byRep).reduce((s, r) => s + r.totalCompleted, 0)
@@ -71,10 +71,18 @@ export function AcquisitionDashboard() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-zinc-900">Client Acquisition</h2>
+      <div className="mb-6 flex items-baseline justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-text-primary tracking-tight">Client Acquisition</h2>
+          <p className="text-[11px] text-text-muted mt-0.5">30-day performance overview</p>
+        </div>
+        <div className="text-[10px] font-data text-text-faint">
+          Updated {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
 
       {/* Row 1: Metric Cards */}
-      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 stagger">
         <MetricCard
           label="Total Calls"
           value={totalActualCalls ?? data.totalCalls}
@@ -89,8 +97,8 @@ export function AcquisitionDashboard() {
       {/* Row 2: Charts */}
       <div className="mb-6 grid grid-cols-2 gap-4">
         {/* Grade Distribution */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-4">Grade Distribution (30d)</h3>
+        <div className="card p-5">
+          <h3 className="text-[13px] font-semibold text-text-primary mb-4">Grade Distribution (30d)</h3>
           <div className="mb-4">
             <GradeDistributionBar calls={[
               ...Array(Math.max(data.gradeDistribution.A || 0, 0)).fill({ grade: 'A' }),
@@ -118,15 +126,15 @@ export function AcquisitionDashboard() {
         </div>
 
         {/* Calls Per Day — stacked bar chart */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-1">Calls Per Day (30d)</h3>
-          <p className="text-[10px] text-zinc-400 mb-3">
+        <div className="card p-5">
+          <h3 className="text-[13px] font-semibold text-text-primary mb-1">Calls Per Day (30d)</h3>
+          <p className="text-[10px] text-text-faint mb-3">
             {checkins?.byDate?.length ? 'Source: Rep daily check-in form' : 'Source: Scored calls'}
           </p>
           <div className="h-60">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#dfe7e2" />
                 <XAxis dataKey="date" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={50} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                 <Tooltip />
@@ -148,16 +156,16 @@ export function AcquisitionDashboard() {
       {/* Row 3: Coaching Themes + Rep Quick Stats */}
       <div className="grid grid-cols-2 gap-4">
         {/* Top Coaching Themes — show full text with wrapping */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 5 Coaching Themes (7d)</h3>
+        <div className="card p-5">
+          <h3 className="text-[13px] font-semibold text-text-primary mb-3">Top 5 Coaching Themes (7d)</h3>
           {data.coachingThemes.length === 0 ? (
-            <p className="text-xs text-zinc-400">No coaching data this week</p>
+            <p className="text-[11px] text-text-faint">No coaching data this week</p>
           ) : (
             <div className="space-y-2">
               {data.coachingThemes.map((t, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 rounded-lg bg-zinc-50 px-3 py-2">
-                  <span className="text-xs text-zinc-700 leading-snug">{t.theme}</span>
-                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-600 shrink-0">{t.count}</span>
+                <div key={i} className="flex items-start justify-between gap-2 border-l-2 border-yanne-200 px-3 py-2">
+                  <span className="text-[11px] text-text-secondary leading-snug">{t.theme}</span>
+                  <span className="rounded-full bg-yanne-100 px-2 py-0.5 text-[10px] font-bold text-yanne-600 font-data shrink-0">{t.count}</span>
                 </div>
               ))}
             </div>
@@ -165,13 +173,13 @@ export function AcquisitionDashboard() {
         </div>
 
         {/* Rep Quick Stats */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">
+        <div className="card p-5">
+          <h3 className="text-[13px] font-semibold text-text-primary mb-3">
             {checkins?.byRep ? 'Rep Activity (30d check-ins)' : 'Rep Quick Stats (30d)'}
           </h3>
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+              <tr className="text-[9px] font-semibold uppercase tracking-wider text-text-muted border-b-2 border-yanne-600">
                 <th className="text-left pb-2">Rep</th>
                 <th className="text-right pb-2">Scheduled</th>
                 <th className="text-right pb-2">Completed</th>
@@ -180,7 +188,7 @@ export function AcquisitionDashboard() {
                 <th className="text-right pb-2">Avg Score</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-border-muted">
               {checkins?.byRep ? (
                 Object.entries(checkins.byRep)
                   .sort((a, b) => b[1].totalCompleted - a[1].totalCompleted)
@@ -189,17 +197,17 @@ export function AcquisitionDashboard() {
                     const showRate = s.totalScheduled > 0 ? Math.round((s.totalCompleted / s.totalScheduled) * 100) : 0
                     return (
                       <tr key={rep}>
-                        <td className="py-2 text-sm font-medium text-zinc-800">{rep}</td>
-                        <td className="py-2 text-sm text-zinc-600 text-right">{s.totalScheduled}</td>
-                        <td className="py-2 text-sm font-semibold text-zinc-900 text-right">{s.totalCompleted}</td>
+                        <td className="py-2 text-sm font-medium text-text-primary">{rep}</td>
+                        <td className="py-2 text-sm text-text-secondary text-right"><span className="font-data">{s.totalScheduled}</span></td>
+                        <td className="py-2 text-sm font-semibold text-text-primary text-right"><span className="font-data">{s.totalCompleted}</span></td>
                         <td className={`py-2 text-sm font-semibold text-right ${showRate >= 80 ? 'text-emerald-600' : showRate >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{showRate}%</td>
-                        <td className="py-2 text-sm text-emerald-600 text-right">{s.totalProgressed}</td>
+                        <td className="py-2 text-sm text-emerald-600 text-right"><span className="font-data">{s.totalProgressed}</span></td>
                         <td className="py-2 text-sm font-semibold text-right">
                           {scoreData ? (
                             <span className={scoreData.avg >= 70 ? 'text-emerald-600' : scoreData.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
                               {scoreData.avg}%
                             </span>
-                          ) : <span className="text-zinc-300">{'\u2014'}</span>}
+                          ) : <span className="text-text-faint">{'\u2014'}</span>}
                         </td>
                       </tr>
                     )
@@ -207,11 +215,11 @@ export function AcquisitionDashboard() {
               ) : (
                 data.repQuickStats.map(r => (
                   <tr key={r.rep}>
-                    <td className="py-2 text-sm font-medium text-zinc-800">{r.rep}</td>
-                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
-                    <td className="py-2 text-sm text-zinc-600 text-right">{r.calls}</td>
-                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
-                    <td className="py-2 text-sm text-zinc-300 text-right">{'\u2014'}</td>
+                    <td className="py-2 text-sm font-medium text-text-primary">{r.rep}</td>
+                    <td className="py-2 text-sm text-text-faint text-right">{'\u2014'}</td>
+                    <td className="py-2 text-sm text-text-secondary text-right"><span className="font-data">{r.calls}</span></td>
+                    <td className="py-2 text-sm text-text-faint text-right">{'\u2014'}</td>
+                    <td className="py-2 text-sm text-text-faint text-right">{'\u2014'}</td>
                     <td className="py-2 text-sm font-semibold text-right">
                       <span className={r.avg >= 70 ? 'text-emerald-600' : r.avg >= 55 ? 'text-amber-600' : 'text-red-600'}>
                         {r.avg}%
