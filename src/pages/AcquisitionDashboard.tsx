@@ -3,7 +3,6 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useSlackMeetings } from '../hooks/useSlackMeetings'
 import { useRepCheckins } from '../hooks/useRepCheckins'
-import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 import { REP_HEX } from '../lib/repColors'
 
