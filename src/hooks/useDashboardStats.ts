@@ -5,6 +5,7 @@ interface DashboardStats {
   totalCalls: number
   avgScore: number
   activeDeals: number
+  pipelineValue: number
   gradeDistribution: { A: number; B: number; C: number; D: number; F: number }
   callsPerDay: { date: string; rep: string; count: number }[]
   coachingThemes: { theme: string; count: number }[]

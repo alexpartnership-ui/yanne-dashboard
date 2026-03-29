@@ -557,15 +557,49 @@ app.get('/api/dashboard-stats', async (_req, res) => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     const floor = thirtyDaysAgo.toISOString()
 
-    const [callsResult, hubspotRes] = await Promise.all([
+    // Paginate HubSpot deals to get ALL (not just first 100)
+    const hubspotDealsPromise = HUBSPOT_KEY ? (async () => {
+      const allDeals = []
+      let after = ''
+      let pages = 0
+      while (pages < 10) {
+        const pagination = after ? `&after=${after}` : ''
+        const { data, error } = await hubspotFetch(`/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,pipeline${pagination}`)
+        if (error || !data) break
+        const results = data.results || []
+        const salesOnly = results.filter(d => !d.properties?.pipeline || d.properties.pipeline === 'default')
+        allDeals.push(...salesOnly)
+        const nextAfter = data.paging?.next?.after
+        if (!nextAfter) break
+        after = nextAfter
+        pages++
+      }
+      return allDeals
+    })().catch(() => []) : Promise.resolve([])
+
+    const [callsResult, hubspotDeals] = await Promise.all([
       supaQuery('call_logs', `select=rep,date,score_percentage,grade,coaching_priority&scored_at=gte.${floor}&order=scored_at.desc`),
-      HUBSPOT_KEY ? hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+      hubspotDealsPromise,
     ])
 
     const calls = callsResult.data || []
-    const hubspotDeals = hubspotRes?.data?.results || []
-    const ACTIVE_STAGES = ['appointmentscheduled', 'qualifiedtobuy', 'presentationscheduled', 'decisionmakerboughtin', '1066193534', 'closedwon']
-    const activeDeals = hubspotDeals.filter(d => ACTIVE_STAGES.includes(d.properties?.dealstage || '')).length
+    const ACTIVE_STAGES = ['appointmentscheduled', 'qualifiedtobuy', 'presentationscheduled', 'decisionmakerboughtin', '1066193534']
+    const activeStageDeals = hubspotDeals.filter(d => ACTIVE_STAGES.includes(d.properties?.dealstage || ''))
+    const activeDeals = activeStageDeals.length
+
+    // Weighted pipeline value — stage probability based on funnel position
+    const STAGE_PROBABILITY = {
+      appointmentscheduled: 0.10,
+      qualifiedtobuy: 0.25,
+      presentationscheduled: 0.45,
+      decisionmakerboughtin: 0.65,
+      '1066193534': 0.85,
+    }
+    const pipelineValue = Math.round(activeStageDeals.reduce((sum, d) => {
+      const amount = parseFloat(d.properties?.amount || '0')
+      const prob = STAGE_PROBABILITY[d.properties?.dealstage] || 0.10
+      return sum + (amount * prob)
+    }, 0))
 
     const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 }
     for (const c of calls) {
@@ -576,10 +610,8 @@ app.get('/api/dashboard-stats', async (_req, res) => {
 
     const avgScore = calls.length ? Math.round(calls.reduce((s, c) => s + c.score_percentage, 0) / calls.length) : 0
 
-    // Calls per day (last 14d)
-    const fourteenDaysAgo = new Date()
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
-    const recentCalls = calls.filter(c => c.date && new Date(c.date) >= fourteenDaysAgo)
+    // Calls per day (last 30d)
+    const recentCalls = calls.filter(c => c.date && new Date(c.date) >= thirtyDaysAgo)
     const dayRepMap = {}
     for (const c of recentCalls) {
       if (!c.date) continue
@@ -614,7 +646,7 @@ app.get('/api/dashboard-stats', async (_req, res) => {
     }
     const repQuickStats = Object.entries(repMap).map(([rep, s]) => ({ rep, calls: s.calls, avg: Math.round(s.totalScore / s.calls) })).sort((a, b) => b.avg - a.avg)
 
-    res.json({ totalCalls: calls.length, avgScore, activeDeals, gradeDistribution, callsPerDay, coachingThemes, repQuickStats })
+    res.json({ totalCalls: calls.length, avgScore, activeDeals, pipelineValue, gradeDistribution, callsPerDay, coachingThemes, repQuickStats })
   } catch (err) {
     serverError(res, err)
   }

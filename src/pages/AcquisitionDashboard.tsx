@@ -74,7 +74,7 @@ export function AcquisitionDashboard() {
       <h2 className="mb-6 text-2xl font-bold text-zinc-900">Client Acquisition</h2>
 
       {/* Row 1: Metric Cards */}
-      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <MetricCard
           label="Total Calls"
           value={totalActualCalls ?? data.totalCalls}
@@ -83,8 +83,7 @@ export function AcquisitionDashboard() {
         <MetricCard label="Avg Score" value={`${data.avgScore}%`} subtitle="Scored calls" />
         <MetricCard label="Meetings Booked" value={meetings?.thisWeek ?? 0} subtitle={`${meetings?.todaySoFar ?? 0} today \u2022 ${meetings?.avgPerDay ?? 0}/day avg`} />
         <MetricCard label="Active Deals" value={data.activeDeals} subtitle="HubSpot pipeline" />
-        <MetricCard label="Close Rate" value="\u2014" placeholder />
-        <MetricCard label="Pipeline Value" value="\u2014" placeholder />
+        <MetricCard label="Pipeline Value" value={data.pipelineValue >= 1000000 ? `$${(data.pipelineValue / 1000000).toFixed(1)}M` : `$${(data.pipelineValue / 1000).toFixed(0)}k`} subtitle="Weighted avg" />
       </div>
 
       {/* Row 2: Charts */}
