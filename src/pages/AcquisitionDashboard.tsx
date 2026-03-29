@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { motion } from 'motion/react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useSlackMeetings } from '../hooks/useSlackMeetings'
@@ -10,18 +11,48 @@ const GRADE_FILLS: Record<string, string> = {
   A: '#166534', B: '#22C55E', C: '#EAB308', D: '#F97316', F: '#EF4444',
 }
 
+const spring = { type: 'spring' as const, damping: 25, stiffness: 200 }
+const springFast = { type: 'spring' as const, damping: 30, stiffness: 300 }
+
+function AnimatedNumber({ value, duration = 1.2 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0)
+  useEffect(() => {
+    let start = 0
+    const end = value
+    const startTime = performance.now()
+    const step = (now: number) => {
+      const elapsed = (now - startTime) / 1000
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplay(Math.round(start + (end - start) * eased))
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [value, duration])
+  return <>{display}</>
+}
+
 function GradeTrack({ dist }: { dist: Record<string, number> }) {
   const total = Object.values(dist).reduce((s, v) => s + v, 0)
   if (!total) return null
   return (
     <div className="grade-track">
-      {(['A', 'B', 'C', 'D', 'F'] as const).map(g => {
+      {(['A', 'B', 'C', 'D', 'F'] as const).map((g, i) => {
         const pct = (dist[g] / total) * 100
         if (!dist[g]) return null
         return (
-          <div key={g} className="grade-segment" style={{ width: pct + '%', background: GRADE_FILLS[g] }} title={g + ': ' + dist[g] + ' (' + pct.toFixed(0) + '%)'}>
+          <motion.div
+            key={g}
+            className="grade-segment"
+            style={{ background: GRADE_FILLS[g] }}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: pct + '%', opacity: 1 }}
+            transition={{ delay: 0.6 + i * 0.08, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ filter: 'brightness(1.2)', scale: 1.03 }}
+            title={g + ': ' + dist[g] + ' (' + pct.toFixed(0) + '%)'}
+          >
             {pct > 8 ? g + ' ' + dist[g] : g}
-          </div>
+          </motion.div>
         )
       })}
     </div>
@@ -45,6 +76,28 @@ function CustomTooltip({ active, payload, label }: any) {
         Total: {total}
       </div>
     </div>
+  )
+}
+
+function SatelliteCard({ label, children, subtitle, accent, delay }: {
+  label: string
+  children: React.ReactNode
+  subtitle: string
+  accent: string
+  delay: number
+}) {
+  return (
+    <motion.div
+      className={'kpi-satellite kpi-satellite-' + accent + ' p-4'}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...spring, delay }}
+      whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(26,60,52,0.12)' }}
+    >
+      <div className="text-[9px] font-semibold text-text-muted uppercase tracking-[0.1em]">{label}</div>
+      <div className="mt-2">{children}</div>
+      <div className="text-[10px] text-text-faint mt-1">{subtitle}</div>
+    </motion.div>
   )
 }
 
@@ -101,7 +154,12 @@ export function AcquisitionDashboard() {
     <div className="-m-6">
       {/* === HERO KPI STRIP === */}
       <div className="bg-yanne-950 px-6 pt-5 pb-6">
-        <div className="flex items-baseline justify-between mb-5">
+        <motion.div
+          className="flex items-baseline justify-between mb-5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight">Client Acquisition</h2>
             <p className="text-[10px] text-yanne-400 font-data mt-0.5">
@@ -114,46 +172,64 @@ export function AcquisitionDashboard() {
               {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="grid grid-cols-12 gap-3 reveal-hero">
-          <div className="col-span-3 kpi-hero p-5 flex flex-col justify-between">
+        <div className="grid grid-cols-12 gap-3">
+          {/* Hero - Total Calls */}
+          <motion.div
+            className="col-span-3 kpi-hero p-5 flex flex-col justify-between"
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ ...spring, delay: 0.1 }}
+            whileHover={{ scale: 1.01 }}
+          >
             <div className="text-[9px] font-semibold text-yanne-300 uppercase tracking-[0.12em]">Total Calls</div>
             <div className="mt-2">
-              <div className="text-[56px] font-bold leading-none text-white font-data tracking-tighter">{heroValue}</div>
+              <div className="text-[56px] font-bold leading-none text-white font-data tracking-tighter">
+                <AnimatedNumber value={heroValue} duration={1.4} />
+              </div>
               <div className="text-[10px] text-yanne-400 mt-1.5">
                 {totalActualCalls ? 'Rep-reported' : 'Scored'} &middot; 30d
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="col-span-9 grid grid-cols-4 gap-3 reveal-satellites">
-            <div className="kpi-satellite kpi-satellite-green p-4">
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-[0.1em]">Avg Score</div>
-              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight mt-2">{data.avgScore}<span className="text-[16px] text-text-muted">%</span></div>
-              <div className="text-[10px] text-text-faint mt-1">Scored calls</div>
-            </div>
-            <div className="kpi-satellite kpi-satellite-blue p-4">
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-[0.1em]">Meetings</div>
-              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight mt-2">{meetings?.thisWeek ?? 0}</div>
-              <div className="text-[10px] text-text-faint mt-1">{meetings?.todaySoFar ?? 0} today &middot; {meetings?.avgPerDay ?? 0}/day</div>
-            </div>
-            <div className="kpi-satellite kpi-satellite-green p-4">
-              <div className="text-[9px] font-semibold text-text-muted uppercase tracking-[0.1em]">Active Deals</div>
-              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight mt-2">{data.activeDeals}</div>
-              <div className="text-[10px] text-text-faint mt-1">HubSpot pipeline</div>
-            </div>
-            <div className="kpi-satellite kpi-satellite-gold p-4">
-              <div className="text-[9px] font-semibold text-gold-500 uppercase tracking-[0.1em]">Pipeline</div>
-              <div className="text-[28px] font-bold leading-none text-gold-500 font-data tracking-tight mt-2">{pipelineStr}</div>
-              <div className="text-[10px] text-text-faint mt-1">Weighted avg</div>
-            </div>
+          {/* Satellites */}
+          <div className="col-span-9 grid grid-cols-4 gap-3">
+            <SatelliteCard label="Avg Score" accent="green" subtitle="Scored calls" delay={0.15}>
+              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight">
+                <AnimatedNumber value={data.avgScore} duration={1} /><span className="text-[16px] text-text-muted">%</span>
+              </div>
+            </SatelliteCard>
+
+            <SatelliteCard label="Meetings" accent="blue" subtitle={(meetings?.todaySoFar ?? 0) + ' today \u00b7 ' + (meetings?.avgPerDay ?? 0) + '/day'} delay={0.2}>
+              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight">
+                <AnimatedNumber value={meetings?.thisWeek ?? 0} duration={1} />
+              </div>
+            </SatelliteCard>
+
+            <SatelliteCard label="Active Deals" accent="green" subtitle="HubSpot pipeline" delay={0.25}>
+              <div className="text-[28px] font-bold leading-none text-text-primary font-data tracking-tight">
+                <AnimatedNumber value={data.activeDeals} duration={0.8} />
+              </div>
+            </SatelliteCard>
+
+            <SatelliteCard label="Pipeline" accent="gold" subtitle="Weighted avg" delay={0.3}>
+              <div className="text-[28px] font-bold leading-none text-gold-500 font-data tracking-tight">{pipelineStr}</div>
+            </SatelliteCard>
           </div>
         </div>
       </div>
+
       {/* === ANALYTICAL GRID === */}
       <div className="px-6 pt-5 pb-6">
-        <div className="panel reveal-panel-1 mb-4">
+        {/* Grade Distribution */}
+        <motion.div
+          className="panel mb-4"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...springFast, delay: 0.35 }}
+        >
           <div className="panel-header">
             <span className="text-[12px] font-semibold text-text-primary">Grade Distribution</span>
             <span className="text-[9px] font-data text-text-faint uppercase">30d &middot; {Object.values(data.gradeDistribution).reduce((s, v) => s + v, 0)} calls</span>
@@ -161,10 +237,17 @@ export function AcquisitionDashboard() {
           <div className="px-5 py-4">
             <GradeTrack dist={data.gradeDistribution} />
           </div>
-        </div>
+        </motion.div>
 
+        {/* Two-panel row */}
         <div className="grid grid-cols-5 gap-4 mb-4">
-          <div className="col-span-3 panel reveal-panel-2">
+          {/* Daily Call Volume */}
+          <motion.div
+            className="col-span-3 panel"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...springFast, delay: 0.45 }}
+          >
             <div className="panel-header">
               <span className="text-[12px] font-semibold text-text-primary">Daily Call Volume</span>
               <span className="text-[9px] font-data text-text-faint uppercase">
@@ -192,9 +275,15 @@ export function AcquisitionDashboard() {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
-          <div className="col-span-2 panel reveal-panel-3">
+          {/* Rep Terminal */}
+          <motion.div
+            className="col-span-2 panel"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...springFast, delay: 0.55 }}
+          >
             <div className="panel-header">
               <span className="text-[12px] font-semibold text-text-primary">
                 {checkins?.byRep ? 'Rep Activity' : 'Rep Stats'}
@@ -226,7 +315,7 @@ export function AcquisitionDashboard() {
                             <td style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{s.totalCompleted}</td>
                             <td style={{ color: showRate >= 80 ? 'var(--color-positive)' : showRate >= 60 ? 'var(--color-warning)' : 'var(--color-negative)' }}>{showRate}%</td>
                             <td style={{ color: scoreData && scoreData.avg >= 70 ? 'var(--color-positive)' : scoreData && scoreData.avg >= 55 ? 'var(--color-warning)' : 'var(--color-negative)' }}>
-                              {scoreData ? scoreData.avg + '%' : '—'}
+                              {scoreData ? scoreData.avg + '%' : '\u2014'}
                             </td>
                           </tr>
                         )
@@ -243,10 +332,16 @@ export function AcquisitionDashboard() {
                 </tbody>
               </table>
             </div>
-          </div>
+          </motion.div>
         </div>
 
-        <div className="panel reveal-panel-4">
+        {/* Coaching */}
+        <motion.div
+          className="panel"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...springFast, delay: 0.65 }}
+        >
           <div className="panel-header">
             <span className="text-[12px] font-semibold text-text-primary">Coaching Priorities</span>
             <span className="text-[9px] font-data text-text-faint uppercase">7d &middot; Top 5</span>
@@ -256,15 +351,21 @@ export function AcquisitionDashboard() {
           ) : (
             <div>
               {data.coachingThemes.map((t, i) => (
-                <div key={i} className="coaching-item">
+                <motion.div
+                  key={i}
+                  className="coaching-item"
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.75 + i * 0.06, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                >
                   <span className="coaching-rank">{String(i + 1).padStart(2, '0')}</span>
                   <span className="text-[11px] text-text-secondary leading-snug flex-1">{t.theme}</span>
                   <span className="font-data text-[11px] font-semibold text-yanne-500">{t.count}</span>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   )
