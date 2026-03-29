@@ -71,7 +71,7 @@ export function CallSearchPage() {
     <div>
       <div className="mb-5">
         <h2 className="text-xl font-bold text-[#1A3C34]">Call Library</h2>
-        <p className="text-xs text-zinc-400 mt-0.5">Search across all scored calls — objections, coaching, company names, red flags</p>
+        <p className="text-xs text-text-faint mt-0.5">Search across all scored calls — objections, coaching, company names, red flags</p>
       </div>
 
       {/* Search bar */}
@@ -82,17 +82,17 @@ export function CallSearchPage() {
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && search()}
           placeholder="Search calls... (e.g. 'fee objection', 'retainer', company name)"
-          className="flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm focus:border-[#1A3C34] focus:outline-none shadow-sm"
+          className="flex-1 rounded-lg border border-border bg-surface-raised px-4 py-2.5 text-sm focus:border-[#1A3C34] focus:outline-none shadow-sm"
           autoFocus
         />
-        <select value={rep} onChange={e => setRep(e.target.value)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm">
+        <select value={rep} onChange={e => setRep(e.target.value)} className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-text-muted shadow-sm">
           <option value="">All Reps</option>
           <option value="Jake">Jake</option>
           <option value="Stanley">Stanley</option>
           <option value="Thomas">Thomas</option>
           <option value="Tahawar">Tahawar</option>
         </select>
-        <select value={callType} onChange={e => setCallType(e.target.value)} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 shadow-sm">
+        <select value={callType} onChange={e => setCallType(e.target.value)} className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-text-muted shadow-sm">
           <option value="">All Types</option>
           <option value="Call 1">Call 1</option>
           <option value="Call 2">Call 2</option>
@@ -107,11 +107,11 @@ export function CallSearchPage() {
       {/* Quick suggestions */}
       {!searched && (
         <div className="mb-6">
-          <p className="text-xs text-zinc-400 mb-2">Quick searches:</p>
+          <p className="text-xs text-text-faint mb-2">Quick searches:</p>
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map(s => (
               <button key={s} onClick={() => { setQuery(s); setTimeout(search, 50) }}
-                className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 hover:border-[#A8C4BB] hover:bg-[#A8C4BB]/10 transition-colors">
+                className="rounded-full border border-border bg-surface-raised px-3 py-1 text-xs text-text-muted hover:border-[#A8C4BB] hover:bg-[#A8C4BB]/10 transition-colors">
                 {s}
               </button>
             ))}
@@ -121,7 +121,7 @@ export function CallSearchPage() {
 
       {/* Results */}
       {searched && (
-        <div className="mb-3 text-xs text-zinc-500">
+        <div className="mb-3 text-xs text-text-muted">
           {total} call{total !== 1 ? 's' : ''} found for "{query}"
           {rep && ` (${rep})`}{callType && ` (${callType})`}
         </div>
@@ -133,13 +133,13 @@ export function CallSearchPage() {
             <div
               key={c.id}
               onClick={() => navigate(`/calls/${c.id}`)}
-              className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm hover:border-[#A8C4BB] cursor-pointer transition-colors"
+              className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm hover:border-[#A8C4BB] cursor-pointer transition-colors"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-zinc-800">{c.prospect_company || 'Unknown'}</span>
-                  <span className="text-xs text-zinc-400">{c.rep} — {c.call_type}</span>
-                  <span className="text-xs text-zinc-400">{c.date?.slice(0, 10)}</span>
+                  <span className="text-sm font-bold text-text-primary">{c.prospect_company || 'Unknown'}</span>
+                  <span className="text-xs text-text-faint">{c.rep} — {c.call_type}</span>
+                  <span className="text-xs text-text-faint">{c.date?.slice(0, 10)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-sm font-bold ${scoreColor(c.score_percentage)}`}>{c.score_percentage}%</span>
@@ -148,12 +148,12 @@ export function CallSearchPage() {
                 </div>
               </div>
               {c.coaching_priority && (
-                <p className="text-xs text-zinc-600 line-clamp-2 mb-1">
-                  <span className="font-semibold text-zinc-500">Coaching:</span> {c.coaching_priority}
+                <p className="text-xs text-text-muted line-clamp-2 mb-1">
+                  <span className="font-semibold text-text-muted">Coaching:</span> {c.coaching_priority}
                 </p>
               )}
               {c.biggest_miss && (
-                <p className="text-xs text-zinc-500 line-clamp-1">
+                <p className="text-xs text-text-muted line-clamp-1">
                   <span className="font-semibold">Miss:</span> {c.biggest_miss}
                 </p>
               )}

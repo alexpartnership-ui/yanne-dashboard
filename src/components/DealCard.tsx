@@ -13,7 +13,7 @@ function latestGrade(deal: DealWithCalls): Grade | null {
 
 function dealHealth(deal: DealWithCalls): { label: string; color: string } {
   if (deal.deal_status === 'signed') return { label: 'Signed', color: 'bg-blue-100 text-blue-800' }
-  if (deal.deal_status === 'lost') return { label: 'Lost', color: 'bg-zinc-100 text-zinc-500' }
+  if (deal.deal_status === 'lost') return { label: 'Lost', color: 'bg-surface-overlay text-text-muted' }
   const updated = deal.updated_at ? new Date(deal.updated_at) : null
   if (updated) {
     const days = Math.floor((Date.now() - updated.getTime()) / 86400000)
@@ -38,7 +38,7 @@ export function DealCard({ deal, staleness, dragHandleProps }: DealCardProps) {
     ? 'border-red-400'
     : staleness?.level === 'warning'
     ? 'border-yellow-400'
-    : 'border-zinc-200'
+    : 'border-border'
 
   return (
     <div
@@ -47,21 +47,21 @@ export function DealCard({ deal, staleness, dragHandleProps }: DealCardProps) {
         const callId = deal.call_4_record_id || deal.call_3_record_id || deal.call_2_record_id || deal.call_1_record_id
         if (callId) navigate(`/calls/${callId}`)
       }}
-      className={`rounded-lg border ${borderClass} bg-white p-3.5 shadow-sm hover:shadow-md hover:border-yanne-light transition-all cursor-pointer`}
+      className={`rounded-lg border ${borderClass} bg-surface-raised p-3.5 shadow-sm hover:shadow-md hover:border-yanne-light transition-all cursor-pointer`}
     >
       <div className="flex items-start justify-between mb-2">
-        <div className="font-semibold text-sm text-zinc-900 leading-tight">{deal.prospect_company}</div>
+        <div className="font-semibold text-sm text-text-primary leading-tight">{deal.prospect_company}</div>
         {grade && <GradeBadge grade={grade} />}
       </div>
 
       <div className="flex items-center gap-2 mb-2">
         <div className={`h-2 w-2 rounded-full ${repDotClass(deal.rep_name)}`} />
-        <span className="text-xs text-zinc-500">{deal.rep_name}</span>
+        <span className="text-xs text-text-muted">{deal.rep_name}</span>
       </div>
 
       <div className="flex items-center justify-between">
         {staleness && staleness.days > 0 && (
-          <span className={`text-[10px] ${staleness.level === 'danger' ? 'text-red-500 font-semibold' : staleness.level === 'warning' ? 'text-yellow-600 font-semibold' : 'text-zinc-400'}`}>
+          <span className={`text-[10px] ${staleness.level === 'danger' ? 'text-red-500 font-semibold' : staleness.level === 'warning' ? 'text-yellow-600 font-semibold' : 'text-text-faint'}`}>
             {staleness.level === 'danger' && '\u26A0\uFE0F '}
             {staleness.days}d in stage
             {staleness.level === 'danger' && ' stale'}

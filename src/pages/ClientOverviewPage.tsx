@@ -62,7 +62,7 @@ export function ClientOverviewPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-zinc-900">Client Overview</h2>
+      <h2 className="mb-6 text-2xl font-bold text-text-primary">Client Overview</h2>
 
       <div className="mb-6 grid grid-cols-4 gap-4">
         <MetricCard label="Total Clients" value={clients.length} subtitle="From onboarding form" />
@@ -71,10 +71,10 @@ export function ClientOverviewPage() {
         <MetricCard label="Total Raise Target" value={`$${(totalRaiseTarget / 1000000).toFixed(0)}M`} />
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
         <table className="w-full">
-          <thead className="bg-zinc-50">
-            <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          <thead className="bg-surface-raised">
+            <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
               <th className="text-left px-4 py-3">Company</th>
               <th className="text-left px-4 py-3">Contact</th>
               <th className="text-left px-4 py-3">HQ</th>
@@ -84,23 +84,23 @@ export function ClientOverviewPage() {
               <th className="text-center px-4 py-3">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-border-muted">
             {enrichedClients.map(c => (
-              <tr key={c.id} className="hover:bg-zinc-50 transition-colors">
-                <td className="px-4 py-3 text-sm font-medium text-zinc-900">{c.companyName}</td>
-                <td className="px-4 py-3 text-xs text-zinc-600">{c.firstName} {c.lastName}</td>
-                <td className="px-4 py-3 text-xs text-zinc-500">{c.hq || '\u2014'}</td>
-                <td className="px-4 py-3 text-xs text-zinc-700 text-right font-semibold">
+              <tr key={c.id} className="hover:bg-surface-raised transition-colors">
+                <td className="px-4 py-3 text-sm font-medium text-text-primary">{c.companyName}</td>
+                <td className="px-4 py-3 text-xs text-text-muted">{c.firstName} {c.lastName}</td>
+                <td className="px-4 py-3 text-xs text-text-muted">{c.hq || '\u2014'}</td>
+                <td className="px-4 py-3 text-xs text-text-secondary text-right font-semibold">
                   {c.totalRaise > 0 ? `$${(c.totalRaise / 1000000).toFixed(1)}M` : '\u2014'}
                 </td>
-                <td className="px-4 py-3 text-xs text-zinc-500">
+                <td className="px-4 py-3 text-xs text-text-muted">
                   {c.date ? new Date(c.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '\u2014'}
                 </td>
                 <td className="px-4 py-3 text-center">
                   {c.isActive ? (
                     <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">Active</span>
                   ) : (
-                    <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-500">No workspace</span>
+                    <span className="rounded-full bg-surface-overlay px-2.5 py-0.5 text-[10px] font-semibold text-text-muted">No workspace</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-center">

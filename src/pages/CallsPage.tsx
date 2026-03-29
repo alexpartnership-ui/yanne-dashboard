@@ -60,7 +60,7 @@ export function CallsPage() {
     <div>
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-baseline gap-3">
-          <h2 className="text-2xl font-bold text-zinc-900">Scored Calls</h2>
+          <h2 className="text-2xl font-bold text-text-primary">Scored Calls</h2>
           {stats && stats.todayCount > 0 && (
             <span className="rounded-full bg-yanne/10 px-2.5 py-0.5 text-xs font-semibold text-yanne">
               {stats.todayCount} today
@@ -80,10 +80,10 @@ export function CallsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by company, rep, contact, grade..."
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-yanne focus:outline-none w-80"
+          className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-secondary shadow-sm focus:border-yanne focus:outline-none w-80"
         />
         {search && (
-          <span className="text-xs text-zinc-400">{filtered.length} of {data.length} calls</span>
+          <span className="text-xs text-text-faint">{filtered.length} of {data.length} calls</span>
         )}
       </div>
 
@@ -92,21 +92,21 @@ export function CallsPage() {
       {/* Stats bar */}
       {stats && (
         <div className="mb-5 grid grid-cols-4 gap-4">
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-2xl font-bold text-zinc-900">{stats.total}</div>
-            <div className="text-[11px] text-zinc-500 mt-1 uppercase tracking-wider">Total Calls</div>
+          <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
+            <div className="text-2xl font-bold text-text-primary">{stats.total}</div>
+            <div className="text-[11px] text-text-muted mt-1 uppercase tracking-wider">Total Calls</div>
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
             <div className={`text-2xl font-bold ${scoreColor(stats.avgScore)}`}>{stats.avgScore}%</div>
-            <div className="text-[11px] text-zinc-500 mt-1 uppercase tracking-wider">Avg Score</div>
+            <div className="text-[11px] text-text-muted mt-1 uppercase tracking-wider">Avg Score</div>
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Grade Distribution</div>
+          <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
+            <div className="text-[11px] text-text-muted uppercase tracking-wider mb-2">Grade Distribution</div>
             <GradeDistributionBar calls={filtered} />
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Top Coaching Theme</div>
-            <div className="text-sm text-zinc-700 leading-snug">{mostCommonCoaching(filtered)}</div>
+          <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
+            <div className="text-[11px] text-text-muted uppercase tracking-wider mb-1">Top Coaching Theme</div>
+            <div className="text-sm text-text-secondary leading-snug">{mostCommonCoaching(filtered)}</div>
           </div>
         </div>
       )}

@@ -3,14 +3,14 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ className = '' }: SkeletonProps) {
-  return <div className={`animate-pulse rounded bg-zinc-200 ${className}`} />
+  return <div className={`skeleton ${className}`} />
 }
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-5">
+    <div className="rounded-xl border border-border bg-surface-raised p-5">
       <Skeleton className="mb-3 h-3 w-24" />
-      <Skeleton className="mb-2 h-7 w-16" />
+      <Skeleton className="mb-2 h-8 w-20" />
       <Skeleton className="h-3 w-32" />
     </div>
   )
@@ -18,12 +18,12 @@ export function CardSkeleton() {
 
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
-      <div className="border-b border-zinc-100 px-4 py-3">
+    <div className="rounded-xl border border-border bg-surface-raised overflow-hidden">
+      <div className="border-b border-border px-5 py-3.5">
         <Skeleton className="h-4 w-48" />
       </div>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-4 border-b border-zinc-50 px-4 py-3 last:border-0">
+        <div key={i} className="flex gap-4 border-b border-border-muted px-5 py-3 last:border-0">
           <Skeleton className="h-4 w-20" />
           <Skeleton className="h-4 w-32" />
           <Skeleton className="h-4 w-16" />

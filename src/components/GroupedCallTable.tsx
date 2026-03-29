@@ -96,7 +96,7 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
       <div className="mb-3 flex justify-end relative">
         <button
           onClick={() => setShowColPicker(!showColPicker)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 shadow-sm"
+          className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-muted hover:bg-surface-raised shadow-sm"
         >
           Columns
           <svg className="w-3 h-3 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -104,9 +104,9 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
           </svg>
         </button>
         {showColPicker && (
-          <div className="absolute right-0 top-full mt-1 z-20 rounded-lg border border-zinc-200 bg-white p-2 shadow-lg min-w-[160px]">
+          <div className="absolute right-0 top-full mt-1 z-20 rounded-lg border border-border bg-surface-raised p-2 shadow-lg min-w-[160px]">
             {ALL_COLUMNS.map(c => (
-              <label key={c.key} className="flex items-center gap-2 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50 rounded cursor-pointer">
+              <label key={c.key} className="flex items-center gap-2 px-2 py-1 text-xs text-text-secondary hover:bg-surface-raised rounded cursor-pointer">
                 <input type="checkbox" checked={visibleCols.has(c.key)} onChange={() => toggleCol(c.key)} className="rounded" />
                 {c.label}
               </label>
@@ -115,7 +115,7 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface-raised shadow-sm">
         {grouped.map(([dateKey, calls]) => {
           const expanded = isExpanded(dateKey)
           return (
@@ -123,25 +123,25 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
               {/* Date header */}
               <button
                 onClick={() => toggleDate(dateKey)}
-                className="flex w-full items-center gap-2 bg-zinc-50 px-4 py-2.5 text-left hover:bg-zinc-100 transition-colors"
+                className="flex w-full items-center gap-2 bg-surface-raised px-4 py-2.5 text-left hover:bg-surface-overlay transition-colors"
               >
-                <svg className={`w-3 h-3 text-zinc-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className={`w-3 h-3 text-text-faint transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
-                <span className="text-xs font-semibold text-zinc-700">
+                <span className="text-xs font-semibold text-text-secondary">
                   {dateKey === 'unknown' ? 'No date' : formatDateHeader(dateKey)}
                 </span>
-                <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold text-zinc-500">
+                <span className="rounded-full bg-surface-overlay px-2 py-0.5 text-[10px] font-bold text-text-muted">
                   {calls.length} call{calls.length !== 1 ? 's' : ''}
                 </span>
               </button>
 
               {expanded && (
-                <table className="min-w-full divide-y divide-zinc-100">
+                <table className="min-w-full divide-y divide-border-muted">
                   <thead>
                     <tr>
                       {cols.map(c => (
-                        <th key={c.key} className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                        <th key={c.key} className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                           {c.label}
                         </th>
                       ))}
@@ -152,15 +152,15 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
                       <tr
                         key={call.id}
                         onClick={() => onRowClick(call)}
-                        className={`cursor-pointer hover:bg-yanne-light/10 transition-colors ${i % 2 === 1 ? 'bg-zinc-50/50' : ''}`}
+                        className={`cursor-pointer hover:bg-yanne-light/10 transition-colors ${i % 2 === 1 ? 'bg-surface-raised/50' : ''}`}
                       >
                         {visibleCols.has('date') && (
-                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-zinc-800">
+                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-text-primary">
                             {call.date ? new Date(call.date).toLocaleDateString() : '\u2014'}
                           </td>
                         )}
                         {visibleCols.has('rep') && (
-                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-zinc-800">
+                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-text-primary">
                             <div className="flex items-center gap-2">
                               <div className={`h-2 w-2 rounded-full ${repDotClass(call.rep)}`} />
                               {call.rep}
@@ -173,7 +173,7 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
                           </td>
                         )}
                         {visibleCols.has('type') && (
-                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-zinc-800">{call.call_type}</td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-sm text-text-primary">{call.call_type}</td>
                         )}
                         {visibleCols.has('score') && (
                           <td className="whitespace-nowrap px-4 py-2.5 text-sm">
@@ -188,7 +188,7 @@ export function GroupedCallTable({ data, onRowClick }: GroupedCallTableProps) {
                           </td>
                         )}
                         {visibleCols.has('coaching') && (
-                          <td className="px-4 py-2.5 text-xs text-zinc-600 max-w-[200px] truncate">
+                          <td className="px-4 py-2.5 text-xs text-text-muted max-w-[200px] truncate">
                             {call.coaching_priority ?? '\u2014'}
                           </td>
                         )}

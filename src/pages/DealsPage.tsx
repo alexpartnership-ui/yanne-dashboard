@@ -18,9 +18,9 @@ const STAGE_COLORS: Record<string, string> = {
   '2nd Closing Call': 'bg-[#1A3C34]/40 text-white',
   '3rd Call / Contract': 'bg-[#1A3C34]/60 text-white',
   'Closed Won': 'bg-emerald-100 text-emerald-700',
-  'Closed Lost': 'bg-zinc-100 text-zinc-500',
+  'Closed Lost': 'bg-surface-overlay text-text-muted',
   'Long Term Lead': 'bg-blue-50 text-blue-600',
-  'Disqualified': 'bg-zinc-100 text-zinc-400',
+  'Disqualified': 'bg-surface-overlay text-text-faint',
 }
 
 const KANBAN_BORDER: Record<string, string> = {
@@ -42,7 +42,7 @@ const BAR_COLORS: Record<string, string> = {
   'Closed Won': 'bg-[#00875A]',
   'Closed Lost': 'bg-zinc-300',
   'Long Term Lead': 'bg-blue-200',
-  'Disqualified': 'bg-zinc-200',
+  'Disqualified': 'bg-surface-overlay',
 }
 
 // ─── Helpers ────────────────────────────────────────────
@@ -95,7 +95,7 @@ function sortDeals(deals: HubSpotDeal[], key: SortKey, dir: SortDir): HubSpotDea
 function TH({ label, k, cur, dir, onSort, right }: { label: string; k: SortKey; cur: SortKey; dir: SortDir; onSort: (k: SortKey) => void; right?: boolean }) {
   const on = cur === k
   return (
-    <th className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider cursor-pointer select-none hover:text-zinc-600 ${right ? 'text-right' : 'text-left'} ${on ? 'text-[#1A3C34]' : 'text-zinc-400'}`} onClick={() => onSort(k)}>
+    <th className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider cursor-pointer select-none hover:text-text-muted ${right ? 'text-right' : 'text-left'} ${on ? 'text-[#1A3C34]' : 'text-text-faint'}`} onClick={() => onSort(k)}>
       {label}{on && <span className="ml-1">{dir === 'asc' ? '\u25B2' : '\u25BC'}</span>}
     </th>
   )
@@ -114,20 +114,20 @@ function KanbanView({ deals }: { deals: HubSpotDeal[] }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
       {columns.map(col => (
-        <div key={col.stage} className={`rounded-lg border border-zinc-200 bg-white shadow-sm border-t-[3px] ${KANBAN_BORDER[col.stage] || 'border-t-zinc-300'}`}>
+        <div key={col.stage} className={`rounded-lg border border-border bg-surface-raised shadow-sm border-t-[3px] ${KANBAN_BORDER[col.stage] || 'border-t-zinc-300'}`}>
           {/* Column header */}
-          <div className="px-3 py-3 border-b border-zinc-100">
+          <div className="px-3 py-3 border-b border-border-muted">
             <div className="flex items-center justify-between mb-1">
-              <h4 className="text-xs font-bold text-zinc-800">{col.stage}</h4>
-              <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">{col.deals.length}</span>
+              <h4 className="text-xs font-bold text-text-primary">{col.stage}</h4>
+              <span className="rounded-full bg-surface-overlay px-1.5 py-0.5 text-[9px] font-bold text-text-muted">{col.deals.length}</span>
             </div>
-            <div className="text-[11px] text-zinc-500">
-              <span className="font-semibold text-zinc-700">{fmt(col.total)}</span>
+            <div className="text-[11px] text-text-muted">
+              <span className="font-semibold text-text-secondary">{fmt(col.total)}</span>
               <span className="mx-1">|</span>
               Total amount
             </div>
-            <div className="text-[11px] text-zinc-400">
-              <span className="font-medium text-zinc-600">{fmt(col.avg)}</span>
+            <div className="text-[11px] text-text-faint">
+              <span className="font-medium text-text-muted">{fmt(col.avg)}</span>
               <span className="mx-1">|</span>
               Average deal
             </div>
@@ -135,17 +135,17 @@ function KanbanView({ deals }: { deals: HubSpotDeal[] }) {
           {/* Deal cards */}
           <div className="p-2 space-y-1.5 max-h-[500px] overflow-y-auto scrollbar-hide">
             {col.deals.length === 0 ? (
-              <div className="py-6 text-center text-[10px] text-zinc-400">No deals</div>
+              <div className="py-6 text-center text-[10px] text-text-faint">No deals</div>
             ) : (
               col.deals.map(d => {
                 const actDays = daysSince(d.lastActivity)
                 const stale = actDays !== null && actDays >= 30
                 return (
-                  <div key={d.id} className="rounded-md border border-zinc-100 bg-zinc-50/50 px-3 py-2.5 hover:bg-zinc-50 transition-colors">
-                    <div className="text-xs font-medium text-zinc-800 truncate">{d.name}</div>
+                  <div key={d.id} className="rounded-md border border-border-muted bg-surface-raised/50 px-3 py-2.5 hover:bg-surface-raised transition-colors">
+                    <div className="text-xs font-medium text-text-primary truncate">{d.name}</div>
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[11px] font-semibold text-zinc-700">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
-                      <span className={`text-[10px] ${stale ? 'text-red-600 font-semibold' : 'text-zinc-400'}`}>
+                      <span className="text-[11px] font-semibold text-text-secondary">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
+                      <span className={`text-[10px] ${stale ? 'text-red-600 font-semibold' : 'text-text-faint'}`}>
                         {actDays !== null ? `${actDays}d` : ''}
                       </span>
                     </div>
@@ -170,15 +170,15 @@ function StageSummary({ deals }: { deals: HubSpotDeal[] }) {
         const total = stageDeals.reduce((s, d) => s + (d.amount || 0), 0)
         const avg = stageDeals.length > 0 ? total / stageDeals.length : 0
         return (
-          <div key={stage} className="rounded-lg bg-white border border-zinc-200 px-3 py-3 shadow-sm">
+          <div key={stage} className="rounded-lg bg-surface-raised border border-border px-3 py-3 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${STAGE_COLORS[stage]}`}>{stage}</span>
-              <span className="text-sm font-bold text-zinc-900">{stageDeals.length}</span>
+              <span className="text-sm font-bold text-text-primary">{stageDeals.length}</span>
             </div>
-            <div className="text-[11px] text-zinc-500">
-              <span className="font-semibold text-zinc-700">{fmt(total)}</span> total
+            <div className="text-[11px] text-text-muted">
+              <span className="font-semibold text-text-secondary">{fmt(total)}</span> total
             </div>
-            <div className="text-[10px] text-zinc-400">
+            <div className="text-[10px] text-text-faint">
               {fmt(avg)} avg per deal
             </div>
           </div>
@@ -215,30 +215,30 @@ function ForecastSection() {
   return (
     <div className="mb-5 space-y-3">
       {/* Forecast bar */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h3 className="text-sm font-bold text-zinc-900">Revenue Forecast</h3>
-            <p className="text-[10px] text-zinc-400">Weighted by stage probability</p>
+            <h3 className="text-sm font-bold text-text-primary">Revenue Forecast</h3>
+            <p className="text-[10px] text-text-faint">Weighted by stage probability</p>
           </div>
           <div className="text-right">
             <div className="text-xl font-bold text-[#1A3C34]">{fmt(data.totalWeighted)}</div>
-            <div className="text-[10px] text-zinc-400">weighted forecast</div>
+            <div className="text-[10px] text-text-faint">weighted forecast</div>
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 text-center">
           {data.stageBreakdown.map(s => (
-            <div key={s.stage} className="rounded bg-zinc-50 px-2 py-2">
-              <div className="text-[9px] font-semibold text-zinc-500 uppercase">{s.stage}</div>
-              <div className="text-sm font-bold text-zinc-800 mt-0.5">{fmt(s.weighted)}</div>
-              <div className="text-[9px] text-zinc-400">{s.count} deals x {Math.round(s.probability * 100)}%</div>
+            <div key={s.stage} className="rounded bg-surface-raised px-2 py-2">
+              <div className="text-[9px] font-semibold text-text-muted uppercase">{s.stage}</div>
+              <div className="text-sm font-bold text-text-primary mt-0.5">{fmt(s.weighted)}</div>
+              <div className="text-[9px] text-text-faint">{s.count} deals x {Math.round(s.probability * 100)}%</div>
             </div>
           ))}
         </div>
         {data.thisMonth.deals > 0 && (
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="rounded-full bg-[#1A3C34]/10 px-2 py-0.5 text-[10px] font-semibold text-[#1A3C34]">{data.thisMonth.month}</span>
-            <span className="text-zinc-600">{data.thisMonth.deals} deals closing this month — {fmt(data.thisMonth.value)}</span>
+            <span className="text-text-muted">{data.thisMonth.deals} deals closing this month — {fmt(data.thisMonth.value)}</span>
           </div>
         )}
       </div>
@@ -257,13 +257,13 @@ function ForecastSection() {
           {showStale && (
             <div className="mt-3 space-y-1.5">
               {data.staleDeals.map((d, i) => (
-                <div key={i} className="flex items-center justify-between text-xs bg-white rounded px-3 py-2">
+                <div key={i} className="flex items-center justify-between text-xs bg-surface-raised rounded px-3 py-2">
                   <div>
-                    <span className="font-medium text-zinc-800">{d.name}</span>
-                    <span className="ml-2 text-zinc-400">{d.stage}</span>
+                    <span className="font-medium text-text-primary">{d.name}</span>
+                    <span className="ml-2 text-text-faint">{d.stage}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-zinc-600">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
+                    <span className="text-text-muted">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</span>
                     <span className="text-red-600 font-medium">{d.reason}</span>
                   </div>
                 </div>
@@ -332,15 +332,15 @@ export function DealsPage() {
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-[#1A3C34]">HubSpot Deals</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">Sales Pipeline — {stats.totalCount} total deals</p>
+          <p className="text-xs text-text-faint mt-0.5">Sales Pipeline — {stats.totalCount} total deals</p>
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="flex rounded-lg border border-zinc-200 overflow-hidden">
-            <button onClick={() => setView('table')} className={`px-3 py-1.5 text-xs font-medium ${view === 'table' ? 'bg-[#1A3C34] text-white' : 'bg-white text-zinc-500 hover:bg-zinc-50'}`}>
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button onClick={() => setView('table')} className={`px-3 py-1.5 text-xs font-medium ${view === 'table' ? 'bg-[#1A3C34] text-white' : 'bg-surface-raised text-text-muted hover:bg-surface-raised'}`}>
               Table
             </button>
-            <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium ${view === 'kanban' ? 'bg-[#1A3C34] text-white' : 'bg-white text-zinc-500 hover:bg-zinc-50'}`}>
+            <button onClick={() => setView('kanban')} className={`px-3 py-1.5 text-xs font-medium ${view === 'kanban' ? 'bg-[#1A3C34] text-white' : 'bg-surface-raised text-text-muted hover:bg-surface-raised'}`}>
               Kanban
             </button>
           </div>
@@ -348,7 +348,7 @@ export function DealsPage() {
           <select
             value={stageFilter}
             onChange={e => { setStageFilter(e.target.value); setPage(0) }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 shadow-sm"
+            className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-muted shadow-sm"
           >
             <option value="active">Active Stages ({stats.activeCount})</option>
             <option value="all">All Deals ({stats.totalCount})</option>
@@ -363,25 +363,25 @@ export function DealsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm">
           <div className="text-2xl font-bold text-[#1A3C34]">{stats.activeCount}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Active Deals</div>
+          <div className="text-[11px] text-text-muted mt-1">Active Deals</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm">
           <div className="text-2xl font-bold text-[#1A3C34]">{fmt(stats.activeValue)}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Active Pipeline Value</div>
+          <div className="text-[11px] text-text-muted mt-1">Active Pipeline Value</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm">
           <div className="text-2xl font-bold text-[#00875A]">{stats.wonCount}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Closed Won</div>
+          <div className="text-[11px] text-text-muted mt-1">Closed Won</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-zinc-400">{stats.lostCount}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Closed Lost</div>
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm">
+          <div className="text-2xl font-bold text-text-faint">{stats.lostCount}</div>
+          <div className="text-[11px] text-text-muted mt-1">Closed Lost</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm">
-          <div className="text-2xl font-bold text-zinc-900">{fmt(stats.totalValue)}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Total Pipeline Value</div>
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm">
+          <div className="text-2xl font-bold text-text-primary">{fmt(stats.totalValue)}</div>
+          <div className="text-[11px] text-text-muted mt-1">Total Pipeline Value</div>
         </div>
       </div>
 
@@ -392,7 +392,7 @@ export function DealsPage() {
       <StageSummary deals={allDeals} />
 
       {/* Pipeline Stage Bar */}
-      <div className="mb-5 flex h-3 rounded-full overflow-hidden bg-zinc-100">
+      <div className="mb-5 flex h-3 rounded-full overflow-hidden bg-surface-overlay">
         {STAGE_ORDER.map(stage => {
           const count = stageCounts[stage] || 0
           if (count === 0) return null
@@ -411,14 +411,14 @@ export function DealsPage() {
           {/* Search + Pagination */}
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search deals..." className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-[#1A3C34] focus:outline-none w-72" />
-              {search && <span className="text-xs text-zinc-400">{displayed.length} results</span>}
+              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search deals..." className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-secondary shadow-sm focus:border-[#1A3C34] focus:outline-none w-72" />
+              {search && <span className="text-xs text-text-faint">{displayed.length} results</span>}
             </div>
             {totalPages > 1 && (
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-surface-raised">Prev</button>
                 <span>{page + 1} / {totalPages}</span>
-                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-surface-raised">Next</button>
               </div>
             )}
           </div>
@@ -427,10 +427,10 @@ export function DealsPage() {
           {displayed.length === 0 ? (
             <EmptyState title="No deals match" description="Try changing the stage filter or search query" />
           ) : (
-            <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-zinc-50 border-b border-zinc-100">
+                  <thead className="bg-surface-raised border-b border-border-muted">
                     <tr>
                       <TH label="Deal Name" k="name" cur={sortKey} dir={sortDir} onSort={handleSort} />
                       <TH label="Stage" k="stageName" cur={sortKey} dir={sortDir} onSort={handleSort} />
@@ -447,21 +447,21 @@ export function DealsPage() {
                       const actDays = daysSince(d.lastActivity)
                       const stale = actDays !== null && actDays >= 30
                       return (
-                        <tr key={d.id} className="hover:bg-zinc-50/50 transition-colors">
-                          <td className="px-4 py-3 text-sm font-medium text-zinc-800 max-w-[250px] truncate">{d.name}</td>
+                        <tr key={d.id} className="hover:bg-surface-raised/50 transition-colors">
+                          <td className="px-4 py-3 text-sm font-medium text-text-primary max-w-[250px] truncate">{d.name}</td>
                           <td className="px-4 py-3">
-                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STAGE_COLORS[d.stageName] || 'bg-zinc-100 text-zinc-600'}`}>{d.stageName}</span>
+                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${STAGE_COLORS[d.stageName] || 'bg-surface-overlay text-text-muted'}`}>{d.stageName}</span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-zinc-700 text-right font-medium tabular-nums">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</td>
-                          <td className="px-4 py-3 text-xs text-zinc-500 text-right">{fmtDate(d.closeDate)}</td>
-                          <td className="px-4 py-3 text-xs text-zinc-400 text-right">{fmtDate(d.createDate)}</td>
-                          <td className={`px-4 py-3 text-xs text-right font-medium ${stale ? 'text-red-600' : 'text-zinc-400'}`}>{actDays !== null ? `${actDays}d ago` : '\u2014'}</td>
+                          <td className="px-4 py-3 text-sm text-text-secondary text-right font-medium tabular-nums">{d.amount ? `$${d.amount.toLocaleString()}` : '\u2014'}</td>
+                          <td className="px-4 py-3 text-xs text-text-muted text-right">{fmtDate(d.closeDate)}</td>
+                          <td className="px-4 py-3 text-xs text-text-faint text-right">{fmtDate(d.createDate)}</td>
+                          <td className={`px-4 py-3 text-xs text-right font-medium ${stale ? 'text-red-600' : 'text-text-faint'}`}>{actDays !== null ? `${actDays}d ago` : '\u2014'}</td>
                           <td className="px-4 py-3 text-xs text-right">
                             {d.dealScore !== null ? (
                               <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${d.dealScore >= 70 ? 'bg-emerald-100 text-emerald-700' : d.dealScore >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{Math.round(d.dealScore)}</span>
                             ) : '\u2014'}
                           </td>
-                          <td className="px-4 py-3 text-xs text-right text-zinc-500">{d.probability !== null ? `${Math.round(d.probability * 100)}%` : '\u2014'}</td>
+                          <td className="px-4 py-3 text-xs text-right text-text-muted">{d.probability !== null ? `${Math.round(d.probability * 100)}%` : '\u2014'}</td>
                         </tr>
                       )
                     })}
@@ -472,11 +472,11 @@ export function DealsPage() {
           )}
 
           {totalPages > 1 && (
-            <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
+            <div className="mt-3 flex items-center justify-between text-xs text-text-faint">
               <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, displayed.length)} of {displayed.length}</span>
               <div className="flex items-center gap-2">
-                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Prev</button>
-                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-zinc-200 disabled:opacity-30 hover:bg-zinc-50">Next</button>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-surface-raised">Prev</button>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-2 py-1 rounded border border-border disabled:opacity-30 hover:bg-surface-raised">Next</button>
               </div>
             </div>
           )}

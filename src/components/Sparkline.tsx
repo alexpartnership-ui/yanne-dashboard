@@ -20,7 +20,7 @@ export function Sparkline({ data, callType, rep = '' }: SparklineProps) {
   const filtered = data.filter(d => d.call_type === callType).slice(-25)
 
   if (filtered.length < 2) {
-    return <div className="h-10 text-xs text-zinc-300 flex items-center">&lt; 2 calls</div>
+    return <div className="h-10 text-xs text-text-faint flex items-center">&lt; 2 calls</div>
   }
 
   const color = strokeColor(filtered)
@@ -42,7 +42,7 @@ export function Sparkline({ data, callType, rep = '' }: SparklineProps) {
               if (!active || !payload?.length) return null
               const pt = payload[0].payload as CallPoint
               return (
-                <div className="rounded bg-zinc-800 px-2 py-1 text-xs text-white shadow">
+                <div className="rounded bg-surface px-2 py-1 text-xs text-white shadow">
                   {pt.score}% — {pt.date?.slice(5) || 'N/A'}
                 </div>
               )

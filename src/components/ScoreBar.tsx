@@ -10,7 +10,7 @@ function barColor(score: number): string {
 function trendArrow(trend: TrendDirection) {
   if (trend === 'Improving') return <span className="text-emerald-500 text-lg">↑</span>
   if (trend === 'Declining') return <span className="text-red-500 text-lg">↓</span>
-  return <span className="text-zinc-400 text-lg">→</span>
+  return <span className="text-text-faint text-lg">→</span>
 }
 
 interface ScoreBarProps {
@@ -23,16 +23,16 @@ export function ScoreBar({ label, score, trend }: ScoreBarProps) {
   return (
     <div className="flex-1">
       <div className="flex items-baseline gap-2 mb-1">
-        <span className="text-4xl font-bold text-zinc-900 tabular-nums leading-none">{score}%</span>
+        <span className="text-4xl font-bold text-text-primary tabular-nums leading-none">{score}%</span>
         {trendArrow(trend)}
       </div>
-      <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden mb-1">
+      <div className="w-full h-2 bg-surface-overlay rounded-full overflow-hidden mb-1">
         <div
           className={`h-full rounded-full transition-all ${barColor(score)}`}
           style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
-      <span className="text-xs text-zinc-400 uppercase tracking-wider">{label}</span>
+      <span className="text-xs text-text-faint uppercase tracking-wider">{label}</span>
     </div>
   )
 }

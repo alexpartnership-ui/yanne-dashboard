@@ -85,7 +85,7 @@ export function DealsAIPage() {
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-yanne">AI Scoring Pipeline</h2>
-          <p className="text-xs text-zinc-400">Coaching intelligence — grades, scores, flags. Drag to move deals.</p>
+          <p className="text-xs text-text-faint">Coaching intelligence — grades, scores, flags. Drag to move deals.</p>
         </div>
         <ExportButton type="deals" label="Export Deals" />
       </div>
@@ -106,21 +106,21 @@ export function DealsAIPage() {
 
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm text-center">
-          <div className="text-2xl font-bold text-zinc-900">{activeDeals.length}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Active</div>
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm text-center">
+          <div className="text-2xl font-bold text-text-primary">{activeDeals.length}</div>
+          <div className="text-[11px] text-text-muted mt-1">Active</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm text-center">
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm text-center">
           <div className="text-2xl font-bold text-emerald-600">{signedDeals.length}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Signed</div>
+          <div className="text-[11px] text-text-muted mt-1">Signed</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm text-center">
-          <div className="text-2xl font-bold text-zinc-400">{lostDeals.length}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Lost</div>
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm text-center">
+          <div className="text-2xl font-bold text-text-faint">{lostDeals.length}</div>
+          <div className="text-[11px] text-text-muted mt-1">Lost</div>
         </div>
-        <div className="rounded-lg bg-white border border-zinc-200 p-4 shadow-sm text-center">
-          <div className={`text-2xl font-bold ${inflationCount > 0 ? 'text-red-600' : 'text-zinc-900'}`}>{inflationCount}</div>
-          <div className="text-[11px] text-zinc-500 mt-1">Inflation Flags</div>
+        <div className="rounded-lg bg-surface-raised border border-border p-4 shadow-sm text-center">
+          <div className={`text-2xl font-bold ${inflationCount > 0 ? 'text-red-600' : 'text-text-primary'}`}>{inflationCount}</div>
+          <div className="text-[11px] text-text-muted mt-1">Inflation Flags</div>
         </div>
       </div>
 
@@ -134,7 +134,7 @@ export function DealsAIPage() {
               <div key={col.stage}>
                 <div className="mb-2 flex items-center justify-between">
                   <h4 className="text-[11px] font-semibold text-yanne">{col.stage === 'Call 4' ? 'Call 4 / Close' : col.stage}</h4>
-                  <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-bold text-zinc-500">{col.deals.length}</span>
+                  <span className="rounded-full bg-surface-overlay px-1.5 py-0.5 text-[9px] font-bold text-text-muted">{col.deals.length}</span>
                 </div>
                 <SortableContext items={col.deals.map(d => d.deal_id)} strategy={verticalListSortingStrategy}>
                   <div className="space-y-1.5 min-h-[80px]">
@@ -142,7 +142,7 @@ export function DealsAIPage() {
                       <SortableDealCard key={deal.deal_id} deal={deal} staleness={stalenessMap.get(deal.deal_id)} />
                     ))}
                     {col.deals.length === 0 && (
-                      <div className="rounded border border-dashed border-zinc-200 py-8 text-center text-[10px] text-zinc-400">No deals</div>
+                      <div className="rounded border border-dashed border-border py-8 text-center text-[10px] text-text-faint">No deals</div>
                     )}
                   </div>
                 </SortableContext>

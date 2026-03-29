@@ -9,7 +9,7 @@ function ringColor(score: number): string {
 function trendArrow(trend: TrendDirection) {
   if (trend === 'Improving') return <span className="text-emerald-500 text-sm font-bold">↑</span>
   if (trend === 'Declining') return <span className="text-red-500 text-sm font-bold">↓</span>
-  return <span className="text-zinc-400 text-sm">→</span>
+  return <span className="text-text-faint text-sm">→</span>
 }
 
 interface ScoreRingProps {
@@ -40,11 +40,11 @@ export function ScoreRing({ label, score, trend }: ScoreRingProps) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-xl font-bold text-zinc-900 leading-none">{score}%</span>
+          <span className="text-xl font-bold text-text-primary leading-none">{score}%</span>
         </div>
       </div>
       <div className="mt-1.5 flex items-center gap-1">
-        <span className="text-[11px] text-zinc-400 uppercase tracking-wider">{label}</span>
+        <span className="text-[11px] text-text-faint uppercase tracking-wider">{label}</span>
         {trendArrow(trend)}
       </div>
     </div>

@@ -50,21 +50,21 @@ export function BenchmarksPage() {
   }, [data])
 
   if (loading) return <Spinner />
-  if (!data) return <p className="text-sm text-zinc-400">Failed to load benchmarks</p>
+  if (!data) return <p className="text-sm text-text-faint">Failed to load benchmarks</p>
 
   return (
     <div>
       <div className="mb-5">
         <h2 className="text-xl font-bold text-[#1A3C34]">Team Benchmarks</h2>
-        <p className="text-xs text-zinc-400 mt-0.5">Performance trends over time — who's improving, who's plateauing</p>
+        <p className="text-xs text-text-faint mt-0.5">Performance trends over time — who's improving, who's plateauing</p>
       </div>
 
       {/* Rep Score Trends */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm mb-5">
-        <h4 className="text-sm font-bold text-zinc-800 mb-1">Weekly Score Trends</h4>
-        <p className="text-[10px] text-zinc-400 mb-3">Average call score per rep by week</p>
+      <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm mb-5">
+        <h4 className="text-sm font-bold text-text-primary mb-1">Weekly Score Trends</h4>
+        <p className="text-[10px] text-text-faint mb-3">Average call score per rep by week</p>
         {repChartData.length === 0 ? (
-          <p className="text-xs text-zinc-400 text-center py-12">No trend data available</p>
+          <p className="text-xs text-text-faint text-center py-12">No trend data available</p>
         ) : (
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={repChartData}>
@@ -83,11 +83,11 @@ export function BenchmarksPage() {
       </div>
 
       {/* Grade Distribution Over Time */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm mb-5">
-        <h4 className="text-sm font-bold text-zinc-800 mb-1">Grade Distribution Over Time</h4>
-        <p className="text-[10px] text-zinc-400 mb-3">Monthly breakdown — are we trending toward more A/B grades?</p>
+      <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm mb-5">
+        <h4 className="text-sm font-bold text-text-primary mb-1">Grade Distribution Over Time</h4>
+        <p className="text-[10px] text-text-faint mb-3">Monthly breakdown — are we trending toward more A/B grades?</p>
         {data.monthlyGrades.length === 0 ? (
-          <p className="text-xs text-zinc-400 text-center py-12">No grade data available</p>
+          <p className="text-xs text-text-faint text-center py-12">No grade data available</p>
         ) : (
         <ResponsiveContainer width="100%" height={250}>
           <BarChart data={data.monthlyGrades}>
@@ -107,19 +107,19 @@ export function BenchmarksPage() {
       </div>
 
       {/* Category Performance Heatmap */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <h4 className="text-sm font-bold text-zinc-800 mb-1">Category Performance by Rep</h4>
-        <p className="text-[10px] text-zinc-400 mb-3">Average score per scoring category — find systematic weaknesses</p>
+      <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+        <h4 className="text-sm font-bold text-text-primary mb-1">Category Performance by Rep</h4>
+        <p className="text-[10px] text-text-faint mb-3">Average score per scoring category — find systematic weaknesses</p>
         {data.categoryBreakdown.length === 0 ? (
-          <p className="text-xs text-zinc-400">No category data available</p>
+          <p className="text-xs text-text-faint">No category data available</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-zinc-100">
-                  <th className="text-left px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase">Category</th>
+                <tr className="border-b border-border-muted">
+                  <th className="text-left px-3 py-2 text-[10px] font-semibold text-text-faint uppercase">Category</th>
                   {data.categoryBreakdown.map(r => (
-                    <th key={r.rep} className="text-center px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase">{r.rep}</th>
+                    <th key={r.rep} className="text-center px-3 py-2 text-[10px] font-semibold text-text-faint uppercase">{r.rep}</th>
                   ))}
                 </tr>
               </thead>
@@ -128,8 +128,8 @@ export function BenchmarksPage() {
                 {(() => {
                   const allCats = [...new Set(data.categoryBreakdown.flatMap(r => r.categories.map(c => c.category)))]
                   return allCats.map(cat => (
-                    <tr key={cat} className="border-b border-zinc-50">
-                      <td className="px-3 py-2 text-zinc-700 font-medium">{cat}</td>
+                    <tr key={cat} className="border-b border-border-muted">
+                      <td className="px-3 py-2 text-text-secondary font-medium">{cat}</td>
                       {data.categoryBreakdown.map(r => {
                         const val = r.categories.find(c => c.category === cat)?.avgScore
                         const color = val === undefined ? '' : val >= 75 ? 'bg-emerald-100 text-emerald-800' : val >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
@@ -138,7 +138,7 @@ export function BenchmarksPage() {
                             {val !== undefined ? (
                               <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${color}`}>{val}%</span>
                             ) : (
-                              <span className="text-zinc-300">\u2014</span>
+                              <span className="text-text-faint">\u2014</span>
                             )}
                           </td>
                         )

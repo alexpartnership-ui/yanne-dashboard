@@ -18,13 +18,13 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, onChange }: FilterBarProps) {
-  const selectClass = 'rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 focus:border-yanne focus:outline-none shadow-sm'
+  const selectClass = 'rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-sm text-text-secondary focus:border-yanne focus:outline-none shadow-sm'
   const activeDateRange = filters.dateRange ?? 'all'
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* Date quick filters */}
-      <div className="flex rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
         {dateOptions.map(opt => (
           <button
             key={opt.value}
@@ -32,7 +32,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
               activeDateRange === opt.value
                 ? 'bg-yanne text-white'
-                : 'text-zinc-500 hover:bg-zinc-50'
+                : 'text-text-muted hover:bg-surface-raised'
             }`}
           >
             {opt.label}

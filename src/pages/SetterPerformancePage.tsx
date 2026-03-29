@@ -48,7 +48,7 @@ export function SetterPerformancePage() {
 
   if (loading) return <Spinner />
   if (error) return <p className="text-sm text-red-600">Error: {error}</p>
-  if (!data) return <p className="text-sm text-zinc-400">No data</p>
+  if (!data) return <p className="text-sm text-text-faint">No data</p>
 
   const setters = Object.entries(data.bySetter)
   const totalBookings = setters.reduce((s, [, v]) => s + v.totalBookings, 0)
@@ -66,7 +66,7 @@ export function SetterPerformancePage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-zinc-900">Setter Performance</h2>
+      <h2 className="mb-6 text-2xl font-bold text-text-primary">Setter Performance</h2>
 
       {/* Top metrics */}
       <div className="mb-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -78,11 +78,11 @@ export function SetterPerformancePage() {
       </div>
 
       {/* Bookings per day chart */}
-      <div className="mb-6 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-zinc-700 mb-3">Bookings Per Day (30d)</h3>
+      <div className="mb-6 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+        <h3 className="text-sm font-semibold text-text-secondary mb-3">Bookings Per Day (30d)</h3>
         <div className="h-64">
           {chartData.length === 0 ? (
-            <p className="text-xs text-zinc-400 text-center pt-24">No data for this period</p>
+            <p className="text-xs text-text-faint text-center pt-24">No data for this period</p>
           ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
@@ -117,10 +117,10 @@ export function SetterPerformancePage() {
             const avgFollowups = s.days > 0 ? Math.round(s.totalFollowups / s.days) : 0
             const color = getSetterColor(name, i)
             return (
-              <div key={name} className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm" style={{ borderLeftColor: color, borderLeftWidth: 4 }}>
+              <div key={name} className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm" style={{ borderLeftColor: color, borderLeftWidth: 4 }}>
                 <div className="flex items-baseline justify-between mb-4">
-                  <h3 className="text-lg font-bold text-zinc-900">{name}</h3>
-                  <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-500">
+                  <h3 className="text-lg font-bold text-text-primary">{name}</h3>
+                  <span className="rounded-full bg-surface-overlay px-2.5 py-0.5 text-xs font-medium text-text-muted">
                     {s.days} days reported
                   </span>
                 </div>
@@ -138,22 +138,22 @@ export function SetterPerformancePage() {
                     <div className="text-2xl font-bold text-violet-700">{s.totalFollowups}</div>
                     <div className="text-[10px] text-violet-600">Follow-ups Sent</div>
                   </div>
-                  <div className="rounded-lg bg-zinc-50 p-3">
-                    <div className="text-2xl font-bold text-zinc-700">{avgFollowups}</div>
-                    <div className="text-[10px] text-zinc-500">Avg FU / Day</div>
+                  <div className="rounded-lg bg-surface-raised p-3">
+                    <div className="text-2xl font-bold text-text-secondary">{avgFollowups}</div>
+                    <div className="text-[10px] text-text-muted">Avg FU / Day</div>
                   </div>
                 </div>
 
                 {/* Last 5 days mini table */}
-                <div className="mt-4 pt-3 border-t border-zinc-100">
-                  <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Recent Days</div>
+                <div className="mt-4 pt-3 border-t border-border-muted">
+                  <div className="text-[10px] font-semibold text-text-faint uppercase tracking-wider mb-1.5">Recent Days</div>
                   <div className="space-y-1">
                     {s.dailyData.slice(-5).reverse().map(d => (
                       <div key={d.date} className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">{new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <span className="text-text-muted">{new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                         <div className="flex gap-3">
                           <span className="text-emerald-600 font-semibold">{d.bookings} booked</span>
-                          <span className="text-zinc-400">{d.followups} FU</span>
+                          <span className="text-text-faint">{d.followups} FU</span>
                         </div>
                       </div>
                     ))}

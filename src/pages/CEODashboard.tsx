@@ -33,7 +33,7 @@ function NotifySlackButton() {
     <button
       onClick={notify}
       disabled={sending}
-      className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+      className="rounded-lg border border-red-200 bg-surface-raised px-2.5 py-1 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
     >
       {sending ? 'Sending...' : 'Notify Slack'}
     </button>
@@ -90,30 +90,30 @@ function TargetsModal({ open, onClose, onSaved }: { open: boolean; onClose: () =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface-raised rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-zinc-900">Edit Scorecard Targets</h3>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 text-xl">&times;</button>
+          <h3 className="text-lg font-bold text-text-primary">Edit Scorecard Targets</h3>
+          <button onClick={onClose} className="text-text-faint hover:text-text-muted text-xl">&times;</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {fields.map(f => (
             <div key={f.key}>
-              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">{f.label}</label>
+              <label className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">{f.label}</label>
               <div className="flex items-center gap-1 mt-0.5">
-                {f.prefix && <span className="text-xs text-zinc-400">{f.prefix}</span>}
+                {f.prefix && <span className="text-xs text-text-faint">{f.prefix}</span>}
                 <input
                   type="number"
                   value={targets[f.key] ?? ''}
                   onChange={e => setTargets(prev => ({ ...prev, [f.key]: parseFloat(e.target.value) || 0 }))}
-                  className="w-full rounded border border-zinc-200 px-2 py-1.5 text-sm text-zinc-800 focus:border-yanne focus:outline-none"
+                  className="w-full rounded border border-border px-2 py-1.5 text-sm text-text-primary focus:border-yanne focus:outline-none"
                 />
-                {f.suffix && <span className="text-xs text-zinc-400">{f.suffix}</span>}
+                {f.suffix && <span className="text-xs text-text-faint">{f.suffix}</span>}
               </div>
             </div>
           ))}
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-2 text-xs text-zinc-600 hover:bg-zinc-50">Cancel</button>
+          <button onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-xs text-text-muted hover:bg-surface-raised">Cancel</button>
           <button onClick={save} disabled={saving} className="rounded-lg bg-yanne px-4 py-2 text-xs font-medium text-white hover:bg-yanne/90 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Targets'}
           </button>
@@ -158,7 +158,7 @@ function StatusDot({ status }: { status: 'green' | 'yellow' | 'red' | 'gray' }) 
 function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
   if (trend === 'up') return <span className="text-emerald-500 text-[10px] font-bold ml-1">{'\u2191'}</span>
   if (trend === 'down') return <span className="text-red-500 text-[10px] font-bold ml-1">{'\u2193'}</span>
-  return <span className="text-zinc-300 text-[10px] ml-1">{'\u2192'}</span>
+  return <span className="text-text-faint text-[10px] ml-1">{'\u2192'}</span>
 }
 
 // Compute trend from week values
@@ -175,7 +175,7 @@ function computeTrend(row: SheetRow): 'up' | 'down' | 'flat' {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-xl border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+    <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
       <div className="skeleton h-4 w-48 mb-3" />
       <div className="space-y-2">
         {[1,2,3].map(i => <div key={i} className="skeleton h-3 w-full" />)}
@@ -208,8 +208,8 @@ function EditableCell({
 
   if (!editable || !colLetter) {
     return (
-      <td className="py-1.5 px-2 text-xs tabular-nums text-zinc-600 text-right bg-sky-50/40">
-        {value || <span className="text-zinc-300">&mdash;</span>}
+      <td className="py-1.5 px-2 text-xs tabular-nums text-text-muted text-right bg-sky-50/40">
+        {value || <span className="text-text-faint">&mdash;</span>}
       </td>
     )
   }
@@ -237,7 +237,7 @@ function EditableCell({
           onChange={e => setVal(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save() }}
-          className="w-full bg-white border-2 border-yanne rounded px-1.5 py-0.5 text-xs outline-none tabular-nums"
+          className="w-full bg-surface-raised border-2 border-yanne rounded px-1.5 py-0.5 text-xs outline-none tabular-nums"
         />
       </td>
     )
@@ -246,10 +246,10 @@ function EditableCell({
   return (
     <td
       onClick={() => { setEditing(true); setVal(String(value ?? '')) }}
-      className="py-1.5 px-2 text-xs tabular-nums text-zinc-800 text-right cursor-pointer hover:bg-amber-50 transition-colors"
+      className="py-1.5 px-2 text-xs tabular-nums text-text-primary text-right cursor-pointer hover:bg-amber-50 transition-colors"
       title="Click to edit"
     >
-      {value || <span className="text-zinc-300">&mdash;</span>}
+      {value || <span className="text-text-faint">&mdash;</span>}
     </td>
   )
 }
@@ -336,7 +336,7 @@ export function CEODashboard() {
       </div>
     )
   }
-  if (!data) return <p className="text-sm text-zinc-400">Failed to load scorecard</p>
+  if (!data) return <p className="text-sm text-text-faint">Failed to load scorecard</p>
 
   const revPct = data.revenueTarget > 0 ? Math.round((data.revenueCollected / data.revenueTarget) * 100) : 0
   const revBarColor = revPct >= 70 ? 'bg-emerald-500' : revPct >= 40 ? 'bg-amber-400' : 'bg-red-500'
@@ -366,13 +366,13 @@ export function CEODashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-zinc-900">Growth Scorecard</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">Week of {data.weekRange}</p>
+          <h2 className="text-2xl font-bold text-text-primary">Growth Scorecard</h2>
+          <p className="text-xs text-text-faint mt-0.5">Week of {data.weekRange}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <span className="text-[10px] text-zinc-400">Last refreshed: {data.lastRefreshed}</span>
-          <button onClick={saveSnapshot} className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm">Save Snapshot</button>
-          <button onClick={() => setShowTargets(true)} className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm">Edit Targets</button>
+          <span className="text-[10px] text-text-faint">Last refreshed: {data.lastRefreshed}</span>
+          <button onClick={saveSnapshot} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm">Save Snapshot</button>
+          <button onClick={() => setShowTargets(true)} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm">Edit Targets</button>
           <button
             onClick={async () => {
               const r = await apiFetch('/api/digest/send', { method: 'POST' })
@@ -381,7 +381,7 @@ export function CEODashboard() {
             }}
             className="rounded-lg bg-yanne px-3 py-1.5 text-xs font-medium text-white hover:bg-yanne/90 shadow-sm"
           >Send Digest</button>
-          <button onClick={syncNow} disabled={syncing} className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm disabled:opacity-50">
+          <button onClick={syncNow} disabled={syncing} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm disabled:opacity-50">
             {syncing ? 'Syncing...' : 'Sync Now'}
           </button>
         </div>
@@ -389,23 +389,23 @@ export function CEODashboard() {
       </div>
 
       {/* ── NORTH STAR ─────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">Revenue Target</div>
-        <div className="text-4xl font-bold text-zinc-900 tabular-nums">
+      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-text-faint mb-2">Revenue Target</div>
+        <div className="text-4xl font-bold text-text-primary tabular-nums">
           ${(data.revenueCollected / 1000).toFixed(0)}K
-          <span className="text-lg font-normal text-zinc-400 ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
+          <span className="text-lg font-normal text-text-faint ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
         </div>
         <div className="mt-3 mx-auto max-w-xl">
-          <div className="h-2.5 rounded-full bg-zinc-100 overflow-hidden">
+          <div className="h-2.5 rounded-full bg-surface-overlay overflow-hidden">
             <div className={`h-full rounded-full ${revBarColor} transition-all`} style={{ width: `${Math.min(revPct, 100)}%` }} />
           </div>
-          <div className="text-xs text-zinc-500 mt-1 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
+          <div className="text-xs text-text-muted mt-1 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
         </div>
       </div>
 
       {/* ── FUNNEL FLOW ──────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 mb-3">Pipeline Flow</div>
+      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint mb-3">Pipeline Flow</div>
         <div className="flex items-center gap-0 overflow-x-auto">
           {data.funnel.map((stage, i) => {
             const pct = stage.target > 0 ? stage.value / stage.target : 0
@@ -418,12 +418,12 @@ export function CEODashboard() {
                   <div className={`text-lg font-bold tabular-nums ${textColor}`}>
                     {stage.label === 'Cash' ? `$${(stage.value / 1000).toFixed(0)}K` : stage.value >= 1000 ? `${(stage.value / 1000).toFixed(0)}K` : stage.value}
                   </div>
-                  <div className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5 font-medium">{stage.label}</div>
-                  <div className="text-[8px] text-zinc-400 tabular-nums">tgt: {stage.target >= 1000 ? `${(stage.target / 1000).toFixed(0)}K` : stage.target}</div>
+                  <div className="text-[9px] text-text-muted uppercase tracking-wider mt-0.5 font-medium">{stage.label}</div>
+                  <div className="text-[8px] text-text-faint tabular-nums">tgt: {stage.target >= 1000 ? `${(stage.target / 1000).toFixed(0)}K` : stage.target}</div>
                 </div>
                 {i < data.funnel.length - 1 && (
                   <div className="flex flex-col items-center mx-0.5 shrink-0">
-                    <svg className="w-5 h-5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <svg className="w-5 h-5 text-text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                     </svg>
                     {stage.conversionRate !== null && (
@@ -442,11 +442,11 @@ export function CEODashboard() {
       </div>
 
       {/* ── SHEET TABLE ────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b-2 border-zinc-200 bg-zinc-50">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b-2 border-border bg-surface-raised">
                 <th className="text-left py-2.5 px-4 w-[260px]">Metric</th>
                 <th className="text-right py-2.5 px-2 w-[55px]">W1</th>
                 <th className="text-right py-2.5 px-2 w-[55px]">W2</th>
@@ -478,11 +478,11 @@ export function CEODashboard() {
 
                 const status = computeStatus(row.monthlyActual, row.monthlyTarget)
                 const trend = computeTrend(row)
-                const rowBg = status === 'red' ? 'bg-red-50/40' : status === 'yellow' ? 'bg-amber-50/30' : idx % 2 === 0 ? 'bg-white' : 'bg-zinc-50/50'
+                const rowBg = status === 'red' ? 'bg-red-50/40' : status === 'yellow' ? 'bg-amber-50/30' : idx % 2 === 0 ? 'bg-surface-raised' : 'bg-surface-raised/50'
 
                 return (
-                  <tr key={`row-${idx}`} className={`border-b border-zinc-100 hover:bg-zinc-100/50 transition-colors ${rowBg}`}>
-                    <td className="py-1.5 px-4 text-xs text-zinc-800 font-medium">{row.metric}</td>
+                  <tr key={`row-${idx}`} className={`border-b border-border-muted hover:bg-surface-overlay/50 transition-colors ${rowBg}`}>
+                    <td className="py-1.5 px-4 text-xs text-text-primary font-medium">{row.metric}</td>
                     <EditableCell value={row.week1} rowIndex={row.rowIndex} column="week1" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week1', v)} />
                     <EditableCell value={row.week2} rowIndex={row.rowIndex} column="week2" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week2', v)} />
                     <EditableCell value={row.week3} rowIndex={row.rowIndex} column="week3" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week3', v)} />
@@ -495,7 +495,7 @@ export function CEODashboard() {
                     <td className="py-1.5 px-1 text-center">
                       <TrendArrow trend={trend} />
                     </td>
-                    <td className="py-1.5 px-2 text-[10px] text-zinc-400">{row.owner}</td>
+                    <td className="py-1.5 px-2 text-[10px] text-text-faint">{row.owner}</td>
                   </tr>
                 )
               })}
@@ -506,17 +506,17 @@ export function CEODashboard() {
 
       {/* ── REP LEADERBOARD ──────────────────────── */}
       {data.repLeaderboard.length > 0 && (
-        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-zinc-700">Rep Leaderboard (This Week)</h3>
-            <div className="flex gap-4 text-[10px] text-zinc-400">
-              <span>Top Theme: <span className="text-zinc-600 font-medium">{data.topCoachingTheme}</span></span>
-              <span>Weakest: <span className="text-zinc-600 font-medium">{data.worstCategory}</span></span>
+            <h3 className="text-sm font-bold text-text-secondary">Rep Leaderboard (This Week)</h3>
+            <div className="flex gap-4 text-[10px] text-text-faint">
+              <span>Top Theme: <span className="text-text-muted font-medium">{data.topCoachingTheme}</span></span>
+              <span>Weakest: <span className="text-text-muted font-medium">{data.worstCategory}</span></span>
             </div>
           </div>
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-200">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
                 <th className="text-left pb-2 w-8">#</th>
                 <th className="text-left pb-2">Rep</th>
                 <th className="text-right pb-2">Calls</th>
@@ -529,12 +529,12 @@ export function CEODashboard() {
                 const medal = i === 0 ? '\uD83E\uDD47' : i === 1 ? '\uD83E\uDD48' : i === 2 ? '\uD83E\uDD49' : `#${i + 1}`
                 const bg = r.avgScore >= 70 ? 'bg-emerald-50/60' : r.avgScore >= 55 ? 'bg-amber-50/60' : 'bg-red-50/60'
                 return (
-                  <tr key={r.name} className={`border-b border-zinc-100 ${bg}`}>
+                  <tr key={r.name} className={`border-b border-border-muted ${bg}`}>
                     <td className="py-2 text-sm">{medal}</td>
-                    <td className="py-2 text-xs font-semibold text-zinc-800">{r.name}</td>
-                    <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{r.calls}</td>
+                    <td className="py-2 text-xs font-semibold text-text-primary">{r.name}</td>
+                    <td className="py-2 text-xs text-text-muted text-right tabular-nums">{r.calls}</td>
                     <td className={`py-2 text-xs font-bold text-right tabular-nums ${r.avgScore >= 70 ? 'text-emerald-600' : r.avgScore >= 55 ? 'text-amber-600' : 'text-red-600'}`}>{r.avgScore}%</td>
-                    <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{r.dealsAdvanced}</td>
+                    <td className="py-2 text-xs text-text-muted text-right tabular-nums">{r.dealsAdvanced}</td>
                   </tr>
                 )
               })}
@@ -545,11 +545,11 @@ export function CEODashboard() {
 
       {/* ── SETTER BREAKDOWN ──────────────────────── */}
       {data.setterBreakdown.length > 0 && (
-        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h3 className="text-sm font-bold text-zinc-700 mb-3">Setter Breakdown</h3>
+        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h3 className="text-sm font-bold text-text-secondary mb-3">Setter Breakdown</h3>
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-200">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
                 <th className="text-left pb-2">Setter</th>
                 <th className="text-right pb-2">Assigned</th>
                 <th className="text-right pb-2">Meetings</th>
@@ -558,11 +558,11 @@ export function CEODashboard() {
             </thead>
             <tbody>
               {data.setterBreakdown.map(s => (
-                <tr key={s.name} className="border-b border-zinc-100">
-                  <td className="py-2 text-xs font-medium text-zinc-800">{s.name}</td>
-                  <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.assigned}</td>
-                  <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.meetings}</td>
-                  <td className="py-2 text-xs text-zinc-600 text-right tabular-nums">{s.conversionRate}%</td>
+                <tr key={s.name} className="border-b border-border-muted">
+                  <td className="py-2 text-xs font-medium text-text-primary">{s.name}</td>
+                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.assigned}</td>
+                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.meetings}</td>
+                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.conversionRate}%</td>
                 </tr>
               ))}
             </tbody>
@@ -586,8 +586,8 @@ export function CEODashboard() {
       )}
 
       {/* ── ALERTS ─────────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <h3 className="text-sm font-bold text-zinc-700 mb-3">Alerts</h3>
+      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <h3 className="text-sm font-bold text-text-secondary mb-3">Alerts</h3>
         <div className="space-y-3">
           {data.alerts.filter(a => a.level === 'critical').length > 0 && (
             <div>
@@ -627,26 +627,26 @@ export function CEODashboard() {
 
       {/* ── ONBOARDING PROGRESS ─────────────────────── */}
       {data.onboardingProjects.length > 0 && (
-        <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-zinc-700">Client Onboarding</h3>
-            <span className="text-[10px] text-zinc-400">{data.onboardingProjects.length} active projects</span>
+            <h3 className="text-sm font-bold text-text-secondary">Client Onboarding</h3>
+            <span className="text-[10px] text-text-faint">{data.onboardingProjects.length} active projects</span>
           </div>
           <div className="space-y-2">
             {data.onboardingProjects.map(p => (
               <div key={p.name} className="flex items-center gap-3 py-1.5">
-                <span className="text-xs font-medium text-zinc-800 w-32 truncate" title={p.name}>{p.name}</span>
-                <div className="flex-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                <span className="text-xs font-medium text-text-primary w-32 truncate" title={p.name}>{p.name}</span>
+                <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${p.completionRate >= 80 ? 'bg-emerald-500' : p.completionRate >= 40 ? 'bg-blue-500' : 'bg-amber-500'}`}
                     style={{ width: `${p.completionRate}%` }}
                   />
                 </div>
-                <span className="text-xs font-semibold text-zinc-700 w-10 text-right">{p.completionRate}%</span>
+                <span className="text-xs font-semibold text-text-secondary w-10 text-right">{p.completionRate}%</span>
                 <div className="flex gap-1">
                   {p.groups.map(g => (
                     <div key={g.title} className="w-6 text-center" title={`${g.title}: ${g.done}/${g.total}`}>
-                      <div className={`text-[9px] font-bold ${g.done === g.total ? 'text-emerald-600' : g.done > 0 ? 'text-blue-600' : 'text-zinc-400'}`}>
+                      <div className={`text-[9px] font-bold ${g.done === g.total ? 'text-emerald-600' : g.done > 0 ? 'text-blue-600' : 'text-text-faint'}`}>
                         {g.done}/{g.total}
                       </div>
                     </div>
@@ -672,29 +672,29 @@ export function CEODashboard() {
             {data.overdueTasks.slice(0, 8).map((t, i) => (
               <div key={i} className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-800">{t.projectName}</span>
-                  <span className="text-[10px] text-zinc-400">{t.group}</span>
-                  <span className="text-xs text-zinc-600">{t.taskName}</span>
+                  <span className="text-xs font-medium text-text-primary">{t.projectName}</span>
+                  <span className="text-[10px] text-text-faint">{t.group}</span>
+                  <span className="text-xs text-text-muted">{t.taskName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-400">{t.owner}</span>
+                  <span className="text-[10px] text-text-faint">{t.owner}</span>
                   <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{t.daysOverdue}d</span>
                 </div>
               </div>
             ))}
             {data.overdueTasks.length > 8 && (
-              <p className="text-[10px] text-zinc-400 pt-1">...and {data.overdueTasks.length - 8} more</p>
+              <p className="text-[10px] text-text-faint pt-1">...and {data.overdueTasks.length - 8} more</p>
             )}
           </div>
         </div>
       )}
 
       {/* ── WEEKLY COMPARISON ──────────────────────── */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <h3 className="text-sm font-bold text-zinc-700 mb-3">This Week vs Last Week</h3>
+      <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <h3 className="text-sm font-bold text-text-secondary mb-3">This Week vs Last Week</h3>
         <table className="w-full">
           <thead>
-            <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 border-b border-zinc-200">
+            <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
               <th className="text-left pb-2">Metric</th>
               <th className="text-right pb-2">This Week</th>
               <th className="text-right pb-2">Last Week</th>
@@ -703,13 +703,13 @@ export function CEODashboard() {
           </thead>
           <tbody>
             {data.weeklyComparison.map(row => (
-              <tr key={row.metric} className="border-b border-zinc-100">
-                <td className="py-2 text-xs text-zinc-700">{row.metric}</td>
-                <td className="py-2 text-xs font-semibold text-zinc-900 text-right tabular-nums">{row.thisWeek}</td>
-                <td className="py-2 text-xs text-zinc-500 text-right tabular-nums">{row.lastWeek}</td>
+              <tr key={row.metric} className="border-b border-border-muted">
+                <td className="py-2 text-xs text-text-secondary">{row.metric}</td>
+                <td className="py-2 text-xs font-semibold text-text-primary text-right tabular-nums">{row.thisWeek}</td>
+                <td className="py-2 text-xs text-text-muted text-right tabular-nums">{row.lastWeek}</td>
                 <td className={`py-2 text-xs font-semibold text-right tabular-nums ${
                   String(row.change).startsWith('+') ? 'text-emerald-600' :
-                  String(row.change).startsWith('-') ? 'text-red-600' : 'text-zinc-400'
+                  String(row.change).startsWith('-') ? 'text-red-600' : 'text-text-faint'
                 }`}>{row.change}</td>
               </tr>
             ))}

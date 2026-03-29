@@ -113,7 +113,7 @@ export function ChatPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
                 </svg>
               </div>
-              <p className="text-sm text-zinc-500">Ask anything about sales, campaigns, clients, or revenue</p>
+              <p className="text-sm text-text-muted">Ask anything about sales, campaigns, clients, or revenue</p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {[
                   'How did the team do this week?',
@@ -126,7 +126,7 @@ export function ChatPage() {
                   <button
                     key={q}
                     onClick={() => { setInput(q); setTimeout(() => inputRef.current?.focus(), 50) }}
-                    className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-600 hover:border-yanne-light hover:bg-yanne-light/10 transition-colors"
+                    className="rounded-full border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-muted hover:border-yanne-light hover:bg-yanne-light/10 transition-colors"
                   >
                     {q}
                   </button>
@@ -142,13 +142,13 @@ export function ChatPage() {
               className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
                   ? 'bg-yanne text-white rounded-br-md'
-                  : 'bg-zinc-100 text-zinc-800 rounded-bl-md'
+                  : 'bg-surface-overlay text-text-primary rounded-bl-md'
               }`}
             >
               {msg.role === 'assistant' ? (
                 <div
                   className="prose prose-sm prose-zinc max-w-none [&_ul]:my-1 [&_li]:my-0"
-                  dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.content || (streaming && i === messages.length - 1 ? '<span class="animate-pulse text-zinc-400">Thinking...</span>' : '')) }}
+                  dangerouslySetInnerHTML={{ __html: parseMarkdown(msg.content || (streaming && i === messages.length - 1 ? '<span class="animate-pulse text-text-faint">Thinking...</span>' : '')) }}
                 />
               ) : (
                 msg.content
@@ -160,7 +160,7 @@ export function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-zinc-200 bg-white p-4">
+      <div className="border-t border-border bg-surface-raised p-4">
         <form
           onSubmit={e => { e.preventDefault(); send() }}
           className="flex gap-2"
@@ -171,7 +171,7 @@ export function ChatPage() {
             value={input}
             onChange={e => setInput(e.target.value)}
             placeholder="Ask about sales, clients, campaigns, revenue..."
-            className="flex-1 rounded-lg border border-zinc-200 px-4 py-2.5 text-sm focus:border-yanne focus:outline-none"
+            className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm focus:border-yanne focus:outline-none"
             disabled={streaming}
             autoFocus
           />

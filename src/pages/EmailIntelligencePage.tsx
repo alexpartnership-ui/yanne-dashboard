@@ -80,18 +80,18 @@ export function EmailIntelligencePage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-zinc-900">Email Intelligence</h2>
+        <h2 className="text-2xl font-bold text-text-primary">Email Intelligence</h2>
         <div className="flex items-center gap-2">
           {/* Tabs */}
-          <div className="flex rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden mr-2">
-            <button onClick={() => setTab('overview')} className={`px-3 py-1.5 text-xs font-medium ${tab === 'overview' ? 'bg-yanne text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}>Daily Overview</button>
-            <button onClick={() => setTab('campaigns')} className={`px-3 py-1.5 text-xs font-medium ${tab === 'campaigns' ? 'bg-yanne text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}>Campaigns</button>
+          <div className="flex rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden mr-2">
+            <button onClick={() => setTab('overview')} className={`px-3 py-1.5 text-xs font-medium ${tab === 'overview' ? 'bg-yanne text-white' : 'text-text-muted hover:bg-surface-raised'}`}>Daily Overview</button>
+            <button onClick={() => setTab('campaigns')} className={`px-3 py-1.5 text-xs font-medium ${tab === 'campaigns' ? 'bg-yanne text-white' : 'text-text-muted hover:bg-surface-raised'}`}>Campaigns</button>
           </div>
           {/* Time range */}
-          <div className="flex rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
             {([['7d', '7D'], ['14d', '14D'], ['30d', '30D'], ['60d', '60D'], ['90d', '90D'], ['all', 'All']] as [TimeRange, string][]).map(([val, label]) => (
               <button key={val} onClick={() => setTimeRange(val)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${timeRange === val ? 'bg-yanne text-white' : 'text-zinc-500 hover:bg-zinc-50'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${timeRange === val ? 'bg-yanne text-white' : 'text-text-muted hover:bg-surface-raised'}`}>
                 {label}
               </button>
             ))}
@@ -115,8 +115,8 @@ export function EmailIntelligencePage() {
           {/* Charts */}
           <div className="mb-5 grid grid-cols-2 gap-4">
             {/* Volume line chart */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-zinc-700 mb-3">Daily Volume</h3>
+            <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-text-secondary mb-3">Daily Volume</h3>
               <div className="h-56">
                 {lineData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -133,13 +133,13 @@ export function EmailIntelligencePage() {
                       <Line yAxisId="right" type="monotone" dataKey="Bounced" stroke="#EF4444" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
-                ) : <p className="text-xs text-zinc-400 text-center pt-20">No data for this period</p>}
+                ) : <p className="text-xs text-text-faint text-center pt-20">No data for this period</p>}
               </div>
             </div>
 
             {/* Rate trend */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-zinc-700 mb-3">Rate Trends</h3>
+            <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-text-secondary mb-3">Rate Trends</h3>
               <div className="h-56">
                 {rateTrend.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -153,17 +153,17 @@ export function EmailIntelligencePage() {
                       <Line type="monotone" dataKey="Bounce Rate" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : <p className="text-xs text-zinc-400 text-center pt-20">No data</p>}
+                ) : <p className="text-xs text-text-faint text-center pt-20">No data</p>}
               </div>
             </div>
           </div>
 
           {/* Daily breakdown table */}
-          <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
             <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
               <table className="w-full">
-                <thead className="bg-zinc-50 sticky top-0">
-                  <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                <thead className="bg-surface-raised sticky top-0">
+                  <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
                     <th className="text-left px-3 py-2">Date</th>
                     <th className="text-right px-3 py-2">Sent</th>
                     <th className="text-right px-3 py-2">Contacted</th>
@@ -178,17 +178,17 @@ export function EmailIntelligencePage() {
                 </thead>
                 <tbody className="divide-y divide-zinc-50">
                   {[...(slackData?.dailyReports ?? [])].reverse().map(r => (
-                    <tr key={r.date} className="hover:bg-zinc-50">
-                      <td className="px-3 py-2 text-xs font-medium text-zinc-800">{new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</td>
-                      <td className="px-3 py-2 text-xs text-zinc-600 text-right">{r.emailsSent.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-xs text-zinc-600 text-right">{r.peopleContacted.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-xs text-zinc-600 text-right">{r.replies}</td>
+                    <tr key={r.date} className="hover:bg-surface-raised">
+                      <td className="px-3 py-2 text-xs font-medium text-text-primary">{new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</td>
+                      <td className="px-3 py-2 text-xs text-text-muted text-right">{r.emailsSent.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-text-muted text-right">{r.peopleContacted.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-text-muted text-right">{r.replies}</td>
                       <td className={`px-3 py-2 text-xs font-semibold text-right ${rateColor(r.replyRate)}`}>{r.replyRate.toFixed(2)}%</td>
                       <td className="px-3 py-2 text-xs text-emerald-600 text-right font-semibold">{r.interested}</td>
-                      <td className="px-3 py-2 text-xs text-zinc-500 text-right">{r.interestedPct.toFixed(0)}%</td>
-                      <td className="px-3 py-2 text-xs text-zinc-600 text-right">{r.bounced}</td>
-                      <td className={`px-3 py-2 text-xs text-right ${r.bounceRate > 2 ? 'text-red-600 font-semibold' : 'text-zinc-400'}`}>{r.bounceRate.toFixed(2)}%</td>
-                      <td className="px-3 py-2 text-xs text-zinc-400 text-right">{r.activeMailboxes.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-text-muted text-right">{r.interestedPct.toFixed(0)}%</td>
+                      <td className="px-3 py-2 text-xs text-text-muted text-right">{r.bounced}</td>
+                      <td className={`px-3 py-2 text-xs text-right ${r.bounceRate > 2 ? 'text-red-600 font-semibold' : 'text-text-faint'}`}>{r.bounceRate.toFixed(2)}%</td>
+                      <td className="px-3 py-2 text-xs text-text-faint text-right">{r.activeMailboxes.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -203,17 +203,17 @@ export function EmailIntelligencePage() {
         <>
           <div className="mb-4 flex items-center gap-3">
             <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search campaigns..."
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 shadow-sm focus:border-yanne focus:outline-none w-56" />
-            <span className="text-xs text-zinc-400">{filteredCampaigns.length} campaigns (all-time from Bison)</span>
+              className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs text-text-secondary shadow-sm focus:border-yanne focus:outline-none w-56" />
+            <span className="text-xs text-text-faint">{filteredCampaigns.length} campaigns (all-time from Bison)</span>
           </div>
 
           {/* Top campaigns chart */}
-          <div className="mb-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-zinc-700 mb-3">Top 10 by Reply Rate</h3>
+          <div className="mb-5 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-text-secondary mb-3">Top 10 by Reply Rate</h3>
             {(() => {
               const topData = filteredCampaigns.filter(c => c.emails_sent > 100).sort((a, b) => b.reply_rate - a.reply_rate).slice(0, 10)
                 .map(c => ({ name: c.name.length > 30 ? c.name.slice(0, 30) + '...' : c.name, 'Reply %': Math.round(c.reply_rate * 100) / 100 }))
-              if (topData.length === 0) return <p className="text-xs text-zinc-400 text-center py-16">No campaigns with 100+ emails sent</p>
+              if (topData.length === 0) return <p className="text-xs text-text-faint text-center py-16">No campaigns with 100+ emails sent</p>
               return (
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
@@ -231,31 +231,31 @@ export function EmailIntelligencePage() {
           </div>
 
           {/* Campaign table */}
-          <div className="rounded-lg border border-zinc-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-lg border border-border bg-surface-raised shadow-sm overflow-hidden">
             <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
               <table className="w-full">
-                <thead className="bg-zinc-50 sticky top-0">
-                  <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                    <th className="text-left px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('name')}>Campaign{sortArrow('name')}</th>
+                <thead className="bg-surface-raised sticky top-0">
+                  <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint">
+                    <th className="text-left px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('name')}>Campaign{sortArrow('name')}</th>
                     <th className="text-left px-3 py-2">Status</th>
-                    <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('emails_sent')}>Sent{sortArrow('emails_sent')}</th>
-                    <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('replied')}>Replies{sortArrow('replied')}</th>
-                    <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('reply_rate')}>Reply %{sortArrow('reply_rate')}</th>
-                    <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('interested')}>Interested{sortArrow('interested')}</th>
-                    <th className="text-right px-3 py-2 cursor-pointer hover:text-zinc-700" onClick={() => toggleSort('bounce_rate')}>Bounce %{sortArrow('bounce_rate')}</th>
+                    <th className="text-right px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('emails_sent')}>Sent{sortArrow('emails_sent')}</th>
+                    <th className="text-right px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('replied')}>Replies{sortArrow('replied')}</th>
+                    <th className="text-right px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('reply_rate')}>Reply %{sortArrow('reply_rate')}</th>
+                    <th className="text-right px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('interested')}>Interested{sortArrow('interested')}</th>
+                    <th className="text-right px-3 py-2 cursor-pointer hover:text-text-secondary" onClick={() => toggleSort('bounce_rate')}>Bounce %{sortArrow('bounce_rate')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-50">
                   {filteredCampaigns.map(c => (
                     <tr key={c.id} onClick={() => setSelectedCampaign(selectedCampaign?.id === c.id ? null : c)}
-                      className={`hover:bg-zinc-50 cursor-pointer ${selectedCampaign?.id === c.id ? 'bg-yanne/5' : ''}`}>
-                      <td className="px-3 py-2.5 text-sm text-zinc-800 max-w-[300px] truncate">{c.name}</td>
-                      <td className="px-3 py-2.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : c.status === 'completed' ? 'bg-zinc-100 text-zinc-600' : c.status === 'paused' ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-500'}`}>{c.status}</span></td>
-                      <td className="px-3 py-2.5 text-xs text-zinc-600 text-right">{c.emails_sent.toLocaleString()}</td>
-                      <td className="px-3 py-2.5 text-xs text-zinc-600 text-right">{c.replied}</td>
+                      className={`hover:bg-surface-raised cursor-pointer ${selectedCampaign?.id === c.id ? 'bg-yanne/5' : ''}`}>
+                      <td className="px-3 py-2.5 text-sm text-text-primary max-w-[300px] truncate">{c.name}</td>
+                      <td className="px-3 py-2.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : c.status === 'completed' ? 'bg-surface-overlay text-text-muted' : c.status === 'paused' ? 'bg-amber-100 text-amber-700' : 'bg-surface-overlay text-text-muted'}`}>{c.status}</span></td>
+                      <td className="px-3 py-2.5 text-xs text-text-muted text-right">{c.emails_sent.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-xs text-text-muted text-right">{c.replied}</td>
                       <td className={`px-3 py-2.5 text-xs font-semibold text-right ${rateColor(c.reply_rate)}`}>{c.reply_rate.toFixed(2)}%</td>
                       <td className="px-3 py-2.5 text-xs text-emerald-600 text-right font-semibold">{c.interested}</td>
-                      <td className={`px-3 py-2.5 text-xs text-right ${c.bounce_rate > 3 ? 'text-red-600' : 'text-zinc-400'}`}>{c.bounce_rate.toFixed(2)}%</td>
+                      <td className={`px-3 py-2.5 text-xs text-right ${c.bounce_rate > 3 ? 'text-red-600' : 'text-text-faint'}`}>{c.bounce_rate.toFixed(2)}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -266,18 +266,18 @@ export function EmailIntelligencePage() {
           {selectedCampaign && (
             <div className="mt-4 rounded-lg border border-yanne/20 bg-yanne/5 p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-zinc-900">{selectedCampaign.name}</h3>
-                <button onClick={() => setSelectedCampaign(null)} className="text-xs text-zinc-400 hover:text-zinc-600">&times; Close</button>
+                <h3 className="text-sm font-bold text-text-primary">{selectedCampaign.name}</h3>
+                <button onClick={() => setSelectedCampaign(null)} className="text-xs text-text-faint hover:text-text-muted">&times; Close</button>
               </div>
               <div className="grid grid-cols-4 gap-4">
-                <div><div className="text-[10px] text-zinc-500 uppercase">Emails Sent</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.emails_sent.toLocaleString()}</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Replies</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.replied}</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Interested</div><div className="text-lg font-bold text-emerald-600">{selectedCampaign.interested}</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Reply Rate</div><div className={`text-lg font-bold ${rateColor(selectedCampaign.reply_rate)}`}>{selectedCampaign.reply_rate.toFixed(2)}%</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Bounce Rate</div><div className={`text-lg font-bold ${selectedCampaign.bounce_rate > 3 ? 'text-red-600' : 'text-zinc-900'}`}>{selectedCampaign.bounce_rate.toFixed(2)}%</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Total Leads</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.total_leads.toLocaleString()}</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Completion</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.completion_percentage}%</div></div>
-                <div><div className="text-[10px] text-zinc-500 uppercase">Unsubscribed</div><div className="text-lg font-bold text-zinc-900">{selectedCampaign.unsubscribed}</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Emails Sent</div><div className="text-lg font-bold text-text-primary">{selectedCampaign.emails_sent.toLocaleString()}</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Replies</div><div className="text-lg font-bold text-text-primary">{selectedCampaign.replied}</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Interested</div><div className="text-lg font-bold text-emerald-600">{selectedCampaign.interested}</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Reply Rate</div><div className={`text-lg font-bold ${rateColor(selectedCampaign.reply_rate)}`}>{selectedCampaign.reply_rate.toFixed(2)}%</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Bounce Rate</div><div className={`text-lg font-bold ${selectedCampaign.bounce_rate > 3 ? 'text-red-600' : 'text-text-primary'}`}>{selectedCampaign.bounce_rate.toFixed(2)}%</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Total Leads</div><div className="text-lg font-bold text-text-primary">{selectedCampaign.total_leads.toLocaleString()}</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Completion</div><div className="text-lg font-bold text-text-primary">{selectedCampaign.completion_percentage}%</div></div>
+                <div><div className="text-[10px] text-text-muted uppercase">Unsubscribed</div><div className="text-lg font-bold text-text-primary">{selectedCampaign.unsubscribed}</div></div>
               </div>
             </div>
           )}

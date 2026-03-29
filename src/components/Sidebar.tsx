@@ -13,7 +13,7 @@ interface NavSection {
   items: NavItem[]
 }
 
-const lockIcon = <svg className="w-3 h-3 text-yanne-400/40" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+const lockIcon = <svg className="w-3 h-3 text-text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
 
 const settingsSection: NavSection = {
   title: 'Settings',
@@ -50,7 +50,7 @@ const sections: NavSection[] = [
         icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0M12 12.75h.008v.008H12v-.008Z" /></svg>,
       },
       {
-        to: '/deals/ai', label: 'Deals — AI',
+        to: '/deals/ai', label: 'Deals AI',
         icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" /></svg>,
       },
       {
@@ -164,35 +164,38 @@ export function Sidebar() {
   const allSections = isAdmin ? [...sections, settingsSection] : sections
 
   return (
-    <aside className="flex h-screen w-[220px] flex-col bg-yanne-950 border-r border-yanne-800/50">
-      {/* Logo / Monogram */}
-      <div className="px-4 pt-5 pb-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-yanne-500 to-yanne-700 text-[11px] font-bold text-white tracking-tight shadow-sm shadow-yanne-900/50">
+    <aside className="flex h-screen w-[232px] flex-col bg-surface border-r border-border relative">
+      {/* Subtle ambient glow at top */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-yanne-500/5 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Logo / Brand */}
+      <div className="px-5 pt-5 pb-4 relative">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-yanne-500 to-yanne-700 text-[11px] font-bold text-white tracking-tight shadow-lg shadow-yanne-900/50 ring-1 ring-yanne-400/20">
             YC
           </div>
           <div>
-            <div className="text-[13px] font-semibold text-yanne-100 leading-tight tracking-tight">Yanne Capital</div>
-            <div className="text-[9px] font-medium text-gold-400 uppercase tracking-[0.15em]">Intelligence</div>
+            <div className="text-[13px] font-semibold text-text-primary leading-tight tracking-tight">Yanne Capital</div>
+            <div className="text-[9px] font-medium text-gold-400 uppercase tracking-[0.18em] font-data">Intelligence</div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto px-3 scrollbar-hide">
         {allSections.map((section, si) => (
           <div key={section.title}>
-            {si > 0 && <div className="my-2 mx-2 border-t border-yanne-800/30" />}
-            <div className="mb-1 px-2 pt-0.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-yanne-400">{section.title}</span>
+            {si > 0 && <div className="my-2.5 mx-2 border-t border-border" />}
+            <div className="mb-1 px-2 pt-1">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-text-faint">{section.title}</span>
             </div>
-            <nav className="space-y-px">
+            <nav className="space-y-0.5">
               {section.items.map(item =>
                 item.locked ? (
                   <div
                     key={item.to}
-                    className="flex items-center justify-between rounded-md px-2 py-[5px] text-[12px] font-medium text-yanne-700 cursor-default"
+                    className="flex items-center justify-between rounded-lg px-2.5 py-[6px] text-[12px] font-medium text-text-faint cursor-default"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5 opacity-40">
                       {item.icon}
                       {item.label}
                     </div>
@@ -203,10 +206,10 @@ export function Sidebar() {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) =>
-                      `flex items-center gap-2 rounded-md px-2 py-[5px] text-[12px] font-medium transition-all duration-150 ${
+                      `flex items-center gap-2.5 rounded-lg px-2.5 py-[6px] text-[12px] font-medium transition-all duration-200 ${
                         isActive
-                          ? 'bg-yanne-800/60 text-gold-300 shadow-[inset_2px_0_0] shadow-gold-400'
-                          : 'text-yanne-300 hover:bg-yanne-800/30 hover:text-yanne-100'
+                          ? 'bg-yanne-500/10 text-yanne-300 shadow-[inset_2px_0_0] shadow-yanne-400'
+                          : 'text-text-muted hover:bg-surface-overlay hover:text-text-secondary'
                       }`
                     }
                   >
@@ -221,16 +224,16 @@ export function Sidebar() {
       </div>
 
       {/* User + Sign out */}
-      <div className="border-t border-yanne-800/30 px-2 py-2.5">
+      <div className="border-t border-border px-3 py-3">
         {user && (
-          <div className="mb-1.5 px-2">
-            <div className="text-[11px] font-medium text-yanne-200 truncate">{user.name}</div>
-            <div className="text-[9px] font-medium text-yanne-500 uppercase tracking-wider">{user.role}</div>
+          <div className="mb-2 px-2.5">
+            <div className="text-[11px] font-medium text-text-secondary truncate">{user.name}</div>
+            <div className="text-[9px] font-medium text-text-faint uppercase tracking-wider font-data">{user.role}</div>
           </div>
         )}
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-[5px] text-[12px] text-yanne-500 hover:bg-yanne-800/30 hover:text-yanne-300 transition-colors"
+          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[6px] text-[12px] text-text-faint hover:bg-surface-overlay hover:text-text-muted transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>
           Sign out

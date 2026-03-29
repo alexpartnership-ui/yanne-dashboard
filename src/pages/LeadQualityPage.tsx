@@ -13,10 +13,10 @@ export function LeadQualityPage() {
   if (apiError && apiError.includes('not configured')) {
     return (
       <div>
-        <h2 className="mb-6 text-2xl font-bold text-zinc-900">Lead Quality</h2>
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-200 bg-white py-20">
-          <p className="text-sm text-zinc-500">API keys not configured</p>
-          <p className="text-xs text-zinc-400 mt-1">Add EMAILBISON_API_KEY and AIRTABLE_API_KEY</p>
+        <h2 className="mb-6 text-2xl font-bold text-text-primary">Lead Quality</h2>
+        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-surface-raised py-20">
+          <p className="text-sm text-text-muted">API keys not configured</p>
+          <p className="text-xs text-text-faint mt-1">Add EMAILBISON_API_KEY and AIRTABLE_API_KEY</p>
         </div>
       </div>
     )
@@ -53,12 +53,12 @@ export function LeadQualityPage() {
     'Already Raised': 'bg-zinc-400',
     'Too Early': 'bg-yellow-400',
     'Auto-Reply': 'bg-zinc-300',
-    'Other': 'bg-zinc-200',
+    'Other': 'bg-surface-overlay',
   }
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-zinc-900">Lead Quality</h2>
+      <h2 className="mb-6 text-2xl font-bold text-text-primary">Lead Quality</h2>
 
       {/* Top metrics */}
       <div className="mb-6 grid grid-cols-5 gap-4">
@@ -71,18 +71,18 @@ export function LeadQualityPage() {
 
       <div className="grid grid-cols-2 gap-4">
         {/* Full funnel breakdown */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">Lead Category Distribution</h3>
+        <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">Lead Category Distribution</h3>
           <div className="space-y-2">
             {sortedCats.map(([cat, count]) => {
               const pct = totalCategorized > 0 ? (count / totalCategorized) * 100 : 0
               return (
                 <div key={cat}>
                   <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-zinc-600">{cat}</span>
-                    <span className="font-semibold text-zinc-800">{count} ({pct.toFixed(1)}%)</span>
+                    <span className="text-text-muted">{cat}</span>
+                    <span className="font-semibold text-text-primary">{count} ({pct.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-surface-overlay overflow-hidden">
                     <div
                       className={`h-full rounded-full ${catColors[cat] ?? 'bg-zinc-300'}`}
                       style={{ width: `${pct}%` }}
@@ -95,17 +95,17 @@ export function LeadQualityPage() {
         </div>
 
         {/* Campaign quality comparison */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-zinc-700 mb-3">Campaign Health</h3>
-          <p className="text-xs text-zinc-400 mb-3">Campaigns with highest bounce rates</p>
+        <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">Campaign Health</h3>
+          <p className="text-xs text-text-faint mb-3">Campaigns with highest bounce rates</p>
           <div className="space-y-2">
             {(campaigns?.campaigns ?? [])
               .filter(c => c.emails_sent > 100)
               .sort((a, b) => b.bounce_rate - a.bounce_rate)
               .slice(0, 8)
               .map(c => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
-                  <span className="text-xs text-zinc-700 truncate max-w-[60%]">{c.name}</span>
+                <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface-raised px-3 py-2">
+                  <span className="text-xs text-text-secondary truncate max-w-[60%]">{c.name}</span>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-bold ${
                       (c.bounce_rate ?? 0) > 3 ? 'text-red-600' :
@@ -118,8 +118,8 @@ export function LeadQualityPage() {
               ))}
           </div>
 
-          <div className="mt-6 pt-4 border-t border-zinc-100">
-            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Lowest Reply Campaigns</h4>
+          <div className="mt-6 pt-4 border-t border-border-muted">
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Lowest Reply Campaigns</h4>
             <div className="space-y-2">
               {(campaigns?.campaigns ?? [])
                 .filter(c => c.emails_sent > 200 && c.reply_rate < 1)
@@ -127,7 +127,7 @@ export function LeadQualityPage() {
                 .slice(0, 5)
                 .map(c => (
                   <div key={c.id} className="flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
-                    <span className="text-xs text-zinc-700 truncate max-w-[60%]">{c.name}</span>
+                    <span className="text-xs text-text-secondary truncate max-w-[60%]">{c.name}</span>
                     <span className="text-xs font-bold text-red-600">{c.reply_rate?.toFixed(2)}%</span>
                   </div>
                 ))}

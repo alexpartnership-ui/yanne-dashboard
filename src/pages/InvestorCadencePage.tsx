@@ -34,7 +34,7 @@ function fmtDate(d: string | null): string {
 }
 
 function urgencyColor(days: number | null): string {
-  if (days == null) return 'bg-zinc-100 text-zinc-500'
+  if (days == null) return 'bg-surface-overlay text-text-muted'
   if (days <= 14) return 'bg-emerald-50 text-emerald-700'
   if (days <= 30) return 'bg-blue-50 text-blue-700'
   if (days <= 60) return 'bg-amber-50 text-amber-700'
@@ -55,7 +55,7 @@ function tierPill(tier: string | null) {
     C: 'bg-amber-50 text-amber-700',
   }
   const label = tier || 'Untiered'
-  const cls = map[label] || 'bg-zinc-100 text-zinc-500'
+  const cls = map[label] || 'bg-surface-overlay text-text-muted'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{label}</span>
 }
 
@@ -110,7 +110,7 @@ export function InvestorCadencePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-zinc-900">Investor Cadence Tracker</h1>
+      <h1 className="text-2xl font-bold text-text-primary">Investor Cadence Tracker</h1>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
@@ -123,53 +123,53 @@ export function InvestorCadencePage() {
       {/* Filter */}
       <div className="flex items-center gap-3">
         <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700">
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary">
           <option value="">All Owners</option>
           {owners.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
-        <span className="text-xs text-zinc-400">{sorted.length} investor{sorted.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-text-faint">{sorted.length} investor{sorted.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface-raised shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-zinc-50 text-left">
-              <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Investor</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Contact</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Tier</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Owner</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Last Contact</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Urgency</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 text-right">Meetings</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Pitched To</th>
+            <tr className="bg-surface-raised text-left">
+              <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted">Investor</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Contact</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Tier</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Owner</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Last Contact</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Urgency</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted text-right">Meetings</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Pitched To</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-border-muted">
             {sorted.map(inv => {
               const days = daysSince(inv.last_contact_date)
               return (
-                <tr key={inv.investor_name} className="hover:bg-zinc-50 transition-colors">
+                <tr key={inv.investor_name} className="hover:bg-surface-raised transition-colors">
                   <td className="px-4 py-2.5">
-                    <div className="font-medium text-zinc-900">{inv.investor_name}</div>
-                    {inv.investor_type && <div className="text-[11px] text-zinc-400">{inv.investor_type}</div>}
+                    <div className="font-medium text-text-primary">{inv.investor_name}</div>
+                    {inv.investor_type && <div className="text-[11px] text-text-faint">{inv.investor_type}</div>}
                   </td>
-                  <td className="px-3 py-2.5 text-zinc-600">{inv.primary_contact || '\u2014'}</td>
+                  <td className="px-3 py-2.5 text-text-muted">{inv.primary_contact || '\u2014'}</td>
                   <td className="px-3 py-2.5">{tierPill(inv.relationship_tier)}</td>
-                  <td className="px-3 py-2.5 text-zinc-600">{inv.relationship_owner || '\u2014'}</td>
-                  <td className="px-3 py-2.5 text-zinc-600">{fmtDate(inv.last_contact_date)}</td>
+                  <td className="px-3 py-2.5 text-text-muted">{inv.relationship_owner || '\u2014'}</td>
+                  <td className="px-3 py-2.5 text-text-muted">{fmtDate(inv.last_contact_date)}</td>
                   <td className="px-3 py-2.5">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${urgencyColor(days)}`}>
                       {urgencyLabel(days)}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right text-zinc-700">{inv.meetings_count ?? 0}</td>
-                  <td className="px-3 py-2.5 text-zinc-600">{inv.client_pitched_to || '\u2014'}</td>
+                  <td className="px-3 py-2.5 text-right text-text-secondary">{inv.meetings_count ?? 0}</td>
+                  <td className="px-3 py-2.5 text-text-muted">{inv.client_pitched_to || '\u2014'}</td>
                 </tr>
               )
             })}
             {sorted.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-zinc-400">No investors found</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-text-faint">No investors found</td></tr>
             )}
           </tbody>
         </table>

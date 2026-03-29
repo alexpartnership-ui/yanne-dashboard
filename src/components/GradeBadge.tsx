@@ -7,11 +7,11 @@ function gradeColor(grade: string): string {
   if (letter === 'C') return 'bg-[#EAB308] text-black'
   if (letter === 'D') return 'bg-[#F97316] text-white'
   if (letter === 'F') return 'bg-[#EF4444] text-white'
-  return 'bg-zinc-100 text-zinc-600'
+  return 'bg-surface-overlay text-text-muted'
 }
 
 export function GradeBadge({ grade }: { grade: Grade | null }) {
-  if (!grade) return <span className="text-zinc-300">—</span>
+  if (!grade) return <span className="text-text-faint">—</span>
   return (
     <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold ${gradeColor(grade)}`}>
       {grade}

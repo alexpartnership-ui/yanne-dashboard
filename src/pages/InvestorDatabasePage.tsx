@@ -62,8 +62,8 @@ function Field({ label, value }: { label: string; value: string | number | boole
   const display = value == null || value === '' ? '—' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)
   return (
     <div>
-      <div className="text-[11px] text-zinc-400 mb-0.5">{label}</div>
-      <div className="text-sm text-zinc-700">{display}</div>
+      <div className="text-[11px] text-text-faint mb-0.5">{label}</div>
+      <div className="text-sm text-text-secondary">{display}</div>
     </div>
   )
 }
@@ -93,9 +93,9 @@ const TYPE_ABBREV: Record<string, string> = {
 }
 
 function typeBadge(t: string | null) {
-  if (!t) return <span className="text-zinc-400">{'\u2014'}</span>
+  if (!t) return <span className="text-text-faint">{'\u2014'}</span>
   const abbr = TYPE_ABBREV[t] || t.slice(0, 2).toUpperCase()
-  return <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">{abbr}</span>
+  return <span className="inline-flex items-center rounded-full bg-surface-overlay px-2 py-0.5 text-[10px] font-semibold text-text-muted">{abbr}</span>
 }
 
 function tierPill(tier: string | null) {
@@ -105,7 +105,7 @@ function tierPill(tier: string | null) {
     C: 'bg-amber-50 text-amber-700',
   }
   const label = tier || 'Untiered'
-  const cls = map[label] || 'bg-zinc-100 text-zinc-500'
+  const cls = map[label] || 'bg-surface-overlay text-text-muted'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{label}</span>
 }
 
@@ -116,11 +116,11 @@ function statusPill(status: string | null) {
     'Active Dialogue': 'bg-teal-50 text-teal-700',
     Warm: 'bg-amber-50 text-amber-700',
     Cold: 'bg-blue-50 text-blue-700',
-    Lost: 'bg-zinc-100 text-zinc-400',
+    Lost: 'bg-surface-overlay text-text-faint',
     New: 'bg-yanne/10 text-yanne',
   }
-  if (!status) return <span className="text-zinc-400">{'\u2014'}</span>
-  const cls = map[status] || 'bg-zinc-100 text-zinc-500'
+  if (!status) return <span className="text-text-faint">{'\u2014'}</span>
+  const cls = map[status] || 'bg-surface-overlay text-text-muted'
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{status}</span>
 }
 
@@ -129,7 +129,7 @@ function sourceBadge(source: string | null) {
   if (isAutoCaptured(source)) {
     return <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700">AUTO</span>
   }
-  return <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">Manual</span>
+  return <span className="inline-flex items-center rounded-full bg-surface-overlay px-2 py-0.5 text-[10px] font-semibold text-text-muted">Manual</span>
 }
 function sortInvestors(arr: Investor[], key: SortKey, dir: SortDir): Investor[] {
   return [...arr].sort((a, b) => {
@@ -167,13 +167,13 @@ function DetailTabContent({ inv, tab }: { inv: Investor; tab: string }) {
         <div className="space-y-4">
           {inv.investment_thesis && (
             <div>
-              <div className="text-[11px] text-zinc-400 mb-0.5">Thesis</div>
-              <div className="text-sm text-zinc-700">{inv.investment_thesis}</div>
+              <div className="text-[11px] text-text-faint mb-0.5">Thesis</div>
+              <div className="text-sm text-text-secondary">{inv.investment_thesis}</div>
             </div>
           )}
           {inv.industries_sectors && inv.industries_sectors.length > 0 && (
             <div>
-              <div className="text-[11px] text-zinc-400 mb-1">Sectors</div>
+              <div className="text-[11px] text-text-faint mb-1">Sectors</div>
               <div className="flex flex-wrap gap-1">
                 {inv.industries_sectors.map(s => (
                   <span key={s} className="inline-flex rounded-full bg-yanne/10 text-yanne px-2 py-0.5 text-[10px] font-medium">{s}</span>
@@ -202,29 +202,29 @@ function DetailTabContent({ inv, tab }: { inv: Investor; tab: string }) {
       return (
         <div className="space-y-4">
           <div>
-            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Primary Contact</h4>
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Primary Contact</h4>
             <div className="grid grid-cols-3 gap-3 text-sm">
               <Field label="Name" value={inv.primary_contact} />
               <Field label="Title" value={inv.primary_title} />
               <div>
-                <div className="text-[11px] text-zinc-400 mb-0.5">Email</div>
-                {inv.primary_email ? <a href={`mailto:${inv.primary_email}`} className="text-sm text-yanne hover:underline">{inv.primary_email}</a> : <div className="text-sm text-zinc-700">{'—'}</div>}
+                <div className="text-[11px] text-text-faint mb-0.5">Email</div>
+                {inv.primary_email ? <a href={`mailto:${inv.primary_email}`} className="text-sm text-yanne hover:underline">{inv.primary_email}</a> : <div className="text-sm text-text-secondary">{'—'}</div>}
               </div>
               <Field label="Phone" value={inv.primary_phone} />
               <div>
-                <div className="text-[11px] text-zinc-400 mb-0.5">LinkedIn</div>
-                {inv.primary_linkedin ? <a href={ensureUrl(inv.primary_linkedin)} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">Profile</a> : <div className="text-sm text-zinc-700">{'—'}</div>}
+                <div className="text-[11px] text-text-faint mb-0.5">LinkedIn</div>
+                {inv.primary_linkedin ? <a href={ensureUrl(inv.primary_linkedin)} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">Profile</a> : <div className="text-sm text-text-secondary">{'—'}</div>}
               </div>
             </div>
           </div>
           <div>
-            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Secondary Contact</h4>
+            <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Secondary Contact</h4>
             <div className="grid grid-cols-3 gap-3 text-sm">
               <Field label="Name" value={inv.secondary_contact} />
               <Field label="Title" value={inv.secondary_title} />
               <div>
-                <div className="text-[11px] text-zinc-400 mb-0.5">Email</div>
-                {inv.secondary_email ? <a href={`mailto:${inv.secondary_email}`} className="text-sm text-yanne hover:underline">{inv.secondary_email}</a> : <div className="text-sm text-zinc-700">{'—'}</div>}
+                <div className="text-[11px] text-text-faint mb-0.5">Email</div>
+                {inv.secondary_email ? <a href={`mailto:${inv.secondary_email}`} className="text-sm text-yanne hover:underline">{inv.secondary_email}</a> : <div className="text-sm text-text-secondary">{'—'}</div>}
               </div>
             </div>
           </div>
@@ -251,14 +251,14 @@ function DetailTabContent({ inv, tab }: { inv: Investor; tab: string }) {
           </div>
           {inv.notable_portfolio_cos && (
             <div>
-              <div className="text-[11px] text-zinc-400 mb-0.5">Notable Portfolio</div>
-              <div className="text-sm text-zinc-700">{inv.notable_portfolio_cos}</div>
+              <div className="text-[11px] text-text-faint mb-0.5">Notable Portfolio</div>
+              <div className="text-sm text-text-secondary">{inv.notable_portfolio_cos}</div>
             </div>
           )}
           {inv.recent_deals_12mo && (
             <div>
-              <div className="text-[11px] text-zinc-400 mb-0.5">Recent Deals (12mo)</div>
-              <div className="text-sm text-zinc-700">{inv.recent_deals_12mo}</div>
+              <div className="text-[11px] text-text-faint mb-0.5">Recent Deals (12mo)</div>
+              <div className="text-sm text-text-secondary">{inv.recent_deals_12mo}</div>
             </div>
           )}
         </div>
@@ -301,8 +301,8 @@ function DetailTabContent({ inv, tab }: { inv: Investor; tab: string }) {
           </div>
           {inv.notes && (
             <div>
-              <div className="text-[11px] text-zinc-400 mb-0.5">Notes</div>
-              <div className="text-sm text-zinc-600 bg-zinc-50 rounded p-2">{inv.notes}</div>
+              <div className="text-[11px] text-text-faint mb-0.5">Notes</div>
+              <div className="text-sm text-text-muted bg-surface-raised rounded p-2">{inv.notes}</div>
             </div>
           )}
         </div>
@@ -378,7 +378,7 @@ export function InvestorDatabasePage() {
   }
 
   function sortArrow(key: SortKey) {
-    if (sortKey !== key) return <span className="text-zinc-300 ml-1">{'\u2195'}</span>
+    if (sortKey !== key) return <span className="text-text-faint ml-1">{'\u2195'}</span>
     return <span className="text-yanne ml-1">{sortDir === 'asc' ? '\u2191' : '\u2193'}</span>
   }
 
@@ -395,7 +395,7 @@ export function InvestorDatabasePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold text-zinc-900">Investor Database</h1><a href="https://docs.google.com/spreadsheets/d/15SvA_bLQ_MaxKAkcECuPP_S9HiONYAeElfjx14JWEmQ/edit" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors">Open Google Sheet <span className="text-xs">↗</span></a></div>
+      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold text-text-primary">Investor Database</h1><a href="https://docs.google.com/spreadsheets/d/15SvA_bLQ_MaxKAkcECuPP_S9HiONYAeElfjx14JWEmQ/edit" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors">Open Google Sheet <span className="text-xs">↗</span></a></div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-6 gap-4">
@@ -412,93 +412,93 @@ export function InvestorDatabasePage() {
         <input
           type="text" placeholder="Search investor or contact..." value={search}
           onChange={e => setSearch(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-yanne/30 w-64"
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary focus:outline-none focus:ring-2 focus:ring-yanne/30 w-64"
         />
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700">
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary">
           <option value="">All Types</option>
           {types.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700">
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary">
           <option value="">All Tiers</option>
           {tiers.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700">
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary">
           <option value="">All Statuses</option>
           {statuses.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700">
+          className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm text-text-secondary">
           <option value="">All Sources</option>
           {sources.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {hasFilters && (
-          <button onClick={clearFilters} className="text-xs text-zinc-500 hover:text-zinc-700 underline">Clear filters</button>
+          <button onClick={clearFilters} className="text-xs text-text-muted hover:text-text-secondary underline">Clear filters</button>
         )}
-        <span className="ml-auto text-xs text-zinc-400">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+        <span className="ml-auto text-xs text-text-faint">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface-raised shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-zinc-50 text-left">
-              <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-zinc-500 cursor-pointer" onClick={() => toggleSort('investor_name')}>
+            <tr className="bg-surface-raised text-left">
+              <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted cursor-pointer" onClick={() => toggleSort('investor_name')}>
                 Investor{sortArrow('investor_name')}
               </th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Type</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">HQ</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 text-right cursor-pointer" onClick={() => toggleSort('aum_millions')}>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Type</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">HQ</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted text-right cursor-pointer" onClick={() => toggleSort('aum_millions')}>
                 AUM{sortArrow('aum_millions')}
               </th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 text-right">Ticket Range</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 cursor-pointer" onClick={() => toggleSort('relationship_tier')}>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted text-right">Ticket Range</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted cursor-pointer" onClick={() => toggleSort('relationship_tier')}>
                 Tier{sortArrow('relationship_tier')}
               </th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Status</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Owner</th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 cursor-pointer" onClick={() => toggleSort('last_contact_date')}>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Status</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Owner</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted cursor-pointer" onClick={() => toggleSort('last_contact_date')}>
                 Last Contact{sortArrow('last_contact_date')}
               </th>
-              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500">Source</th>
+              <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-muted">Source</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-border-muted">
             {filtered.map(inv => (
               <tr
                 key={inv.investor_name}
-                className={`hover:bg-zinc-50 cursor-pointer transition-colors ${expandedId === inv.investor_name ? 'bg-yanne/5' : ''}`}
+                className={`hover:bg-surface-raised cursor-pointer transition-colors ${expandedId === inv.investor_name ? 'bg-yanne/5' : ''}`}
                 onClick={() => { setExpandedId(expandedId === inv.investor_name ? null : inv.investor_name); setActiveTab('mandate') }}
               >
                 <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1.5"><span className="font-medium text-zinc-900">{inv.investor_name}</span>{isRecentlyAdded(inv.created_at) && (<span className="inline-flex items-center rounded-full bg-yanne/10 text-yanne px-1.5 py-0.5 text-[9px] font-bold">NEW</span>)}</div>
-                  {inv.primary_contact && <div className="text-[11px] text-zinc-400">{inv.primary_contact}</div>}
+                  <div className="flex items-center gap-1.5"><span className="font-medium text-text-primary">{inv.investor_name}</span>{isRecentlyAdded(inv.created_at) && (<span className="inline-flex items-center rounded-full bg-yanne/10 text-yanne px-1.5 py-0.5 text-[9px] font-bold">NEW</span>)}</div>
+                  {inv.primary_contact && <div className="text-[11px] text-text-faint">{inv.primary_contact}</div>}
                   <div className="flex gap-2 mt-0.5">
                     {inv.website && <a href={ensureUrl(inv.website)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-yanne hover:underline">{'\ud83c\udf10'}</a>}
                     {inv.linkedin_page && <a href={ensureUrl(inv.linkedin_page)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-[10px] text-blue-600 hover:underline">in</a>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5">{typeBadge(inv.investor_type)}</td>
-                <td className="px-3 py-2.5 text-zinc-600">
+                <td className="px-3 py-2.5 text-text-muted">
                   {inv.hq_city || inv.hq_country ? `${inv.hq_city || ''}${inv.hq_city && inv.hq_country ? ', ' : ''}${inv.hq_country || ''}` : '\u2014'}
                 </td>
-                <td className="px-3 py-2.5 text-right font-medium text-zinc-700">{fmtAum(inv.aum_millions)}</td>
-                <td className="px-3 py-2.5 text-right text-zinc-600">
+                <td className="px-3 py-2.5 text-right font-medium text-text-secondary">{fmtAum(inv.aum_millions)}</td>
+                <td className="px-3 py-2.5 text-right text-text-muted">
                   {inv.ticket_min_millions != null && inv.ticket_max_millions != null
                     ? `$${inv.ticket_min_millions}M\u2013$${inv.ticket_max_millions}M`
                     : '\u2014'}
                 </td>
                 <td className="px-3 py-2.5">{tierPill(inv.relationship_tier)}</td>
                 <td className="px-3 py-2.5">{statusPill(inv.relationship_status)}</td>
-                <td className="px-3 py-2.5 text-zinc-600">{inv.relationship_owner || '\u2014'}</td>
-                <td className="px-3 py-2.5 text-zinc-600">{fmtDate(inv.last_contact_date)}</td>
+                <td className="px-3 py-2.5 text-text-muted">{inv.relationship_owner || '\u2014'}</td>
+                <td className="px-3 py-2.5 text-text-muted">{fmtDate(inv.last_contact_date)}</td>
                 <td className="px-3 py-2.5">{sourceBadge(inv.source)}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-8 text-center text-zinc-400">No investors match your filters</td></tr>
+              <tr><td colSpan={10} className="px-4 py-8 text-center text-text-faint">No investors match your filters</td></tr>
             )}
           </tbody>
         </table>
@@ -506,14 +506,14 @@ export function InvestorDatabasePage() {
 
       {/* Expandable Detail Panel -- Tabbed */}
       {expanded && (
-        <div className="rounded-lg border border-zinc-200 bg-white shadow-sm">
+        <div className="rounded-lg border border-border bg-surface-raised shadow-sm">
           <div className="flex items-center justify-between px-6 pt-5 pb-3">
-            <h2 className="text-lg font-bold text-zinc-900">{expanded.investor_name}</h2>
-            <button onClick={() => setExpandedId(null)} className="text-zinc-400 hover:text-zinc-600 text-sm">{'✕'} Close</button>
+            <h2 className="text-lg font-bold text-text-primary">{expanded.investor_name}</h2>
+            <button onClick={() => setExpandedId(null)} className="text-text-faint hover:text-text-muted text-sm">{'✕'} Close</button>
           </div>
 
           {/* Tab Bar */}
-          <div className="border-b border-zinc-200 px-6">
+          <div className="border-b border-border px-6">
             <nav className="flex gap-6 -mb-px">
               {DETAIL_TABS.map(tab => (
                 <button
@@ -522,7 +522,7 @@ export function InvestorDatabasePage() {
                   className={`pb-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === tab.key
                       ? 'border-yanne text-yanne'
-                      : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                      : 'border-transparent text-text-faint hover:text-text-muted'
                   }`}
                 >
                   {tab.label}

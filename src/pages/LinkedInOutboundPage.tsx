@@ -16,9 +16,9 @@ function statusBadge(status: string) {
     PAUSED: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Paused' },
     COMPLETED: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Completed' },
     FINISHED: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Finished' },
-    DRAFT: { bg: 'bg-zinc-100', text: 'text-zinc-500', label: 'Draft' },
+    DRAFT: { bg: 'bg-surface-overlay', text: 'text-text-muted', label: 'Draft' },
   }
-  const s = map[status] || { bg: 'bg-zinc-100', text: 'text-zinc-500', label: status }
+  const s = map[status] || { bg: 'bg-surface-overlay', text: 'text-text-muted', label: status }
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.bg} ${s.text}`}>{s.label}</span>
 }
 
@@ -26,12 +26,12 @@ function StatBar({ label, value, total, color }: { label: string; value: number;
   const pct = total > 0 ? (value / total) * 100 : 0
   return (
     <div className="flex items-center gap-3 text-xs">
-      <span className="w-20 text-zinc-500 shrink-0">{label}</span>
-      <div className="flex-1 h-2 rounded-full bg-zinc-100 overflow-hidden">
+      <span className="w-20 text-text-muted shrink-0">{label}</span>
+      <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-16 text-right font-medium text-zinc-700">{fmt(value)}</span>
-      <span className="w-12 text-right text-zinc-400">{pct.toFixed(1)}%</span>
+      <span className="w-16 text-right font-medium text-text-secondary">{fmt(value)}</span>
+      <span className="w-12 text-right text-text-faint">{pct.toFixed(1)}%</span>
     </div>
   )
 }
@@ -107,8 +107,8 @@ function OverviewTab({ campaigns, totals, senders }: {
       </div>
 
       {/* Lead Funnel Breakdown */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-zinc-800 mb-4">Lead Funnel Breakdown</h3>
+      <div className="rounded-lg border border-border bg-surface-raised p-5">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Lead Funnel Breakdown</h3>
         <div className="space-y-2.5">
           <StatBar label="In Progress" value={totals.totalInProgress} total={totals.totalLeads} color="bg-blue-500" />
           <StatBar label="Pending" value={totals.totalPending} total={totals.totalLeads} color="bg-amber-400" />
@@ -121,8 +121,8 @@ function OverviewTab({ campaigns, totals, senders }: {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top Campaigns Bar Chart */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Top Campaigns by Size</h3>
+        <div className="rounded-lg border border-border bg-surface-raised p-5">
+          <h3 className="text-sm font-semibold text-text-primary mb-4">Top Campaigns by Size</h3>
           {topCampaigns.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={topCampaigns} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
@@ -137,12 +137,12 @@ function OverviewTab({ campaigns, totals, senders }: {
                 <Bar dataKey="failed" stackId="a" fill="#ef4444" name="Failed" />
               </BarChart>
             </ResponsiveContainer>
-          ) : <p className="text-xs text-zinc-400 text-center py-16">No campaign data available</p>}
+          ) : <p className="text-xs text-text-faint text-center py-16">No campaign data available</p>}
         </div>
 
         {/* Campaign Timeline */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-5">
-          <h3 className="text-sm font-semibold text-zinc-800 mb-4">Campaign Growth Timeline</h3>
+        <div className="rounded-lg border border-border bg-surface-raised p-5">
+          <h3 className="text-sm font-semibold text-text-primary mb-4">Campaign Growth Timeline</h3>
           {timelineData.length > 1 ? (
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart data={timelineData} margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
@@ -156,7 +156,7 @@ function OverviewTab({ campaigns, totals, senders }: {
                 <Line yAxisId="right" type="stepAfter" dataKey="cumCampaigns" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} name="Campaigns Launched" />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <p className="text-xs text-zinc-400 text-center py-16">Need 2+ campaigns with start dates</p>}
+          ) : <p className="text-xs text-text-faint text-center py-16">Need 2+ campaigns with start dates</p>}
         </div>
       </div>
     </div>
@@ -197,17 +197,17 @@ function CampaignsTab({ campaigns }: { campaigns: HeyReachCampaign[] }) {
         <div className="flex items-center gap-2">
           {(['all', 'active', 'paused', 'draft'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${filter === f ? 'bg-yanne text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}`}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${filter === f ? 'bg-yanne text-white' : 'bg-surface-overlay text-text-muted hover:bg-surface-overlay'}`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)} ({counts[f]})
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+        <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
           <span>Sort:</span>
           {(['date', 'leads', 'name'] as const).map(s => (
             <button key={s} onClick={() => setSortBy(s)}
-              className={`px-2 py-0.5 rounded capitalize ${sortBy === s ? 'bg-zinc-200 text-zinc-800 font-medium' : 'hover:bg-zinc-100'}`}
+              className={`px-2 py-0.5 rounded capitalize ${sortBy === s ? 'bg-surface-overlay text-text-primary font-medium' : 'hover:bg-surface-overlay'}`}
             >{s}</button>
           ))}
         </div>
@@ -216,33 +216,33 @@ function CampaignsTab({ campaigns }: { campaigns: HeyReachCampaign[] }) {
       {/* Campaign List */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <div className="text-sm text-zinc-400 py-8 text-center">No campaigns match this filter</div>
+          <div className="text-sm text-text-faint py-8 text-center">No campaigns match this filter</div>
         ) : filtered.map(c => {
           const stats = c.progressStats
           const isExpanded = expandedId === c.id
           const total = stats?.totalUsers || 0
 
           return (
-            <div key={c.id} className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
+            <div key={c.id} className="rounded-lg border border-border bg-surface-raised overflow-hidden">
               <button
                 onClick={() => setExpandedId(isExpanded ? null : c.id)}
-                className="flex w-full items-center justify-between px-5 py-4 hover:bg-zinc-50 transition-colors text-left"
+                className="flex w-full items-center justify-between px-5 py-4 hover:bg-surface-raised transition-colors text-left"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2.5 mb-1">
-                    <span className="text-sm font-semibold text-zinc-900 truncate">{c.name}</span>
+                    <span className="text-sm font-semibold text-text-primary truncate">{c.name}</span>
                     {statusBadge(c.status)}
                   </div>
                   {stats && total > 0 && (
                     <>
-                      <div className="flex items-center gap-4 text-[11px] text-zinc-500">
+                      <div className="flex items-center gap-4 text-[11px] text-text-muted">
                         <span>{fmt(total)} leads</span>
                         <span>{c.campaignAccountIds.length} senders</span>
                         <span className="text-emerald-600">{Math.round((stats.totalUsersFinished / total) * 100)}% done</span>
                         {stats.totalUsersFailed > 0 && <span className="text-red-500">{Math.round((stats.totalUsersFailed / total) * 100)}% failed</span>}
-                        {c.linkedInUserListName && <span className="text-zinc-400">List: {c.linkedInUserListName}</span>}
+                        {c.linkedInUserListName && <span className="text-text-faint">List: {c.linkedInUserListName}</span>}
                       </div>
-                      <div className="mt-2 flex h-1.5 rounded-full overflow-hidden bg-zinc-100" style={{ maxWidth: 350 }}>
+                      <div className="mt-2 flex h-1.5 rounded-full overflow-hidden bg-surface-overlay" style={{ maxWidth: 350 }}>
                         <div className="bg-emerald-500 h-full" style={{ width: `${(stats.totalUsersFinished / total) * 100}%` }} />
                         <div className="bg-blue-500 h-full" style={{ width: `${(stats.totalUsersInProgress / total) * 100}%` }} />
                         <div className="bg-amber-400 h-full" style={{ width: `${(stats.totalUsersPending / total) * 100}%` }} />
@@ -252,16 +252,16 @@ function CampaignsTab({ campaigns }: { campaigns: HeyReachCampaign[] }) {
                     </>
                   )}
                   {(!stats || total === 0) && (
-                    <div className="text-[11px] text-zinc-400">No progress data</div>
+                    <div className="text-[11px] text-text-faint">No progress data</div>
                   )}
                 </div>
-                <svg className={`w-4 h-4 text-zinc-400 transition-transform shrink-0 ml-3 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <svg className={`w-4 h-4 text-text-faint transition-transform shrink-0 ml-3 ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                 </svg>
               </button>
 
               {isExpanded && stats && (
-                <div className="px-5 pb-4 border-t border-zinc-100 pt-3">
+                <div className="px-5 pb-4 border-t border-border-muted pt-3">
                   <div className="space-y-2 mb-3">
                     <StatBar label="In Progress" value={stats.totalUsersInProgress} total={total} color="bg-blue-500" />
                     <StatBar label="Pending" value={stats.totalUsersPending} total={total} color="bg-amber-400" />
@@ -269,10 +269,10 @@ function CampaignsTab({ campaigns }: { campaigns: HeyReachCampaign[] }) {
                     <StatBar label="Failed" value={stats.totalUsersFailed} total={total} color="bg-red-400" />
                     <StatBar label="Excluded" value={stats.totalUsersExcluded} total={total} color="bg-zinc-400" />
                     {stats.totalUsersManuallyStopped > 0 && (
-                      <StatBar label="Stopped" value={stats.totalUsersManuallyStopped} total={total} color="bg-zinc-500" />
+                      <StatBar label="Stopped" value={stats.totalUsersManuallyStopped} total={total} color="bg-surface-raised0" />
                     )}
                   </div>
-                  <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-400 pt-2 border-t border-zinc-50">
+                  <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-faint pt-2 border-t border-border-muted">
                     <span>ID: {c.id}</span>
                     <span>Senders: {c.campaignAccountIds.length}</span>
                     {c.startedAt && <span>Started: {new Date(c.startedAt).toLocaleDateString()}</span>}
@@ -321,8 +321,8 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
       </div>
 
       {/* Active / Idle bar */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-zinc-800 mb-3">Account Status</h3>
+      <div className="rounded-lg border border-border bg-surface-raised p-5">
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Account Status</h3>
         <div className="space-y-2">
           <StatBar label="Active" value={activeSenders.length} total={senders.length} color="bg-emerald-500" />
           <StatBar label="Idle" value={idleSenders.length} total={senders.length} color="bg-amber-400" />
@@ -330,33 +330,33 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100">
-          <h3 className="text-sm font-semibold text-zinc-800">All Sender Accounts ({senders.length})</h3>
-          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+      <div className="rounded-lg border border-border bg-surface-raised overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-muted">
+          <h3 className="text-sm font-semibold text-text-primary">All Sender Accounts ({senders.length})</h3>
+          <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
             <span>Sort:</span>
             {(['campaigns', 'leads', 'name'] as const).map(s => (
               <button key={s} onClick={() => setSortBy(s)}
-                className={`px-2 py-0.5 rounded capitalize ${sortBy === s ? 'bg-zinc-200 text-zinc-800 font-medium' : 'hover:bg-zinc-100'}`}
+                className={`px-2 py-0.5 rounded capitalize ${sortBy === s ? 'bg-surface-overlay text-text-primary font-medium' : 'hover:bg-surface-overlay'}`}
               >{s}</button>
             ))}
           </div>
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-zinc-50 border-b border-zinc-100">
+            <thead className="sticky top-0 bg-surface-raised border-b border-border-muted">
               <tr>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Account</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Status</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600 text-right">Campaigns</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600 text-right">Est. Leads</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Assigned To</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Account</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Status</th>
+                <th className="px-4 py-2 font-semibold text-text-muted text-right">Campaigns</th>
+                <th className="px-4 py-2 font-semibold text-text-muted text-right">Est. Leads</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Assigned To</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {sorted.map(s => (
-                <tr key={s.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-2 font-medium text-zinc-800">{s.name}</td>
+                <tr key={s.id} className="hover:bg-surface-raised">
+                  <td className="px-4 py-2 font-medium text-text-primary">{s.name}</td>
                   <td className="px-4 py-2">
                     {activeAccountIds.has(s.id) ? (
                       <span className="inline-flex items-center gap-1 text-emerald-600 text-[11px]">
@@ -368,7 +368,7 @@ function SendersTab({ senders, campaigns }: { senders: SenderAccount[]; campaign
                   </td>
                   <td className="px-4 py-2 text-right font-medium">{s.campaignCount}</td>
                   <td className="px-4 py-2 text-right">{fmt(s.totalLeadsAssigned)}</td>
-                  <td className="px-4 py-2 text-zinc-500 truncate max-w-[300px]">{s.campaignNames.join(', ')}</td>
+                  <td className="px-4 py-2 text-text-muted truncate max-w-[300px]">{s.campaignNames.join(', ')}</td>
                 </tr>
               ))}
             </tbody>
@@ -401,8 +401,8 @@ function ListsTab({ lists, campaigns }: { lists: HeyReachList[]; campaigns: HeyR
       </div>
 
       {/* Bar chart */}
-      <div className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-zinc-800 mb-4">Lists by Size</h3>
+      <div className="rounded-lg border border-border bg-surface-raised p-5">
+        <h3 className="text-sm font-semibold text-text-primary mb-4">Lists by Size</h3>
         {topLists.length > 0 ? (
           <ResponsiveContainer width="100%" height={Math.max(topLists.length * 32, 200)}>
             <BarChart data={topLists} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
@@ -413,34 +413,34 @@ function ListsTab({ lists, campaigns }: { lists: HeyReachList[]; campaigns: HeyR
               <Bar dataKey="leads" fill="#0d9488" name="Leads" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        ) : <p className="text-xs text-zinc-400 text-center py-16">No lists available</p>}
+        ) : <p className="text-xs text-text-faint text-center py-16">No lists available</p>}
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-zinc-100">
-          <h3 className="text-sm font-semibold text-zinc-800">All Lists ({lists.length})</h3>
+      <div className="rounded-lg border border-border bg-surface-raised overflow-hidden">
+        <div className="px-4 py-3 border-b border-border-muted">
+          <h3 className="text-sm font-semibold text-text-primary">All Lists ({lists.length})</h3>
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-zinc-50 border-b border-zinc-100">
+            <thead className="sticky top-0 bg-surface-raised border-b border-border-muted">
               <tr>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Name</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600 text-right">Leads</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Type</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Created</th>
-                <th className="px-4 py-2 font-semibold text-zinc-600">Campaigns</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Name</th>
+                <th className="px-4 py-2 font-semibold text-text-muted text-right">Leads</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Type</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Created</th>
+                <th className="px-4 py-2 font-semibold text-text-muted">Campaigns</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
               {sorted.map(l => (
-                <tr key={l.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-2 font-medium text-zinc-800 max-w-[300px] truncate">{l.name}</td>
+                <tr key={l.id} className="hover:bg-surface-raised">
+                  <td className="px-4 py-2 font-medium text-text-primary max-w-[300px] truncate">{l.name}</td>
                   <td className="px-4 py-2 text-right font-semibold">{fmt(l.totalItemsCount)}</td>
-                  <td className="px-4 py-2 text-zinc-500">{l.listType.replace(/_/g, ' ')}</td>
-                  <td className="px-4 py-2 text-zinc-500">{new Date(l.creationTime).toLocaleDateString()}</td>
-                  <td className="px-4 py-2 text-zinc-500 truncate max-w-[250px]">
-                    {l.campaignIds.length === 0 ? <span className="text-zinc-300">—</span> : l.campaignIds.map(id => campaignMap.get(id) || `#${id}`).join(', ')}
+                  <td className="px-4 py-2 text-text-muted">{l.listType.replace(/_/g, ' ')}</td>
+                  <td className="px-4 py-2 text-text-muted">{new Date(l.creationTime).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-text-muted truncate max-w-[250px]">
+                    {l.campaignIds.length === 0 ? <span className="text-text-faint">—</span> : l.campaignIds.map(id => campaignMap.get(id) || `#${id}`).join(', ')}
                   </td>
                 </tr>
               ))}
@@ -460,7 +460,7 @@ export function LinkedInOutboundPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><Spinner /></div>
   if (error) return <div className="p-8 text-red-500">Error: {error}</div>
-  if (!data) return <div className="p-8 text-zinc-400">No data available</div>
+  if (!data) return <div className="p-8 text-text-faint">No data available</div>
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
@@ -472,13 +472,13 @@ export function LinkedInOutboundPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-zinc-900">LinkedIn Outbound</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
+        <h1 className="text-xl font-bold text-text-primary">LinkedIn Outbound</h1>
+        <p className="text-sm text-text-muted mt-0.5">
           HeyReach — {data.totals.activeCampaigns} active campaigns, {fmt(data.totals.totalLeads)} total leads, {data.totals.totalSenderAccounts} sender accounts
         </p>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-zinc-200">
+      <div className="flex items-center gap-1 border-b border-border">
         {tabs.map(t => (
           <button
             key={t.key}
@@ -486,11 +486,11 @@ export function LinkedInOutboundPage() {
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.key
                 ? 'border-yanne text-yanne'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 hover:border-zinc-300'
+                : 'border-transparent text-text-muted hover:text-text-primary hover:border-border-strong'
             }`}
           >
             {t.label}
-            {t.count !== undefined && <span className="ml-1.5 text-[10px] bg-zinc-100 text-zinc-500 rounded-full px-1.5 py-0.5">{t.count}</span>}
+            {t.count !== undefined && <span className="ml-1.5 text-[10px] bg-surface-overlay text-text-muted rounded-full px-1.5 py-0.5">{t.count}</span>}
           </button>
         ))}
       </div>
