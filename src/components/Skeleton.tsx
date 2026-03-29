@@ -8,7 +8,7 @@ export function Skeleton({ className = '' }: SkeletonProps) {
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-surface-raised p-5">
+    <div className="rounded-xl border border-border bg-surface p-5">
       <Skeleton className="mb-3 h-3 w-24" />
       <Skeleton className="mb-2 h-8 w-20" />
       <Skeleton className="h-3 w-32" />
@@ -18,8 +18,8 @@ export function CardSkeleton() {
 
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="rounded-xl border border-border bg-surface-raised overflow-hidden">
-      <div className="border-b border-border px-5 py-3.5">
+    <div className="rounded-xl border border-border bg-surface overflow-hidden">
+      <div className="border-b border-border-muted px-5 py-3.5">
         <Skeleton className="h-4 w-48" />
       </div>
       {Array.from({ length: rows }).map((_, i) => (

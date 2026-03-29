@@ -42,7 +42,7 @@ function MiniSparkline({ data }: { data: number[] }) {
         strokeLinejoin="round"
         className="text-yanne-400"
       />
-      <circle cx={lastX} cy={lastY} r={2} className="fill-yanne-400" />
+      <circle cx={lastX} cy={lastY} r={2} className="fill-yanne-500" />
     </svg>
   )
 }
