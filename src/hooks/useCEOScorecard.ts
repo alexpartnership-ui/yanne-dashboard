@@ -229,7 +229,8 @@ export function useCEOScorecard() {
       const sheetData = parseSheetData(raw.googleSheet)
 
       // Build sheetRows from raw Google Sheet data
-      const NON_EDITABLE_SOURCES = ['Email Bison', 'Email Bison CA', 'HeyReach Airtable', 'HeyReach AT', 'HubSpot', 'Calculated', 'Inbox Manager Airtable', 'Setter Form + HeyReach']
+      // All rows editable — API values get overwritten on next sync but user can always edit
+      const NON_EDITABLE_SOURCES: string[] = []
       const rawSheetRows: unknown[][] = Array.isArray(raw.googleSheet) ? raw.googleSheet : []
       // Extract tab name from row 1 if available, fallback
       const extractedTabName: string = (rawSheetRows[0]?.[0] as string)?.includes('202')

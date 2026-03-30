@@ -184,7 +184,7 @@ function SkeletonCard() {
 
 const COL_MAP: Record<string, string> = {
   week1: 'B', week2: 'C', week3: 'D', week4: 'E',
-  monthlyActual: 'H', monthlyTarget: 'I', status: 'J',
+  monthlyActual: 'H', monthlyTarget: 'I', status: 'J', owner: 'K',
 }
 
 function EditableCell({
@@ -201,10 +201,12 @@ function EditableCell({
   const [val, setVal] = useState(String(value ?? ''))
   const { toast } = useToast()
   const colLetter = COL_MAP[column]
+  const isTextCol = column === 'owner'
+  const align = isTextCol ? 'text-left' : 'text-right'
 
   if (!editable || !colLetter) {
     return (
-      <td className="py-1.5 px-2 text-xs tabular-nums text-text-muted text-right bg-yanne-50/40">
+      <td className={`py-1.5 px-2 text-xs ${isTextCol ? '' : 'tabular-nums'} text-text-muted ${align} bg-yanne-50/40`}>
         {value || <span className="text-text-faint">&mdash;</span>}
       </td>
     )
@@ -233,7 +235,7 @@ function EditableCell({
           onChange={e => setVal(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save() }}
-          className="w-full bg-white border-2 border-yanne-500 rounded px-1.5 py-0.5 text-xs outline-none tabular-nums"
+          className={`w-full bg-white border-2 border-yanne-500 rounded px-1.5 py-0.5 text-xs outline-none ${isTextCol ? '' : 'tabular-nums'}`}
         />
       </td>
     )
@@ -242,7 +244,7 @@ function EditableCell({
   return (
     <td
       onClick={() => { setEditing(true); setVal(String(value ?? '')) }}
-      className="py-1.5 px-2 text-xs tabular-nums text-text-primary text-right cursor-pointer hover:bg-amber-50 transition-colors"
+      className={`py-1.5 px-2 text-xs ${isTextCol ? '' : 'tabular-nums'} text-text-primary ${align} cursor-pointer hover:bg-amber-50 transition-colors`}
       title="Click to edit"
     >
       {value || <span className="text-text-faint">&mdash;</span>}
@@ -503,7 +505,7 @@ export function CEODashboard() {
                     <td className="py-1.5 px-1 text-center">
                       <TrendArrow trend={trend} />
                     </td>
-                    <td className="py-1.5 px-2 text-[10px] text-text-muted">{row.owner}</td>
+                    <EditableCell value={row.owner} rowIndex={row.rowIndex} column="owner" tab={data.sheetTab} editable={true} onSaved={v => updateLocalRow(idx, 'owner', v)} />
                   </tr>
                 )
               })}
