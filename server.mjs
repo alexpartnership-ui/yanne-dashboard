@@ -2585,7 +2585,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // Fetch ALL API-derived values
     const daysAgoFn = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
-    const [bisonRes, linkedinRes, hubspotDeals, callsRes, dealsRes, inboxRes, meetingsRes] = await Promise.all([
+    const [bisonRes, linkedinRes, hubspotDeals, callsRes, dealsRes, inboxRes, meetingsRes, emailReports] = await Promise.all([
       fetchAllBisonCampaigns().catch(() => []),
       AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       fetchAllHubSpotDeals().catch(() => ({ results: [] })),
@@ -2593,16 +2593,17 @@ app.post('/api/scorecard/sync', async (req, res) => {
       supaQuery('deals_with_calls', 'select=rep_name,deal_status,current_stage,created_at,updated_at').catch(() => ({ data: [] })),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       fetchMeetingsParsed().catch(() => ({ thisWeek: 0, thisMonth: 0 })),
+      fetchEmailReportsParsed().catch(() => ({ emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0 })),
     ])
 
-    // ── EmailBison ──
-    let totalSent = 0, totalReplies = 0, rateCount = 0, replyRateSum = 0, activeCampaigns = 0
+    // ── Email stats from Slack daily reports (truth of source) ──
+    const totalSent = emailReports.emailsSent || 0
+    const totalReplies = emailReports.replies || 0
+    const replyRateAvg = emailReports.replyRate || 0
+    // Still count active campaigns from Bison for that metric
+    let activeCampaigns = 0
     for (const c of bisonRes) {
       if (c.status === 'active' || c.status === 'launching') activeCampaigns++
-      const sent = Number(c.emails_sent) || 0
-      const replied = Number(c.replied) || Number(c.unique_replies) || 0
-      totalSent += sent; totalReplies += replied
-      if (sent > 0) { replyRateSum += (replied / sent) * 100; rateCount++ }
     }
 
     // ── LinkedIn/HeyReach ──
@@ -2663,9 +2664,11 @@ app.post('/api/scorecard/sync', async (req, res) => {
       updates.push({ cell: `${column}${rowNum}`, value })
     }
 
-    // ── Email metrics ──
+    // ── Email metrics (from Slack daily reports) ──
     writeRow(rowMap['Emails Sent']?.[0], 'H', totalSent)
-    writeRow(rowMap['Reply Rate']?.[0], 'H', rateCount > 0 ? `${(replyRateSum / rateCount).toFixed(2)}%` : '0%')
+    writeRow(rowMap['Total Replies']?.[0], 'H', totalReplies)
+    writeRow(rowMap['Reply Rate']?.[0], 'H', `${replyRateAvg.toFixed(2)}%`)
+    writeRow(rowMap['Interested Leads']?.[0], 'H', emailReports.interested || 0)
     writeRow(rowMap['Interested Reply Rate (% of replies)']?.[0], 'H', `${interestedReplyRate}%`)
 
     // ── LinkedIn metrics ──
@@ -3089,6 +3092,53 @@ async function fetchMeetingsParsed() {
   return { thisWeek, thisMonth, todaySoFar: todayIndividual, dailyReports: sortedReports }
 }
 
+// Fetch monthly email stats from Slack #y-c-emails-reportings channel
+async function fetchEmailReportsParsed() {
+  if (!SLACK_TOKEN) return { emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0, interestedPct: 0, days: 0, dailyReports: [] }
+  const now = new Date()
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const oldest = String(Math.floor(new Date(firstOfMonth).getTime() / 1000))
+  const messages = []
+  let cursor = undefined, pages = 0
+  while (pages < 10) {
+    const params = { channel: EMAILS_REPORT_CHANNEL, limit: 200, oldest }
+    if (cursor) params.cursor = cursor
+    const { data, error } = await slackFetch('conversations.history', params)
+    if (error || !data) break
+    messages.push(...(data.messages || []))
+    cursor = data.response_metadata?.next_cursor
+    if (!cursor) break
+    pages++
+  }
+  const dailyReports = []
+  for (const m of messages) {
+    const text = m.text || ''
+    if (!text.includes('Daily Email Campaign Report')) continue
+    const ts = parseFloat(m.ts)
+    const date = new Date(ts * 1000).toISOString().slice(0, 10)
+    if (date < firstOfMonth) continue // Safety: only this month
+    const sent = text.match(/Total Emails Sent:\*?\s*([\d,]+)/i)
+    const replies = text.match(/Total Replies:\*?\s*([\d,]+)/i)
+    const bounced = text.match(/Bounced Emails:\*?\s*([\d,]+)/i)
+    const interested = text.match(/Interested Replies:\*?\s*([\d,]+)/i)
+    const parseN = (m) => m ? parseInt(m[1].replace(/,/g, '')) : 0
+    dailyReports.push({ date, emailsSent: parseN(sent), replies: parseN(replies), bounced: parseN(bounced), interested: parseN(interested) })
+  }
+  dailyReports.sort((a, b) => a.date.localeCompare(b.date))
+  const totals = {
+    emailsSent: dailyReports.reduce((s, r) => s + r.emailsSent, 0),
+    replies: dailyReports.reduce((s, r) => s + r.replies, 0),
+    bounced: dailyReports.reduce((s, r) => s + r.bounced, 0),
+    interested: dailyReports.reduce((s, r) => s + r.interested, 0),
+    days: dailyReports.length,
+    dailyReports,
+  }
+  totals.replyRate = totals.emailsSent > 0 ? (totals.replies / totals.emailsSent) * 100 : 0
+  totals.bounceRate = totals.emailsSent > 0 ? (totals.bounced / totals.emailsSent) * 100 : 0
+  totals.interestedPct = totals.replies > 0 ? (totals.interested / totals.replies) * 100 : 0
+  return totals
+}
+
 async function fetchAllHubSpotDeals() {
   if (!HUBSPOT_KEY) return { results: [] }
   const allDeals = []
@@ -3118,7 +3168,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       mondayRes, hubspotParsed,
       callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
       targetsData, googleSheetRes, linkedinRes, snapshotsRes,
-      onboardingTasksRes,
+      onboardingTasksRes, slackEmailTotals,
     ] = await Promise.all([
       fetchAllBisonCampaigns(),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
@@ -3152,6 +3202,8 @@ app.get('/api/scorecard/data', async (_req, res) => {
         }
         return { boards, overdue: parseMondayOverdue(boards) }
       }).catch(() => null) : Promise.resolve(null),
+      // Slack daily email reports — monthly totals (truth of source for emails/replies/interested)
+      fetchEmailReportsParsed().catch(() => ({ emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0, days: 0 })),
     ])
 
     // Build data freshness indicators
@@ -3181,6 +3233,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       linkedin: linkedinRes,
       snapshots: snapshotsRes.data,
       onboardingTasks: onboardingTasksRes,
+      slackEmailTotals,
       dataFreshness,
     })
   } catch (err) {

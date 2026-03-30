@@ -274,39 +274,27 @@ export function useCEOScorecard() {
       const now = new Date()
       const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-      // ── EmailBison aggregates ──────────────────────
-      // Note: emails_sent is cumulative per campaign. We use Google Sheet monthly actual
-      // when available, otherwise show the cumulative as-is (it resets with new campaigns monthly).
-      let totalSentCumulative = 0, totalRepliesCumulative = 0, totalBounced = 0, activeCampaigns = 0
-      let replyRateSum = 0, bounceRateSum = 0, rateCount = 0
+      // ── Email stats from Slack daily reports (truth of source) ──
+      const slackEmail = raw.slackEmailTotals || { emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0, days: 0 }
+      const totalSent = slackEmail.emailsSent
+      const totalReplies = slackEmail.replies
+      const totalInterested = slackEmail.interested
+      const avgReplyRate = slackEmail.replyRate
+      const avgBounceRate = slackEmail.bounceRate
+
+      // Count active campaigns from Bison (still useful for that metric)
+      let activeCampaigns = 0
       for (const c of campaignList) {
         if (c.status === 'active' || c.status === 'launching') activeCampaigns++
-        const sent = Number(c.emails_sent) || 0
-        const replied = Number(c.replied) || Number(c.unique_replies) || 0
-        const bounced = Number(c.bounced) || 0
-        totalSentCumulative += sent
-        totalRepliesCumulative += replied
-        totalBounced += bounced
-        if (sent > 0) {
-          replyRateSum += (replied / sent) * 100
-          bounceRateSum += (bounced / sent) * 100
-          rateCount++
-        }
       }
-      const avgReplyRate = rateCount > 0 ? replyRateSum / rateCount : 0
-      const avgBounceRate = rateCount > 0 ? bounceRateSum / rateCount : 0
-      // Use Google Sheet monthly actual for emails if available, otherwise use cumulative
-      const sheetEmailsSent = sheetData.get('Emails Sent')
-      const totalSent = sheetEmailsSent && Number(sheetEmailsSent.monthlyActual) > 0
-        ? Number(sheetEmailsSent.monthlyActual)
-        : totalSentCumulative
-      const totalReplies = totalRepliesCumulative
 
-      // ── Airtable Inbox aggregates ──────────────────
+      // ── Meetings from Slack #y-c-meetings-reportings ──
+      const totalMeetingsBooked = slackMeetings.thisWeek || 0
+      const meetingsThisMonth = slackMeetings.thisMonth || slackMeetings.thisWeek || 0
+
+      // ── Airtable Inbox for setter breakdown ──
       const categoryCounts: Record<string, number> = {}
       const setterMap: Record<string, { assigned: number; unactioned: number; meetings: number; interested: number }> = {}
-      let orphanedReplies = 0
-
       for (const r of inboxRecords) {
         const f = r.fields || {}
         const cat = (f['Lead Category'] as string) || ''
@@ -318,14 +306,8 @@ export function useCEOScorecard() {
           if (f['Open Response'] === true) setterMap[setter].unactioned++
           if (cat === 'Meeting Booked') setterMap[setter].meetings++
           if (cat === 'Interested') setterMap[setter].interested++
-        } else {
-          if (f['Open Response'] === true) orphanedReplies++
         }
       }
-
-      const totalInterested = categoryCounts['Interested'] || 0
-      const totalMeetingsBooked = slackMeetings.thisWeek || 0
-      const meetingsThisMonth = slackMeetings.thisMonth || slackMeetings.thisWeek || 0
 
       // ── Supabase call aggregates ───────────────────
       const weekCallCount = weekCalls.length
@@ -486,29 +468,51 @@ export function useCEOScorecard() {
 
       // ── BUILD SCORECARD ────────────────────────────
 
-      // Funnel
-      const interestedToMeeting = totalInterested > 0 ? Math.round((totalMeetingsBooked / totalInterested) * 100) : 0
+      // Use targets from saved targets or Google Sheet
+      const t = raw.targets || {}
+
+      // Funnel — all monthly values from Slack channels
+      const interestedToMeeting = totalInterested > 0 ? Math.round((meetingsThisMonth / totalInterested) * 100) : 0
       const meetingToProposal = meetingsThisMonth > 0 ? Math.round((proposalDeals.length / meetingsThisMonth) * 100) : 0
       const proposalToSigned = proposalDeals.length > 0 ? Math.round((signedDeals.length / Math.max(proposalDeals.length, 1)) * 100) : 0
 
+      // Funnel targets from saved targets (editable via Edit Targets modal)
+      const fEmailTarget = t.emailsSentMonth || 350000
+      const fReplyTarget = t.repliesMonth || 2800
+      const fInterestedTarget = t.interestedMonth || 980
+      const fMeetingsTarget = t.meetingsMonth || 60
+      const fProposalsTarget = t.proposalsMonth || 10
+      const fSignedTarget = t.signedMonth || 3
+      const fRevenueTarget = t.revenueTarget || 833000
+
+      // Get proposals/signed from Google Sheet if available (editable fields)
+      const sheetProposals = sheetData.get('Proposals Sent') || sheetData.get('Proposals')
+      const sheetSigned = sheetData.get('Mandates Signed') || sheetData.get('Signed')
+      const proposalsCount = sheetProposals && Number(sheetProposals.monthlyActual) > 0
+        ? Number(sheetProposals.monthlyActual)
+        : proposalDeals.length
+      const signedCount = sheetSigned && Number(sheetSigned.monthlyActual) > 0
+        ? Number(sheetSigned.monthlyActual)
+        : signedDeals.length
+
       const funnel: FunnelStage[] = [
-        { label: 'Emails Sent', value: totalSent, target: 350000, conversionRate: rateCount > 0 ? Math.round(avgReplyRate * 100) / 100 : null, conversionTarget: 0.8 },
-        { label: 'Replies', value: totalReplies, target: 2800, conversionRate: totalReplies > 0 ? Math.round((totalInterested / totalReplies) * 100) : null, conversionTarget: 35 },
-        { label: 'Interested', value: totalInterested, target: 980, conversionRate: interestedToMeeting, conversionTarget: 60 },
-        { label: 'Meetings', value: meetingsThisMonth, target: 588, conversionRate: meetingToProposal, conversionTarget: 30 },
-        { label: 'Proposals', value: proposalDeals.length, target: 176, conversionRate: proposalToSigned, conversionTarget: 25 },
-        { label: 'Signed', value: signedDeals.length, target: 44, conversionRate: null, conversionTarget: null },
-        { label: 'Cash', value: revenueCollected, target: 833000, conversionRate: null, conversionTarget: null },
+        { label: 'Emails Sent', value: totalSent, target: fEmailTarget, conversionRate: avgReplyRate > 0 ? Math.round(avgReplyRate * 100) / 100 : null, conversionTarget: 0.8 },
+        { label: 'Replies', value: totalReplies, target: fReplyTarget, conversionRate: totalReplies > 0 ? Math.round((totalInterested / totalReplies) * 100) : null, conversionTarget: 35 },
+        { label: 'Interested', value: totalInterested, target: fInterestedTarget, conversionRate: interestedToMeeting, conversionTarget: 60 },
+        { label: 'Meetings', value: meetingsThisMonth, target: fMeetingsTarget, conversionRate: meetingToProposal, conversionTarget: 30 },
+        { label: 'Proposals', value: proposalsCount, target: fProposalsTarget, conversionRate: proposalToSigned, conversionTarget: 25 },
+        { label: 'Signed', value: signedCount, target: fSignedTarget, conversionRate: null, conversionTarget: null },
+        { label: 'Cash', value: revenueCollected, target: fRevenueTarget, conversionRate: null, conversionTarget: null },
       ]
 
       const outbound: ScorecardMetric[] = [
-        metric('Emails Sent / Week', 'Outreachify', '350K', `${(totalSent / 1000).toFixed(0)}K`, totalSent, 350000, false, prevValue(prevOutbound, 'Emails Sent / Week')),
-        metric('Active Campaigns', 'Outreachify', '30+', String(activeCampaigns), activeCampaigns, 30, false, prevValue(prevOutbound, 'Active Campaigns')),
-        metric('Reply Rate', 'Outreachify', '0.8%', `${avgReplyRate.toFixed(2)}%`, avgReplyRate, 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
-        metric('Bounce Rate', 'Outreachify', '<1.0%', `${avgBounceRate.toFixed(2)}%`, avgBounceRate, 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
-        metric('Interested / Week', 'Outreachify', '50', String(totalInterested), totalInterested, 50, false, prevValue(prevOutbound, 'Interested / Week')),
-        metric('Connected Senders', 'Outreachify', '100+', String(connectedSenders), connectedSenders, 100, false, prevValue(prevOutbound, 'Connected Senders')),
-        metric('Burnt Senders', 'Outreachify', '<10', String(burntSenders), burntSenders, 10, true, prevValue(prevOutbound, 'Burnt Senders')),
+        metric('Emails Sent (MTD)', 'Outreachify', `${(fEmailTarget / 1000).toFixed(0)}K`, `${(totalSent / 1000).toFixed(0)}K`, totalSent, fEmailTarget, false, prevValue(prevOutbound, 'Emails Sent (MTD)')),
+        metric('Active Campaigns', 'Outreachify', String(t.activeCampaigns || 30), String(activeCampaigns), activeCampaigns, t.activeCampaigns || 30, false, prevValue(prevOutbound, 'Active Campaigns')),
+        metric('Reply Rate', 'Outreachify', `${t.replyRate || 0.8}%`, `${avgReplyRate.toFixed(2)}%`, avgReplyRate, t.replyRate || 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
+        metric('Bounce Rate', 'Outreachify', `<${t.bounceRate || 1.0}%`, `${avgBounceRate.toFixed(2)}%`, avgBounceRate, t.bounceRate || 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
+        metric('Interested (MTD)', 'Outreachify', String(fInterestedTarget), String(totalInterested), totalInterested, fInterestedTarget, false, prevValue(prevOutbound, 'Interested (MTD)')),
+        metric('Connected Senders', 'Outreachify', String(t.connectedSenders || 100), String(connectedSenders), connectedSenders, t.connectedSenders || 100, false, prevValue(prevOutbound, 'Connected Senders')),
+        metric('Burnt Senders', 'Outreachify', `<${t.burntSenders || 10}`, String(burntSenders), burntSenders, t.burntSenders || 10, true, prevValue(prevOutbound, 'Burnt Senders')),
       ]
 
       // LinkedIn outbound section

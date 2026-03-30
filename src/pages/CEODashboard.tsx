@@ -33,7 +33,7 @@ function NotifySlackButton() {
     <button
       onClick={notify}
       disabled={sending}
-      className="rounded-lg border border-red-200 bg-surface-raised px-2.5 py-1 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+      className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-[10px] font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
     >
       {sending ? 'Sending...' : 'Notify Slack'}
     </button>
@@ -68,53 +68,51 @@ function TargetsModal({ open, onClose, onSaved }: { open: boolean; onClose: () =
 
   const fields: { key: string; label: string; prefix?: string; suffix?: string }[] = [
     { key: 'revenueTarget', label: 'Monthly Revenue Target', prefix: '$' },
-    { key: 'emailsSentWeek', label: 'Emails Sent / Week' },
+    { key: 'emailsSentMonth', label: 'Emails Sent / Month' },
+    { key: 'repliesMonth', label: 'Replies / Month' },
+    { key: 'interestedMonth', label: 'Interested / Month' },
+    { key: 'meetingsMonth', label: 'Meetings / Month' },
+    { key: 'proposalsMonth', label: 'Proposals / Month' },
+    { key: 'signedMonth', label: 'Signed / Month' },
     { key: 'activeCampaigns', label: 'Active Campaigns' },
     { key: 'replyRate', label: 'Reply Rate Target', suffix: '%' },
     { key: 'bounceRate', label: 'Max Bounce Rate', suffix: '%' },
-    { key: 'interestedWeek', label: 'Interested Replies / Week' },
     { key: 'connectedSenders', label: 'Connected Senders' },
     { key: 'burntSenders', label: 'Max Burnt Senders' },
-    { key: 'unactionedReplies', label: 'Max Unactioned Replies' },
-    { key: 'interestedToMeeting', label: 'Interested to Meeting %', suffix: '%' },
-    { key: 'meetingsBookedWeek', label: 'Meetings Booked / Week' },
     { key: 'callsScoredWeek', label: 'Calls Scored / Week' },
     { key: 'teamAvgScore', label: 'Team Avg Score', suffix: '%' },
-    { key: 'c1toC2Rate', label: 'Call 1 to Call 2 Rate', suffix: '%' },
-    { key: 'c2toC3Rate', label: 'Call 2 to Call 3 Rate', suffix: '%' },
     { key: 'qualificationRate', label: 'Qualification Rate', suffix: '%' },
-    { key: 'proposalsSent', label: 'Proposals Sent / Week' },
     { key: 'closeRate', label: 'Close Rate', suffix: '%' },
     { key: 'stalledDeals', label: 'Max Stalled Deals' },
   ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-surface-raised rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-text-primary">Edit Scorecard Targets</h3>
-          <button onClick={onClose} className="text-text-faint hover:text-text-muted text-xl">&times;</button>
+          <button onClick={onClose} className="text-text-faint hover:text-text-secondary text-xl leading-none">&times;</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {fields.map(f => (
             <div key={f.key}>
               <label className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">{f.label}</label>
               <div className="flex items-center gap-1 mt-0.5">
-                {f.prefix && <span className="text-xs text-text-faint">{f.prefix}</span>}
+                {f.prefix && <span className="text-xs text-text-muted">{f.prefix}</span>}
                 <input
                   type="number"
                   value={targets[f.key] ?? ''}
                   onChange={e => setTargets(prev => ({ ...prev, [f.key]: parseFloat(e.target.value) || 0 }))}
-                  className="w-full rounded border border-border px-2 py-1.5 text-sm text-text-primary focus:border-yanne focus:outline-none"
+                  className="w-full rounded-lg border border-border px-2 py-1.5 text-sm text-text-primary bg-surface-sunken focus:border-yanne-500 focus:outline-none"
                 />
-                {f.suffix && <span className="text-xs text-text-faint">{f.suffix}</span>}
+                {f.suffix && <span className="text-xs text-text-muted">{f.suffix}</span>}
               </div>
             </div>
           ))}
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-xs text-text-muted hover:bg-surface-raised">Cancel</button>
-          <button onClick={save} disabled={saving} className="rounded-lg bg-yanne px-4 py-2 text-xs font-medium text-white hover:bg-yanne/90 disabled:opacity-50">
+          <button onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-xs text-text-muted hover:bg-surface-sunken">Cancel</button>
+          <button onClick={save} disabled={saving} className="rounded-lg bg-yanne-500 px-4 py-2 text-xs font-medium text-white hover:bg-yanne-400 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Targets'}
           </button>
         </div>
@@ -136,8 +134,7 @@ function parseNum(v: string | number | undefined): number {
 function computeStatus(actual: string | number, target: string | number): 'green' | 'yellow' | 'red' | 'gray' {
   const a = parseNum(actual)
   const t = parseNum(target)
-  if (t === 0) return 'gray' // no target = no status
-  // Handle "Track" or "Track trend" targets
+  if (t === 0) return 'gray'
   if (String(target).toLowerCase().includes('track')) return 'gray'
   const ratio = a / t
   if (ratio >= 1) return 'green'
@@ -150,18 +147,17 @@ function StatusDot({ status }: { status: 'green' | 'yellow' | 'red' | 'gray' }) 
     green: 'bg-emerald-500',
     yellow: 'bg-amber-400',
     red: 'bg-red-500',
-    gray: 'bg-zinc-300',
+    gray: 'bg-border-strong',
   }
   return <div className={`h-2.5 w-2.5 rounded-full ${colors[status]} mx-auto`} />
 }
 
 function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
-  if (trend === 'up') return <span className="text-emerald-500 text-[10px] font-bold ml-1">{'\u2191'}</span>
+  if (trend === 'up') return <span className="text-emerald-600 text-[10px] font-bold ml-1">{'\u2191'}</span>
   if (trend === 'down') return <span className="text-red-500 text-[10px] font-bold ml-1">{'\u2193'}</span>
-  return <span className="text-text-faint text-[10px] ml-1">{'\u2192'}</span>
+  return <span className="text-text-muted text-[10px] ml-1">{'\u2192'}</span>
 }
 
-// Compute trend from week values
 function computeTrend(row: SheetRow): 'up' | 'down' | 'flat' {
   const vals = [row.week1, row.week2, row.week3, row.week4].map(parseNum).filter(v => v > 0)
   if (vals.length < 2) return 'flat'
@@ -175,7 +171,7 @@ function computeTrend(row: SheetRow): 'up' | 'down' | 'flat' {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
       <div className="skeleton h-4 w-48 mb-3" />
       <div className="space-y-2">
         {[1,2,3].map(i => <div key={i} className="skeleton h-3 w-full" />)}
@@ -208,7 +204,7 @@ function EditableCell({
 
   if (!editable || !colLetter) {
     return (
-      <td className="py-1.5 px-2 text-xs tabular-nums text-text-muted text-right bg-sky-50/40">
+      <td className="py-1.5 px-2 text-xs tabular-nums text-text-muted text-right bg-yanne-50/40">
         {value || <span className="text-text-faint">&mdash;</span>}
       </td>
     )
@@ -237,7 +233,7 @@ function EditableCell({
           onChange={e => setVal(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save() }}
-          className="w-full bg-surface-raised border-2 border-yanne rounded px-1.5 py-0.5 text-xs outline-none tabular-nums"
+          className="w-full bg-white border-2 border-yanne-500 rounded px-1.5 py-0.5 text-xs outline-none tabular-nums"
         />
       </td>
     )
@@ -257,14 +253,13 @@ function EditableCell({
 // ─── Section Header with badge ──────────────────────────
 
 function SectionHeader({ title, rows }: { title: string; rows: SheetRow[] }) {
-  // Count metrics in this section that have both actual and target
   const scored = rows.filter(r => !r.isSection && !r.isSubheader)
   const onTarget = scored.filter(r => computeStatus(r.monthlyActual, r.monthlyTarget) === 'green').length
   const total = scored.filter(r => computeStatus(r.monthlyActual, r.monthlyTarget) !== 'gray').length
 
   return (
     <tr>
-      <td colSpan={10} className="bg-yanne text-white font-bold text-[11px] uppercase tracking-wider py-2.5 px-4">
+      <td colSpan={10} className="bg-yanne-600 text-white font-bold text-[11px] uppercase tracking-wider py-2.5 px-4">
         <div className="flex items-center justify-between">
           <span>{title}</span>
           {total > 0 && (
@@ -336,7 +331,7 @@ export function CEODashboard() {
       </div>
     )
   }
-  if (!data) return <p className="text-sm text-text-faint">Failed to load scorecard</p>
+  if (!data) return <p className="text-sm text-text-muted">Failed to load scorecard</p>
 
   const revPct = data.revenueTarget > 0 ? Math.round((data.revenueCollected / data.revenueTarget) * 100) : 0
   const revBarColor = revPct >= 70 ? 'bg-emerald-500' : revPct >= 40 ? 'bg-amber-400' : 'bg-red-500'
@@ -349,7 +344,6 @@ export function CEODashboard() {
     })
   }
 
-  // Group rows by section for badge counting
   const sections: { title: string; rows: SheetRow[] }[] = []
   let currentSection: { title: string; rows: SheetRow[] } | null = null
   for (const row of localRows) {
@@ -362,26 +356,26 @@ export function CEODashboard() {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto print:max-w-none">
+    <div className="max-w-[1400px] mx-auto print:max-w-none space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary">Growth Scorecard</h2>
-          <p className="text-xs text-text-faint mt-0.5">Week of {data.weekRange}</p>
+          <h2 className="text-2xl font-bold text-text-primary tracking-tight">Growth Scorecard</h2>
+          <p className="text-xs text-text-muted mt-0.5">Week of {data.weekRange}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <span className="text-[10px] text-text-faint">Last refreshed: {data.lastRefreshed}</span>
-          <button onClick={saveSnapshot} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm">Save Snapshot</button>
-          <button onClick={() => setShowTargets(true)} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm">Edit Targets</button>
+          <span className="text-[10px] text-text-faint font-data">Last refreshed: {data.lastRefreshed}</span>
+          <button onClick={saveSnapshot} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken transition-colors">Save Snapshot</button>
+          <button onClick={() => setShowTargets(true)} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken transition-colors">Edit Targets</button>
           <button
             onClick={async () => {
               const r = await apiFetch('/api/digest/send', { method: 'POST' })
               if (r.ok) toast('Digest sent to Slack', 'success')
               else toast('Failed to send digest', 'error')
             }}
-            className="rounded-lg bg-yanne px-3 py-1.5 text-xs font-medium text-white hover:bg-yanne/90 shadow-sm"
+            className="rounded-lg bg-yanne-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-yanne-400 transition-colors"
           >Send Digest</button>
-          <button onClick={syncNow} disabled={syncing} className="rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-muted hover:bg-surface-raised shadow-sm disabled:opacity-50">
+          <button onClick={syncNow} disabled={syncing} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken disabled:opacity-50 transition-colors">
             {syncing ? 'Syncing...' : 'Sync Now'}
           </button>
         </div>
@@ -389,23 +383,23 @@ export function CEODashboard() {
       </div>
 
       {/* ── NORTH STAR ─────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-text-faint mb-2">Revenue Target</div>
+      <div className="rounded-xl border border-border bg-white p-6 shadow-sm text-center">
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-2">Revenue Target</div>
         <div className="text-4xl font-bold text-text-primary tabular-nums">
           ${(data.revenueCollected / 1000).toFixed(0)}K
-          <span className="text-lg font-normal text-text-faint ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
+          <span className="text-lg font-normal text-text-muted ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
         </div>
         <div className="mt-3 mx-auto max-w-xl">
-          <div className="h-2.5 rounded-full bg-surface-overlay overflow-hidden">
+          <div className="h-3 rounded-full bg-surface-sunken overflow-hidden">
             <div className={`h-full rounded-full ${revBarColor} transition-all`} style={{ width: `${Math.min(revPct, 100)}%` }} />
           </div>
-          <div className="text-xs text-text-muted mt-1 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
+          <div className="text-xs text-text-muted mt-1.5 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
         </div>
       </div>
 
       {/* ── FUNNEL FLOW ──────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-faint mb-3">Pipeline Flow</div>
+      <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-3">Pipeline Flow</div>
         <div className="flex items-center gap-0 overflow-x-auto">
           {data.funnel.map((stage, i) => {
             const pct = stage.target > 0 ? stage.value / stage.target : 0
@@ -418,8 +412,8 @@ export function CEODashboard() {
                   <div className={`text-lg font-bold tabular-nums ${textColor}`}>
                     {stage.label === 'Cash' ? `$${(stage.value / 1000).toFixed(0)}K` : stage.value >= 1000 ? `${(stage.value / 1000).toFixed(0)}K` : stage.value}
                   </div>
-                  <div className="text-[9px] text-text-muted uppercase tracking-wider mt-0.5 font-medium">{stage.label}</div>
-                  <div className="text-[8px] text-text-faint tabular-nums">tgt: {stage.target >= 1000 ? `${(stage.target / 1000).toFixed(0)}K` : stage.target}</div>
+                  <div className="text-[9px] text-text-secondary uppercase tracking-wider mt-0.5 font-medium">{stage.label}</div>
+                  <div className="text-[8px] text-text-muted tabular-nums">tgt: {stage.target >= 1000 ? `${(stage.target / 1000).toFixed(0)}K` : stage.target}</div>
                 </div>
                 {i < data.funnel.length - 1 && (
                   <div className="flex flex-col items-center mx-0.5 shrink-0">
@@ -442,11 +436,11 @@ export function CEODashboard() {
       </div>
 
       {/* ── SHEET TABLE ────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b-2 border-border bg-surface-raised">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b-2 border-yanne-500 bg-surface-sunken">
                 <th className="text-left py-2.5 px-4 w-[260px]">Metric</th>
                 <th className="text-right py-2.5 px-2 w-[55px]">W1</th>
                 <th className="text-right py-2.5 px-2 w-[55px]">W2</th>
@@ -469,7 +463,7 @@ export function CEODashboard() {
                 if (row.isSubheader) {
                   return (
                     <tr key={`sub-${idx}`}>
-                      <td colSpan={10} className="bg-yanne-light/30 font-semibold text-xs text-yanne py-2 px-4 border-b border-yanne-light/40">
+                      <td colSpan={10} className="bg-yanne-50 font-semibold text-xs text-yanne-600 py-2 px-4 border-b border-yanne-100">
                         {row.metric}
                       </td>
                     </tr>
@@ -478,10 +472,10 @@ export function CEODashboard() {
 
                 const status = computeStatus(row.monthlyActual, row.monthlyTarget)
                 const trend = computeTrend(row)
-                const rowBg = status === 'red' ? 'bg-red-50/40' : status === 'yellow' ? 'bg-amber-50/30' : idx % 2 === 0 ? 'bg-surface-raised' : 'bg-surface-raised/50'
+                const rowBg = status === 'red' ? 'bg-red-50/50' : status === 'yellow' ? 'bg-amber-50/40' : idx % 2 === 0 ? 'bg-white' : 'bg-surface-sunken/50'
 
                 return (
-                  <tr key={`row-${idx}`} className={`border-b border-border-muted hover:bg-surface-overlay/50 transition-colors ${rowBg}`}>
+                  <tr key={`row-${idx}`} className={`border-b border-border-muted hover:bg-yanne-50/50 transition-colors ${rowBg}`}>
                     <td className="py-1.5 px-4 text-xs text-text-primary font-medium">{row.metric}</td>
                     <EditableCell value={row.week1} rowIndex={row.rowIndex} column="week1" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week1', v)} />
                     <EditableCell value={row.week2} rowIndex={row.rowIndex} column="week2" tab={data.sheetTab} editable={row.editable} onSaved={v => updateLocalRow(idx, 'week2', v)} />
@@ -495,7 +489,7 @@ export function CEODashboard() {
                     <td className="py-1.5 px-1 text-center">
                       <TrendArrow trend={trend} />
                     </td>
-                    <td className="py-1.5 px-2 text-[10px] text-text-faint">{row.owner}</td>
+                    <td className="py-1.5 px-2 text-[10px] text-text-muted">{row.owner}</td>
                   </tr>
                 )
               })}
@@ -506,17 +500,17 @@ export function CEODashboard() {
 
       {/* ── REP LEADERBOARD ──────────────────────── */}
       {data.repLeaderboard.length > 0 && (
-        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-text-secondary">Rep Leaderboard (This Week)</h3>
-            <div className="flex gap-4 text-[10px] text-text-faint">
-              <span>Top Theme: <span className="text-text-muted font-medium">{data.topCoachingTheme}</span></span>
-              <span>Weakest: <span className="text-text-muted font-medium">{data.worstCategory}</span></span>
+            <h3 className="text-sm font-bold text-text-primary">Rep Leaderboard (This Week)</h3>
+            <div className="flex gap-4 text-[10px] text-text-muted">
+              <span>Top Theme: <span className="text-text-secondary font-medium">{data.topCoachingTheme}</span></span>
+              <span>Weakest: <span className="text-text-secondary font-medium">{data.worstCategory}</span></span>
             </div>
           </div>
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border">
                 <th className="text-left pb-2 w-8">#</th>
                 <th className="text-left pb-2">Rep</th>
                 <th className="text-right pb-2">Calls</th>
@@ -532,9 +526,9 @@ export function CEODashboard() {
                   <tr key={r.name} className={`border-b border-border-muted ${bg}`}>
                     <td className="py-2 text-sm">{medal}</td>
                     <td className="py-2 text-xs font-semibold text-text-primary">{r.name}</td>
-                    <td className="py-2 text-xs text-text-muted text-right tabular-nums">{r.calls}</td>
+                    <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{r.calls}</td>
                     <td className={`py-2 text-xs font-bold text-right tabular-nums ${r.avgScore >= 70 ? 'text-emerald-600' : r.avgScore >= 55 ? 'text-amber-600' : 'text-red-600'}`}>{r.avgScore}%</td>
-                    <td className="py-2 text-xs text-text-muted text-right tabular-nums">{r.dealsAdvanced}</td>
+                    <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{r.dealsAdvanced}</td>
                   </tr>
                 )
               })}
@@ -545,11 +539,11 @@ export function CEODashboard() {
 
       {/* ── SETTER BREAKDOWN ──────────────────────── */}
       {data.setterBreakdown.length > 0 && (
-        <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h3 className="text-sm font-bold text-text-secondary mb-3">Setter Breakdown</h3>
+        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-text-primary mb-3">Setter Breakdown</h3>
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
+              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border">
                 <th className="text-left pb-2">Setter</th>
                 <th className="text-right pb-2">Assigned</th>
                 <th className="text-right pb-2">Meetings</th>
@@ -560,9 +554,9 @@ export function CEODashboard() {
               {data.setterBreakdown.map(s => (
                 <tr key={s.name} className="border-b border-border-muted">
                   <td className="py-2 text-xs font-medium text-text-primary">{s.name}</td>
-                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.assigned}</td>
-                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.meetings}</td>
-                  <td className="py-2 text-xs text-text-muted text-right tabular-nums">{s.conversionRate}%</td>
+                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.assigned}</td>
+                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.meetings}</td>
+                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.conversionRate}%</td>
                 </tr>
               ))}
             </tbody>
@@ -572,7 +566,7 @@ export function CEODashboard() {
 
       {/* ── BOTTLENECK ─────────────────────────────── */}
       {data.bottleneck && (
-        <div className="mb-6 rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
+        <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
           <h3 className="text-sm font-bold text-amber-900 mb-2">This Week's Bottleneck</h3>
           <div className="text-sm text-amber-800 mb-2">
             <span className="font-bold">{data.bottleneck.stage}:</span> {data.bottleneck.actual}% conversion (target: {data.bottleneck.target}%)
@@ -586,14 +580,14 @@ export function CEODashboard() {
       )}
 
       {/* ── ALERTS ─────────────────────────────────── */}
-      <div className="mb-6 rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <h3 className="text-sm font-bold text-text-secondary mb-3">Alerts</h3>
+      <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+        <h3 className="text-sm font-bold text-text-primary mb-3">Alerts</h3>
         <div className="space-y-3">
           {data.alerts.filter(a => a.level === 'critical').length > 0 && (
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-red-500 mb-1">Critical</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-red-600 mb-1">Critical</div>
               {data.alerts.filter(a => a.level === 'critical').map((a, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-1.5 mb-1">
+                <div key={i} className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 mb-1">
                   <div className="h-2 w-2 rounded-full bg-red-500 mt-1 shrink-0" />
                   <span className="text-xs text-red-800">{a.message}</span>
                 </div>
@@ -602,9 +596,9 @@ export function CEODashboard() {
           )}
           {data.alerts.filter(a => a.level === 'warning').length > 0 && (
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-1">Warning</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 mb-1">Warning</div>
               {data.alerts.filter(a => a.level === 'warning').map((a, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-1.5 mb-1">
+                <div key={i} className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 mb-1">
                   <div className="h-2 w-2 rounded-full bg-amber-400 mt-1 shrink-0" />
                   <span className="text-xs text-amber-800">{a.message}</span>
                 </div>
@@ -613,9 +607,9 @@ export function CEODashboard() {
           )}
           {data.alerts.filter(a => a.level === 'win').length > 0 && (
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500 mb-1">Wins</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 mb-1">Wins</div>
               {data.alerts.filter(a => a.level === 'win').map((a, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 mb-1">
+                <div key={i} className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 mb-1">
                   <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
                   <span className="text-xs text-emerald-800">{a.message}</span>
                 </div>
@@ -627,22 +621,22 @@ export function CEODashboard() {
 
       {/* ── ONBOARDING PROGRESS ─────────────────────── */}
       {data.onboardingProjects.length > 0 && (
-        <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-text-secondary">Client Onboarding</h3>
-            <span className="text-[10px] text-text-faint">{data.onboardingProjects.length} active projects</span>
+            <h3 className="text-sm font-bold text-text-primary">Client Onboarding</h3>
+            <span className="text-[10px] text-text-muted">{data.onboardingProjects.length} active projects</span>
           </div>
           <div className="space-y-2">
             {data.onboardingProjects.map(p => (
               <div key={p.name} className="flex items-center gap-3 py-1.5">
                 <span className="text-xs font-medium text-text-primary w-32 truncate" title={p.name}>{p.name}</span>
-                <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
+                <div className="flex-1 h-2.5 rounded-full bg-surface-sunken overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${p.completionRate >= 80 ? 'bg-emerald-500' : p.completionRate >= 40 ? 'bg-blue-500' : 'bg-amber-500'}`}
                     style={{ width: `${p.completionRate}%` }}
                   />
                 </div>
-                <span className="text-xs font-semibold text-text-secondary w-10 text-right">{p.completionRate}%</span>
+                <span className="text-xs font-semibold text-text-primary w-10 text-right tabular-nums">{p.completionRate}%</span>
                 <div className="flex gap-1">
                   {p.groups.map(g => (
                     <div key={g.title} className="w-6 text-center" title={`${g.title}: ${g.done}/${g.total}`}>
@@ -663,7 +657,7 @@ export function CEODashboard() {
 
       {/* ── OVERDUE TASKS ───────────────────────────── */}
       {data.overdueTasks.length > 0 && (
-        <div className="rounded-xl border border-red-200 bg-red-50/50 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-red-700">Overdue Onboarding Tasks</h3>
             <NotifySlackButton />
@@ -673,28 +667,28 @@ export function CEODashboard() {
               <div key={i} className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-text-primary">{t.projectName}</span>
-                  <span className="text-[10px] text-text-faint">{t.group}</span>
-                  <span className="text-xs text-text-muted">{t.taskName}</span>
+                  <span className="text-[10px] text-text-muted">{t.group}</span>
+                  <span className="text-xs text-text-secondary">{t.taskName}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-text-faint">{t.owner}</span>
+                  <span className="text-[10px] text-text-muted">{t.owner}</span>
                   <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{t.daysOverdue}d</span>
                 </div>
               </div>
             ))}
             {data.overdueTasks.length > 8 && (
-              <p className="text-[10px] text-text-faint pt-1">...and {data.overdueTasks.length - 8} more</p>
+              <p className="text-[10px] text-text-muted pt-1">...and {data.overdueTasks.length - 8} more</p>
             )}
           </div>
         </div>
       )}
 
       {/* ── WEEKLY COMPARISON ──────────────────────── */}
-      <div className="rounded-xl border border-[#E5E5E5] bg-surface-raised p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        <h3 className="text-sm font-bold text-text-secondary mb-3">This Week vs Last Week</h3>
+      <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+        <h3 className="text-sm font-bold text-text-primary mb-3">This Week vs Last Week</h3>
         <table className="w-full">
           <thead>
-            <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-faint border-b border-border">
+            <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border">
               <th className="text-left pb-2">Metric</th>
               <th className="text-right pb-2">This Week</th>
               <th className="text-right pb-2">Last Week</th>
@@ -709,7 +703,7 @@ export function CEODashboard() {
                 <td className="py-2 text-xs text-text-muted text-right tabular-nums">{row.lastWeek}</td>
                 <td className={`py-2 text-xs font-semibold text-right tabular-nums ${
                   String(row.change).startsWith('+') ? 'text-emerald-600' :
-                  String(row.change).startsWith('-') ? 'text-red-600' : 'text-text-faint'
+                  String(row.change).startsWith('-') ? 'text-red-600' : 'text-text-muted'
                 }`}>{row.change}</td>
               </tr>
             ))}
