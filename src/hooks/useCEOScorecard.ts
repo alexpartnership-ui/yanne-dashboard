@@ -402,22 +402,22 @@ export function useCEOScorecard() {
       const revenuePerEmployee = revenueCollected > 0 ? Math.round(revenueCollected / sheetHeadcount) : 0
 
       // ── LinkedIn/HeyReach aggregates ───────────────
+      // Airtable records are cumulative snapshots by date — use the LATEST record
       const liAgg = { messagesSent: 0, connectionsSent: 0, connectionsAccepted: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, totalReplies: 0, meetingsBooked: 0 }
-      for (const r of linkedinRecords) {
-        const f = r.fields || {}
-        liAgg.messagesSent += Number(f.messagesSent) || 0
-        liAgg.connectionsSent += Number(f.connectionsSent) || 0
-        liAgg.connectionsAccepted += Number(f.connectionsAccepted) || 0
-        liAgg.totalReplies += Number(f.totalMessageReplies) || 0
-        liAgg.meetingsBooked += Number(f['Meeting Booked']) || 0
+      if (linkedinRecords.length > 0) {
+        // Sort by date descending, take latest
+        const sorted = [...linkedinRecords].sort((a: { fields: { Date?: string } }, b: { fields: { Date?: string } }) =>
+          (b.fields?.Date || '').localeCompare(a.fields?.Date || ''))
+        const latest = sorted[0].fields || {}
+        liAgg.messagesSent = Number(latest.messagesSent) || 0
+        liAgg.connectionsSent = Number(latest.connectionsSent) || 0
+        liAgg.connectionsAccepted = Number(latest.connectionsAccepted) || 0
+        liAgg.totalReplies = Number(latest.totalMessageReplies) || 0
+        liAgg.meetingsBooked = Number(latest['Meeting Booked']) || 0
+        // Rates stored as decimals (0.176 = 17.6%) — multiply by 100
+        liAgg.connectionAcceptanceRate = Math.round((Number(latest.connectionAcceptanceRate) || 0) * 1000) / 10
+        liAgg.messageReplyRate = Math.round((Number(latest.messageReplyRate) || 0) * 1000) / 10
       }
-      // Calculate rates from totals (not from individual record rates)
-      liAgg.connectionAcceptanceRate = liAgg.connectionsSent > 0
-        ? Math.round((liAgg.connectionsAccepted / liAgg.connectionsSent) * 1000) / 10
-        : 0
-      liAgg.messageReplyRate = liAgg.messagesSent > 0
-        ? Math.round((liAgg.totalReplies / liAgg.messagesSent) * 1000) / 10
-        : 0
 
       // ── Previous snapshot values for trends ────────
       const prevOutbound = lastSnapshot?.outbound || []
