@@ -2608,15 +2608,21 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // ── LinkedIn/HeyReach ──
     const liRecords = linkedinRes?.records || []
-    const liAgg = { messagesSent: 0, connectionsSent: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, meetingsBooked: 0 }
+    const liAgg = { messagesSent: 0, connectionsSent: 0, connectionsAccepted: 0, connectionAcceptanceRate: 0, messageReplyRate: 0, totalReplies: 0, meetingsBooked: 0 }
     for (const r of liRecords) {
       const f = r.fields || {}
       liAgg.messagesSent += Number(f.messagesSent) || 0
       liAgg.connectionsSent += Number(f.connectionsSent) || 0
+      liAgg.connectionsAccepted += Number(f.connectionsAccepted) || 0
+      liAgg.totalReplies += Number(f.totalMessageReplies) || 0
       liAgg.meetingsBooked += Number(f['Meeting Booked']) || 0
-      if (f.connectionAcceptanceRate) liAgg.connectionAcceptanceRate = Number(f.connectionAcceptanceRate) || 0
-      if (f.messageReplyRate) liAgg.messageReplyRate = Number(f.messageReplyRate) || 0
     }
+    liAgg.connectionAcceptanceRate = liAgg.connectionsSent > 0
+      ? Math.round((liAgg.connectionsAccepted / liAgg.connectionsSent) * 1000) / 10
+      : 0
+    liAgg.messageReplyRate = liAgg.messagesSent > 0
+      ? Math.round((liAgg.totalReplies / liAgg.messagesSent) * 1000) / 10
+      : 0
 
     // ── Supabase calls per rep ──
     const calls = callsRes.data || []

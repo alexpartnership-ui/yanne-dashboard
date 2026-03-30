@@ -408,9 +408,14 @@ export function useCEOScorecard() {
         liAgg.connectionsAccepted += Number(f.connectionsAccepted) || 0
         liAgg.totalReplies += Number(f.totalMessageReplies) || 0
         liAgg.meetingsBooked += Number(f['Meeting Booked']) || 0
-        if (f.connectionAcceptanceRate) liAgg.connectionAcceptanceRate = Number(f.connectionAcceptanceRate) || 0
-        if (f.messageReplyRate) liAgg.messageReplyRate = Number(f.messageReplyRate) || 0
       }
+      // Calculate rates from totals (not from individual record rates)
+      liAgg.connectionAcceptanceRate = liAgg.connectionsSent > 0
+        ? Math.round((liAgg.connectionsAccepted / liAgg.connectionsSent) * 1000) / 10
+        : 0
+      liAgg.messageReplyRate = liAgg.messagesSent > 0
+        ? Math.round((liAgg.totalReplies / liAgg.messagesSent) * 1000) / 10
+        : 0
 
       // ── Previous snapshot values for trends ────────
       const prevOutbound = lastSnapshot?.outbound || []
