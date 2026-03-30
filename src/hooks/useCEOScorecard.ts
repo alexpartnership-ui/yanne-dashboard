@@ -280,8 +280,8 @@ export function useCEOScorecard() {
       const totalSent = slackEmail.emailsSent
       const totalReplies = slackEmail.replies
       const totalInterested = slackEmail.interested
-      const avgReplyRate = slackEmail.replyRate
-      const avgBounceRate = slackEmail.bounceRate
+      const _avgReplyRate = slackEmail.replyRate // kept for reference; we compute monthlyReplyRate from totals
+      void _avgReplyRate
 
       // Count active campaigns from Bison (still useful for that metric)
       let activeCampaigns = 0
@@ -368,13 +368,15 @@ export function useCEOScorecard() {
       }
       const worstCategory = Object.entries(catFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'
 
-      // Call progression rates
-      const call1Deals = deals.filter(d => d.call_1_record_id)
-      const call2Deals = deals.filter(d => d.call_2_record_id)
-      const call3Deals = deals.filter(d => d.call_3_record_id)
+      // Call progression rates — use active + signed this month, not all-time
+      const currentDeals = [...activeDeals, ...signedDeals]
+      const call1Deals = currentDeals.filter(d => d.call_1_record_id)
+      const call2Deals = currentDeals.filter(d => d.call_2_record_id)
+      const call3Deals = currentDeals.filter(d => d.call_3_record_id)
       const c1to2Rate = call1Deals.length > 0 ? Math.round((call2Deals.length / call1Deals.length) * 100) : 0
       const c2to3Rate = call2Deals.length > 0 ? Math.round((call3Deals.length / call2Deals.length) * 100) : 0
-      const closeRate = deals.length > 0 ? Math.round((signedDeals.length / deals.length) * 100) : 0
+      const pipelineTotal = activeDeals.length + signedDeals.length
+      const closeRate = pipelineTotal > 0 ? Math.round((signedDeals.length / pipelineTotal) * 100) : 0
 
       // ── HubSpot revenue (this month only) ─────────
       let revenueCollected = 0
@@ -501,9 +503,14 @@ export function useCEOScorecard() {
         ? Number(sheetSigned.monthlyActual)
         : signedDeals.length
 
+      // Compute actual monthly reply rate from totals (not daily average)
+      const monthlyReplyRate = totalSent > 0 ? Math.round((totalReplies / totalSent) * 10000) / 100 : 0
+      const monthlyBounceRate = totalSent > 0 ? Math.round((slackEmail.bounced / totalSent) * 10000) / 100 : 0
+      const interestedOfReplies = totalReplies > 0 ? Math.round((totalInterested / totalReplies) * 100) : 0
+
       const funnel: FunnelStage[] = [
-        { label: 'Emails Sent', value: totalSent, target: fEmailTarget, conversionRate: avgReplyRate > 0 ? Math.round(avgReplyRate * 100) / 100 : null, conversionTarget: 0.8 },
-        { label: 'Replies', value: totalReplies, target: fReplyTarget, conversionRate: totalReplies > 0 ? Math.round((totalInterested / totalReplies) * 100) : null, conversionTarget: 35 },
+        { label: 'Emails Sent', value: totalSent, target: fEmailTarget, conversionRate: monthlyReplyRate, conversionTarget: 0.8 },
+        { label: 'Replies', value: totalReplies, target: fReplyTarget, conversionRate: interestedOfReplies, conversionTarget: 35 },
         { label: 'Interested', value: totalInterested, target: fInterestedTarget, conversionRate: interestedToMeeting, conversionTarget: 60 },
         { label: 'Meetings', value: meetingsThisMonth, target: fMeetingsTarget, conversionRate: meetingToProposal, conversionTarget: 30 },
         { label: 'Proposals', value: proposalsCount, target: fProposalsTarget, conversionRate: proposalToSigned, conversionTarget: 25 },
@@ -514,8 +521,8 @@ export function useCEOScorecard() {
       const outbound: ScorecardMetric[] = [
         metric('Emails Sent (MTD)', 'Outreachify', `${(fEmailTarget / 1000).toFixed(0)}K`, `${(totalSent / 1000).toFixed(0)}K`, totalSent, fEmailTarget, false, prevValue(prevOutbound, 'Emails Sent (MTD)')),
         metric('Active Campaigns', 'Outreachify', String(t.activeCampaigns || 30), String(activeCampaigns), activeCampaigns, t.activeCampaigns || 30, false, prevValue(prevOutbound, 'Active Campaigns')),
-        metric('Reply Rate', 'Outreachify', `${t.replyRate || 0.8}%`, `${avgReplyRate.toFixed(2)}%`, avgReplyRate, t.replyRate || 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
-        metric('Bounce Rate', 'Outreachify', `<${t.bounceRate || 1.0}%`, `${avgBounceRate.toFixed(2)}%`, avgBounceRate, t.bounceRate || 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
+        metric('Reply Rate', 'Outreachify', `${t.replyRate || 0.8}%`, `${monthlyReplyRate.toFixed(2)}%`, monthlyReplyRate, t.replyRate || 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
+        metric('Bounce Rate', 'Outreachify', `<${t.bounceRate || 1.0}%`, `${monthlyBounceRate.toFixed(2)}%`, monthlyBounceRate, t.bounceRate || 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
         metric('Interested (MTD)', 'Outreachify', String(fInterestedTarget), String(totalInterested), totalInterested, fInterestedTarget, false, prevValue(prevOutbound, 'Interested (MTD)')),
         metric('Connected Senders', 'Outreachify', String(t.connectedSenders || 100), String(connectedSenders), connectedSenders, t.connectedSenders || 100, false, prevValue(prevOutbound, 'Connected Senders')),
         metric('Burnt Senders', 'Outreachify', `<${t.burntSenders || 10}`, String(burntSenders), burntSenders, t.burntSenders || 10, true, prevValue(prevOutbound, 'Burnt Senders')),
@@ -545,12 +552,14 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
-      // Qualification Rate = calls progressed to Call 2+ / total Call 1 deals (from Closer Form / deal data)
-      // Use Google Sheet value if available, otherwise use deal progression
+      // Qualification Rate — use Google Sheet if available, otherwise use deal progression
       const sheetQualRate = sheetData.get('Qualification Rate (Call 1 → Call 2)')
-      const qualRate = sheetQualRate && Number(sheetQualRate.monthlyActual) > 0
-        ? Math.round(Number(sheetQualRate.monthlyActual) * 100)
-        : c1to2Rate
+      let qualRate = c1to2Rate
+      if (sheetQualRate && Number(sheetQualRate.monthlyActual) > 0) {
+        const sheetVal = Number(sheetQualRate.monthlyActual)
+        // Sheet might store as 0.30 (decimal) or 30 (percentage) — normalize
+        qualRate = sheetVal <= 1 ? Math.round(sheetVal * 100) : Math.round(sheetVal)
+      }
 
       const sales: ScorecardMetric[] = [
         metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40, false, prevValue(prevSales, 'Calls Scored / Week')),
@@ -606,7 +615,7 @@ export function useCEOScorecard() {
       const alerts: Alert[] = []
       alerts.push({ level: 'critical', message: 'Sales Manager role VACANT — no one enforcing coaching directives' })
       if (inflationCount > 5) alerts.push({ level: 'critical', message: `${inflationCount} deals flagged for pipeline inflation`, link: '/deals' })
-      if (avgReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${avgReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
+      if (monthlyReplyRate < 0.8) alerts.push({ level: 'warning', message: `Reply rate ${monthlyReplyRate.toFixed(2)}% (target 0.8%)`, link: '/outbound/email' })
       if (weekAvgScore < 70) alerts.push({ level: 'warning', message: `Team avg call score ${weekAvgScore}% (target 70%)`, link: '/reps' })
       if (stalledDeals.length > 3) alerts.push({ level: 'warning', message: `${stalledDeals.length} deals stalled 14+ days`, link: '/deals' })
       // Onboarding overdue alerts

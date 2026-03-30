@@ -2644,9 +2644,11 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const teamCalls = calls.length
     const teamQualified = deals.filter(d => d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active').length
     const teamMandates = deals.filter(d => d.deal_status === 'signed').length
+    const activeDeals = deals.filter(d => d.deal_status === 'active')
     const allCall1s = calls.filter(c => c.call_type === 'Call 1')
     const qualRate = allCall1s.length > 0 ? Math.round((allCall1s.filter(c => c.qualification_result === 'QUALIFIED').length / allCall1s.length) * 100) : 0
-    const closeRate = deals.length > 0 ? Math.round((teamMandates / deals.length) * 100) : 0
+    const pipelineTotal = activeDeals.length + teamMandates
+    const closeRate = pipelineTotal > 0 ? Math.round((teamMandates / pipelineTotal) * 100) : 0
 
     // ── Inbox interested ──
     const inboxRecords = inboxRes?.records || []
@@ -2671,9 +2673,10 @@ app.post('/api/scorecard/sync', async (req, res) => {
     }
 
     // ── Email metrics (from Slack daily reports) ──
+    const monthlyReplyRate = totalSent > 0 ? Math.round((totalReplies / totalSent) * 10000) / 100 : 0
     writeRow(rowMap['Emails Sent']?.[0], 'H', totalSent)
     writeRow(rowMap['Total Replies']?.[0], 'H', totalReplies)
-    writeRow(rowMap['Reply Rate']?.[0], 'H', `${replyRateAvg.toFixed(2)}%`)
+    writeRow(rowMap['Reply Rate']?.[0], 'H', `${monthlyReplyRate.toFixed(2)}%`)
     writeRow(rowMap['Interested Leads']?.[0], 'H', emailReports.interested || 0)
     writeRow(rowMap['Interested Reply Rate (% of replies)']?.[0], 'H', `${interestedReplyRate}%`)
 
