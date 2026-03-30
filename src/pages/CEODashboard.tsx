@@ -355,17 +355,31 @@ export function CEODashboard() {
     }
   }
 
+  const currentMonth = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  const SHEET_URL = `https://docs.google.com/spreadsheets/d/1kS3K2rVXpXbqhrlCeBU8PEu5CnaOtFPGY_XfvE7G0mo/edit`
+
   return (
     <div className="max-w-[1400px] mx-auto print:max-w-none space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-text-primary tracking-tight">Growth Scorecard</h2>
-          <p className="text-xs text-text-muted mt-0.5">Week of {data.weekRange}</p>
+          <div className="flex items-center gap-3 mt-0.5">
+            <p className="text-xs text-text-muted">{currentMonth} &middot; Goals tracked weekly, revenue monthly</p>
+            <span className="text-[10px] text-text-faint font-data">Refreshed {data.lastRefreshed}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <span className="text-[10px] text-text-faint font-data">Last refreshed: {data.lastRefreshed}</span>
-          <button onClick={saveSnapshot} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken transition-colors">Save Snapshot</button>
+          <a
+            href={SHEET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M19.5 3h-15A1.5 1.5 0 0 0 3 4.5v15A1.5 1.5 0 0 0 4.5 21h15a1.5 1.5 0 0 0 1.5-1.5v-15A1.5 1.5 0 0 0 19.5 3ZM9 17H7v-2h2v2Zm0-4H7v-2h2v2Zm0-4H7V7h2v2Zm4 8h-2v-2h2v2Zm0-4h-2v-2h2v2Zm0-4h-2V7h2v2Zm4 8h-2v-2h2v2Zm0-4h-2v-2h2v2Zm0-4h-2V7h2v2Z"/></svg>
+            Open Google Sheet
+          </a>
+          <button onClick={saveSnapshot} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken transition-colors">Snapshot</button>
           <button onClick={() => setShowTargets(true)} className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-sunken transition-colors">Edit Targets</button>
           <button
             onClick={async () => {
@@ -384,7 +398,7 @@ export function CEODashboard() {
 
       {/* ── NORTH STAR ─────────────────────────────── */}
       <div className="rounded-xl border border-border bg-white p-6 shadow-sm text-center">
-        <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-2">Revenue Target</div>
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted mb-2">Monthly Revenue Target</div>
         <div className="text-4xl font-bold text-text-primary tabular-nums">
           ${(data.revenueCollected / 1000).toFixed(0)}K
           <span className="text-lg font-normal text-text-muted ml-2">/ ${((data.revenueTarget || 833000) / 1000).toFixed(0)}K monthly target</span>
@@ -399,7 +413,7 @@ export function CEODashboard() {
 
       {/* ── FUNNEL FLOW ──────────────────────────── */}
       <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-3">Pipeline Flow</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-3">Monthly Pipeline Flow</div>
         <div className="flex items-center gap-0 overflow-x-auto">
           {data.funnel.map((stage, i) => {
             const pct = stage.target > 0 ? stage.value / stage.target : 0
@@ -502,7 +516,7 @@ export function CEODashboard() {
       {data.repLeaderboard.length > 0 && (
         <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-text-primary">Rep Leaderboard (This Week)</h3>
+            <h3 className="text-sm font-bold text-text-primary">Rep Leaderboard (Weekly)</h3>
             <div className="flex gap-4 text-[10px] text-text-muted">
               <span>Top Theme: <span className="text-text-secondary font-medium">{data.topCoachingTheme}</span></span>
               <span>Weakest: <span className="text-text-secondary font-medium">{data.worstCategory}</span></span>
