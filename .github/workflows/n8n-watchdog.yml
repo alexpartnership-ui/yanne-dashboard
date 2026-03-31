@@ -1,0 +1,82 @@
+name: n8n Watchdog
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'  # Every 10 minutes
+  workflow_dispatch: {}  # Manual trigger
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check n8n scheduler health
+        id: check
+        run: |
+          echo "Checking n8n execution recency..."
+
+          RESPONSE=$(curl -s -m 15 \
+            "https://n8n.yanneceodashboard.com/api/v1/executions?limit=1" \
+            -H "X-N8N-API-KEY: ${{ secrets.N8N_API_KEY }}")
+
+          if [ -z "$RESPONSE" ] || echo "$RESPONSE" | grep -q '"message"'; then
+            echo "needs_restart=true" >> $GITHUB_OUTPUT
+            echo "reason=n8n API unreachable" >> $GITHUB_OUTPUT
+            echo "n8n API unreachable — triggering restart"
+            exit 0
+          fi
+
+          MINUTES_AGO=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          from datetime import datetime, timezone
+          data = json.load(sys.stdin)
+          execs = data.get('data', [])
+          if not execs:
+              print(999)
+          else:
+              ts = execs[0].get('startedAt', '').replace('Z', '+00:00')
+              last = datetime.fromisoformat(ts)
+              now = datetime.now(timezone.utc)
+              print(int((now - last).total_seconds() / 60))
+          ")
+
+          echo "Last execution: ${MINUTES_AGO} minutes ago"
+
+          if [ "$MINUTES_AGO" -gt 30 ]; then
+            echo "needs_restart=true" >> $GITHUB_OUTPUT
+            echo "reason=No execution in ${MINUTES_AGO} minutes" >> $GITHUB_OUTPUT
+            echo "STALE — scheduler frozen"
+          else
+            echo "needs_restart=false" >> $GITHUB_OUTPUT
+            echo "OK — scheduler active"
+          fi
+
+      - name: Restart n8n via Coolify
+        if: steps.check.outputs.needs_restart == 'true'
+        run: |
+          echo "Stopping n8n..."
+          curl -s -X POST \
+            "${{ secrets.COOLIFY_API_URL }}/services/${{ secrets.N8N_SERVICE_UUID }}/stop" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json"
+
+          echo "Waiting 10 seconds..."
+          sleep 10
+
+          echo "Starting n8n..."
+          curl -s -X POST \
+            "${{ secrets.COOLIFY_API_URL }}/services/${{ secrets.N8N_SERVICE_UUID }}/start" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json"
+
+          echo "n8n restart triggered"
+
+      - name: Alert Slack
+        if: steps.check.outputs.needs_restart == 'true'
+        run: |
+          curl -s -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}" \
+            -d "{
+              \"channel\": \"C0AK9CF0BU1\",
+              \"text\": \"WATCHDOG AUTO-RESTART: n8n scheduler was frozen (${{ steps.check.outputs.reason }}). Service restarted via Coolify. Workflows should resume within 2 minutes.\"
+            }"
