@@ -664,7 +664,7 @@ export function useCEOScorecard() {
 
       setData({
         revenueCollected,
-        revenueTarget: 833000,
+        revenueTarget: fRevenueTarget,
         retainers: sheetRetainers || 0,
         successFees: sheetSuccessFees || 0,
         outstanding: 0,
