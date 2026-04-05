@@ -2631,7 +2631,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // Fetch ALL API-derived values
     const daysAgoFn = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
-    const [bisonRes, linkedinRes, hubspotDeals, callsRes, dealsRes, inboxRes, meetingsRes, emailReports] = await Promise.all([
+    const [bisonRes, linkedinRes, hubspotDeals, callsRes, dealsRes, inboxRes, meetingsRes, emailReports, salesFormRes] = await Promise.all([
       fetchAllBisonCampaigns().catch(() => []),
       AIRTABLE_KEY ? airtableFetch('appisraRpUPDhzh6b', 'tblosAcipaVFp0zmo', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       fetchAllHubSpotDeals().catch(() => ({ results: [] })),
@@ -2640,6 +2640,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data).catch(() => null) : Promise.resolve(null),
       fetchMeetingsParsed().catch(() => ({ thisWeek: 0, thisMonth: 0 })),
       fetchEmailReportsParsed().catch(() => ({ emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0 })),
+      fetchWeeklySalesForm().catch(() => ({ rows: [], tabName: null })),
     ])
 
     // ── Email stats from Slack daily reports (truth of source) ──
@@ -2689,8 +2690,24 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const teamQualified = deals.filter(d => d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active').length
     const teamMandates = deals.filter(d => d.deal_status === 'signed').length
     const activeDeals = deals.filter(d => d.deal_status === 'active')
-    const allCall1s = calls.filter(c => c.call_type === 'Call 1')
-    const qualRate = allCall1s.length > 0 ? Math.round((allCall1s.filter(c => c.qualification_result === 'QUALIFIED').length / allCall1s.length) * 100) : 0
+    // Qualification rate from weekly sales form (progressed / showed)
+    const sfRows = salesFormRes?.rows || []
+    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    let sfShowed = 0, sfProgressed = 0
+    for (let i = 1; i < sfRows.length; i++) {
+      const r = sfRows[i]
+      if (!r || r.length < 6) continue
+      const weekEnd = (r[2] || '').trim()
+      const parts = weekEnd.split('/')
+      if (parts.length === 3) {
+        const m = parseInt(parts[0]), y = parseInt(parts[2])
+        if (y === now.getFullYear() && m === (now.getMonth() + 1)) {
+          sfShowed += parseInt(r[4]) || 0
+          sfProgressed += parseInt(r[5]) || 0
+        }
+      }
+    }
+    const qualRate = sfShowed > 0 ? Math.round((sfProgressed / sfShowed) * 100) : 0
     const pipelineTotal = activeDeals.length + teamMandates
     const closeRate = pipelineTotal > 0 ? Math.round((teamMandates / pipelineTotal) * 100) : 0
 

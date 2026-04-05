@@ -269,18 +269,31 @@ export function useCEOScorecard() {
         const isSubheader = typeof row[0] === 'string' && row[0].startsWith('    ')
         const source = String(row[12] ?? row[11] ?? '')
         const editable = !NON_EDITABLE_SOURCES.includes(source.trim())
+
+        // Google Sheets stores percentages as decimals (0.04 = 4%) — convert for display
+        const isRateMetric = metricName.toLowerCase().includes('rate') || metricName.includes('%') || metricName.toLowerCase().includes('conversion')
+        function formatRateVal(v: string | number | undefined): string | number {
+          if (v === undefined || v === '') return ''
+          if (!isRateMetric) return v
+          const n = typeof v === 'number' ? v : parseFloat(String(v))
+          if (isNaN(n)) return v
+          // Only convert if it looks like a decimal (between 0 and 1 exclusive)
+          if (n > 0 && n < 1) return `${(n * 100).toFixed(1)}%`
+          return v
+        }
+
         parsedSheetRows.push({
           rowIndex: i + 1, // 1-indexed for Google Sheets API
           metric: metricName,
           isSection,
           isSubheader,
-          week1: row[1] ?? '',
-          week2: row[2] ?? '',
-          week3: row[3] ?? '',
-          week4: row[4] ?? '',
+          week1: formatRateVal(row[1]),
+          week2: formatRateVal(row[2]),
+          week3: formatRateVal(row[3]),
+          week4: formatRateVal(row[4]),
           type: String(row[6] ?? ''),
-          monthlyActual: row[7] ?? '',
-          monthlyTarget: row[8] ?? '',
+          monthlyActual: formatRateVal(row[7]),
+          monthlyTarget: formatRateVal(row[8]),
           status: String(row[9] ?? ''),
           owner: String(row[10] ?? ''),
           source,
