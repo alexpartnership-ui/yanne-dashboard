@@ -229,7 +229,6 @@ export function useCEOScorecard() {
       const campaignList = Array.isArray(raw.bison) ? raw.bison : []
       const inboxRecords = raw.inbox?.records || []
       const slackMeetings = raw.meetings || { thisWeek: 0, dailyReports: [], todaySoFar: 0 }
-      const senderRecords = raw.senders?.records || []
       const mondayBoards = raw.monday?.boards || []
       const hubspotDeals = raw.hubspot?.results || []
       // Onboarding task data
@@ -492,12 +491,6 @@ export function useCEOScorecard() {
         }
       })
 
-      // ── Senders ────────────────────────────────────
-      const connectedSenders = senderRecords.length
-      const burntSenders = senderRecords.filter((r: { fields: Record<string, unknown> }) => {
-        const status = r.fields?.['Status'] as string
-        return status && (status.toLowerCase().includes('paused') || status.toLowerCase().includes('disabled'))
-      }).length
 
       // ── BUILD SCORECARD ────────────────────────────
 
@@ -548,8 +541,6 @@ export function useCEOScorecard() {
         metric('Reply Rate', 'Outreachify', `${t.replyRate || 0.8}%`, `${monthlyReplyRate.toFixed(2)}%`, monthlyReplyRate, t.replyRate || 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
         metric('Bounce Rate', 'Outreachify', `<${t.bounceRate || 1.0}%`, `${monthlyBounceRate.toFixed(2)}%`, monthlyBounceRate, t.bounceRate || 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
         metric('Interested (MTD)', 'Outreachify', String(fInterestedTarget), String(totalInterested), totalInterested, fInterestedTarget, false, prevValue(prevOutbound, 'Interested (MTD)')),
-        metric('Connected Senders', 'Outreachify', String(t.connectedSenders || 100), String(connectedSenders), connectedSenders, t.connectedSenders || 100, false, prevValue(prevOutbound, 'Connected Senders')),
-        metric('Burnt Senders', 'Outreachify', `<${t.burntSenders || 10}`, String(burntSenders), burntSenders, t.burntSenders || 10, true, prevValue(prevOutbound, 'Burnt Senders')),
       ]
 
       // LinkedIn outbound section — targets from Edit Targets modal
@@ -588,7 +579,6 @@ export function useCEOScorecard() {
       // Qualification Rate — from rep check-in forms: progressed / completed
       const qualRate = checkinQualRate
 
-      const tCallsScoredWeek = t.callsScoredWeek || 40
       const tTeamAvgScore = t.teamAvgScore || 70
       const tQualificationRate = t.qualificationRate || 30
       const tC1to2Rate = t.c1to2Rate || 35
@@ -598,7 +588,6 @@ export function useCEOScorecard() {
       const tStalledDeals = t.stalledDeals || 5
 
       const sales: ScorecardMetric[] = [
-        metric('Calls Scored / Week', 'VACANT', String(tCallsScoredWeek), String(weekCallCount), weekCallCount, tCallsScoredWeek, false, prevValue(prevSales, 'Calls Scored / Week')),
         metric('Team Avg Score', 'VACANT', `${tTeamAvgScore}%`, `${weekAvgScore}%`, weekAvgScore, tTeamAvgScore, false, prevValue(prevSales, 'Team Avg Score')),
         metric('Qualification Rate', 'VACANT', `${tQualificationRate}%`, `${qualRate}%`, qualRate, tQualificationRate, false, prevValue(prevSales, 'Qualification Rate')),
         metric('Call 1 → Call 2 Rate', 'VACANT', `${tC1to2Rate}%`, `${c1to2Rate}%`, c1to2Rate, tC1to2Rate, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
