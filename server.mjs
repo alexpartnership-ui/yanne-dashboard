@@ -2720,60 +2720,145 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const totalMeetingsMonth = meetingsRes.thisMonth || meetingsRes.thisWeek || 0
     const interestedToMeeting = totalInterested > 0 ? Math.round((totalMeetingsMonth / totalInterested) * 100) : 0
 
-    // Build updates — write column H (Monthly Actual)
+    // ── Week boundaries (fixed by day-of-month) ──
+    // W1: 1-6, W2: 7-13, W3: 14-20, W4: 21-27, Remainder: 28+
+    const weekRanges = [
+      { col: 'B', start: 1, end: 6 },   // W1
+      { col: 'C', start: 7, end: 13 },   // W2
+      { col: 'D', start: 14, end: 20 },  // W3
+      { col: 'E', start: 21, end: 27 },  // W4
+      // F = Remainder 28+, not used yet
+    ]
+    function dayInWeek(dateStr) {
+      // dateStr = 'YYYY-MM-DD', returns week column letter or null
+      const d = parseInt(dateStr.slice(8, 10))
+      const m = parseInt(dateStr.slice(5, 7))
+      const y = parseInt(dateStr.slice(0, 4))
+      if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) return null
+      for (const w of weekRanges) { if (d >= w.start && d <= w.end) return w.col }
+      return 'F' // remainder
+    }
+
+    // Aggregate daily email reports by week
+    const emailByWeek = { B: { sent: 0, replies: 0, interested: 0, bounced: 0 }, C: { sent: 0, replies: 0, interested: 0, bounced: 0 }, D: { sent: 0, replies: 0, interested: 0, bounced: 0 }, E: { sent: 0, replies: 0, interested: 0, bounced: 0 } }
+    for (const dr of (emailReports.dailyReports || [])) {
+      const wk = dayInWeek(dr.date)
+      if (wk && emailByWeek[wk]) {
+        emailByWeek[wk].sent += dr.emailsSent || 0
+        emailByWeek[wk].replies += dr.replies || 0
+        emailByWeek[wk].interested += dr.interested || 0
+        emailByWeek[wk].bounced += dr.bounced || 0
+      }
+    }
+
+    // Aggregate daily meeting reports by week
+    const meetingsByWeek = { B: 0, C: 0, D: 0, E: 0 }
+    for (const mr of (meetingsRes.dailyReports || [])) {
+      const wk = dayInWeek(mr.date)
+      if (wk && meetingsByWeek[wk] !== undefined) meetingsByWeek[wk] += mr.count || 0
+    }
+
+    // Aggregate weekly sales form by week (using week ending date)
+    const salesByWeek = { B: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, C: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, D: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, E: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 } }
+    for (let i = 1; i < sfRows.length; i++) {
+      const r = sfRows[i]
+      if (!r || r.length < 6) continue
+      const weekEnd = (r[2] || '').trim()
+      const parts = weekEnd.split('/')
+      if (parts.length !== 3) continue
+      const m = parseInt(parts[0]), d = parseInt(parts[1]), y = parseInt(parts[2])
+      if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
+      // Map the week ending day to the correct week column
+      let wkCol = null
+      for (const w of weekRanges) { if (d >= w.start && d <= w.end) wkCol = w.col }
+      if (!wkCol) wkCol = 'E' // if ends 28+, put in W4 or remainder
+      if (salesByWeek[wkCol]) {
+        salesByWeek[wkCol].showed += parseInt(r[4]) || 0
+        salesByWeek[wkCol].progressed += parseInt(r[5]) || 0
+        salesByWeek[wkCol].elsSent += parseInt(r[6]) || 0
+        const parseCash = (v) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
+        salesByWeek[wkCol].dealsClosed += parseCash(r[7])
+      }
+    }
+
+    // Build updates — write column H (Monthly Actual) + weekly columns B-E
     const updates = []
     const rowMap = {}
-    // Build map: key = metric name, but for per-closer rows we need section context
-    // Use exact row numbers since metric names repeat (Calls Booked appears 4x)
     sheetRows.forEach((row, i) => { if (row[0]) rowMap[String(row[0]).trim()] = rowMap[String(row[0]).trim()] || []; rowMap[String(row[0]).trim()]?.push(i + 1) })
 
-    // Helper: write to a specific row number
     function writeRow(rowNum, column, value) {
       if (!rowNum || value === undefined) return
       updates.push({ cell: `${column}${rowNum}`, value })
     }
 
+    // Helper: write monthly + all weekly columns for a metric
+    function writeMetricWeekly(metricName, monthlyVal, weeklyVals) {
+      const rowNum = rowMap[metricName]?.[0]
+      if (!rowNum) return
+      writeRow(rowNum, 'H', monthlyVal)
+      for (const [col, val] of Object.entries(weeklyVals)) {
+        writeRow(rowNum, col, val)
+      }
+    }
+
     // ── Email metrics (from Slack daily reports) ──
     const monthlyReplyRate = totalSent > 0 ? Math.round((totalReplies / totalSent) * 10000) / 100 : 0
-    writeRow(rowMap['Emails Sent']?.[0], 'H', totalSent)
-    writeRow(rowMap['Total Replies']?.[0], 'H', totalReplies)
-    writeRow(rowMap['Reply Rate']?.[0], 'H', `${monthlyReplyRate.toFixed(2)}%`)
-    writeRow(rowMap['Interested Leads']?.[0], 'H', emailReports.interested || 0)
-    writeRow(rowMap['Interested Reply Rate (% of replies)']?.[0], 'H', `${interestedReplyRate}%`)
+    writeMetricWeekly('Emails Sent', totalSent, { B: emailByWeek.B.sent, C: emailByWeek.C.sent, D: emailByWeek.D.sent, E: emailByWeek.E.sent })
+    writeMetricWeekly('Total Replies', totalReplies, { B: emailByWeek.B.replies, C: emailByWeek.C.replies, D: emailByWeek.D.replies, E: emailByWeek.E.replies })
+    writeMetricWeekly('Reply Rate', `${monthlyReplyRate.toFixed(2)}%`, {
+      B: emailByWeek.B.sent > 0 ? `${((emailByWeek.B.replies / emailByWeek.B.sent) * 100).toFixed(2)}%` : '',
+      C: emailByWeek.C.sent > 0 ? `${((emailByWeek.C.replies / emailByWeek.C.sent) * 100).toFixed(2)}%` : '',
+      D: emailByWeek.D.sent > 0 ? `${((emailByWeek.D.replies / emailByWeek.D.sent) * 100).toFixed(2)}%` : '',
+      E: emailByWeek.E.sent > 0 ? `${((emailByWeek.E.replies / emailByWeek.E.sent) * 100).toFixed(2)}%` : '',
+    })
+    writeMetricWeekly('Interested Leads', emailReports.interested || 0, { B: emailByWeek.B.interested, C: emailByWeek.C.interested, D: emailByWeek.D.interested, E: emailByWeek.E.interested })
+    const intRateW = (w) => emailByWeek[w].replies > 0 ? `${Math.round((emailByWeek[w].interested / emailByWeek[w].replies) * 100)}%` : ''
+    writeMetricWeekly('Interested Reply Rate (% of replies)', `${interestedReplyRate}%`, { B: intRateW('B'), C: intRateW('C'), D: intRateW('D'), E: intRateW('E') })
 
-    // ── LinkedIn metrics ──
+    // ── LinkedIn metrics (cumulative snapshots — monthly only, no weekly breakdown) ──
     writeRow(rowMap['LinkedIn Messages Sent']?.[0], 'H', liAgg.messagesSent)
     writeRow(rowMap['Connection Requests Sent']?.[0], 'H', liAgg.connectionsSent)
     writeRow(rowMap['Connection Acceptance Rate']?.[0], 'H', liAgg.connectionAcceptanceRate ? `${liAgg.connectionAcceptanceRate}%` : '')
     writeRow(rowMap['LinkedIn Reply Rate']?.[0], 'H', liAgg.messageReplyRate ? `${liAgg.messageReplyRate}%` : '')
     writeRow(rowMap['Meetings Booked from LinkedIn']?.[0], 'H', liAgg.meetingsBooked)
 
-    // ── Inbox/Meetings aggregate ──
-    writeRow(rowMap['Total Meetings Booked (Email + LinkedIn)']?.[0], 'H', totalMeetingsMonth)
-    writeRow(rowMap['Interested Leads → Meetings Conversion']?.[0], 'H', `${interestedToMeeting}%`)
+    // ── Meetings (from Slack daily reports) ──
+    writeMetricWeekly('Total Meetings Booked (Email + LinkedIn)', totalMeetingsMonth, meetingsByWeek)
+    const intToMeetW = (w) => emailByWeek[w].interested > 0 ? `${Math.round((meetingsByWeek[w] / emailByWeek[w].interested) * 100)}%` : ''
+    writeMetricWeekly('Interested Leads → Meetings Conversion', `${interestedToMeeting}%`, { B: intToMeetW('B'), C: intToMeetW('C'), D: intToMeetW('D'), E: intToMeetW('E') })
 
-    // ── Qualification Rate ──
-    writeRow(rowMap['Qualification Rate (Call 1 → Call 2)']?.[0], 'H', `${qualRate}%`)
+    // ── Qualification Rate (from weekly sales form) ──
+    const qualW = (w) => salesByWeek[w].showed > 0 ? `${Math.round((salesByWeek[w].progressed / salesByWeek[w].showed) * 100)}%` : ''
+    writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, { B: qualW('B'), C: qualW('C'), D: qualW('D'), E: qualW('E') })
 
     // ── Per-closer: Calls Booked, Progressed to Qualified, Mandates ──
-    // Sheet rows: Stanley=30, Thomas=37, Tahawar=44, Jake=51 (subheaders)
-    // Their metrics are offset +1 to +6 from the subheader
     const closerStartRows = { Stanley: 31, Thomas: 38, Tahawar: 45, Jake: 52 }
     for (const [rep, startRow] of Object.entries(closerStartRows)) {
       const rd = repCalls[rep] || { callsBooked: 0, progressedToQualified: 0, mandatesSigned: 0 }
-      writeRow(startRow, 'H', rd.callsBooked)          // Calls Booked
-      writeRow(startRow + 2, 'H', rd.progressedToQualified) // Progressed to Qualified
-      writeRow(startRow + 5, 'H', rd.mandatesSigned)    // Mandates Signed
+      writeRow(startRow, 'H', rd.callsBooked)
+      writeRow(startRow + 2, 'H', rd.progressedToQualified)
+      writeRow(startRow + 5, 'H', rd.mandatesSigned)
     }
 
     // ── Team aggregate ──
     writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamCalls)
-    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', `${qualRate}%`)
+    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', sfProgressed)
     writeRow(rowMap['Total Mandates Signed']?.[0], 'H', teamMandates)
     writeRow(rowMap['Closed from Qualified %']?.[0], 'H', `${closeRate}%`)
 
     // ── Fulfillment ──
     writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
+
+    // ── Update week header labels with date ranges ──
+    const mo = now.getMonth() + 1
+    const yr = now.getFullYear()
+    const lastDay = new Date(yr, mo, 0).getDate()
+    const monthAbbr = now.toLocaleString('en-US', { month: 'short' })
+    updates.push({ cell: 'B3', value: `Week 1\n[${mo}/1-${mo}/6]` })
+    updates.push({ cell: 'C3', value: `Week 2\n[${mo}/7-${mo}/13]` })
+    updates.push({ cell: 'D3', value: `Week 3\n[${mo}/14-${mo}/20]` })
+    updates.push({ cell: 'E3', value: `Week 4\n[${mo}/21-${mo}/27]` })
+    if (lastDay > 27) updates.push({ cell: 'F3', value: `Remainder\n[${mo}/28-${mo}/${lastDay}]` })
 
     const written = updates.length > 0 ? await writeSheetCells(tab, updates) : true
     auditLog(req.user?.id, 'sync_scorecard', 'scorecard', { cellsWritten: updates.length }, req.ip)
