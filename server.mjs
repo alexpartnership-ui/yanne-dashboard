@@ -272,10 +272,32 @@ app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 app.get('/api/health/data-sources', async (_req, res) => {
   const results = {}
-  try { const r = await fetchWeeklySalesForm(); results.weeklySalesForm = { ok: r.rows.length > 0, rows: r.rows.length, tabName: r.tabName } } catch (e) { results.weeklySalesForm = { ok: false, error: e.message } }
-  try { const r = await fetchRepCheckins(45); results.repCheckins = { ok: r.checkins.length > 0, count: r.checkins.length } } catch (e) { results.repCheckins = { ok: false, error: e.message } }
+  try {
+    const r = await fetchWeeklySalesForm()
+    const now = new Date()
+    const thisMonth = now.getMonth() + 1, thisYear = now.getFullYear()
+    const monthRows = r.rows.slice(1).filter(row => {
+      const parts = (row[2] || '').split('/')
+      return parts.length === 3 && parseInt(parts[0]) === thisMonth && parseInt(parts[2]) === thisYear
+    }).map(row => ({ rep: row[1], weekEnding: row[2], calendar: row[3], showed: row[4], progressed: row[5], elsSent: row[6], dealsClosed: row[7] }))
+    results.weeklySalesForm = { ok: r.rows.length > 0, totalRows: r.rows.length, thisMonthEntries: monthRows.length, tabName: r.tabName, data: monthRows }
+  } catch (e) { results.weeklySalesForm = { ok: false, error: e.message } }
+  try {
+    const r = await fetchRepCheckins(45)
+    const now = new Date()
+    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const monthCheckins = r.checkins.filter(c => c.date >= firstOfMonth)
+    const byRep = {}
+    for (const c of monthCheckins) {
+      if (!byRep[c.rep]) byRep[c.rep] = { days: 0, scheduled: 0, completed: 0, progressed: 0 }
+      byRep[c.rep].days++
+      byRep[c.rep].scheduled += c.scheduled
+      byRep[c.rep].completed += c.completed
+      byRep[c.rep].progressed += c.progressed
+    }
+    results.repCheckins = { ok: r.checkins.length > 0, total: r.checkins.length, thisMonth: monthCheckins.length, byRep }
+  } catch (e) { results.repCheckins = { ok: false, error: e.message } }
   try { const t = await loadTargetsFromSheet(); results.targets = { ok: !!t, keys: t ? Object.keys(t).length : 0 } } catch (e) { results.targets = { ok: false, error: e.message } }
-  try { const s = await getGoogleSheetsClient(); results.sheetsClient = { ok: !!s } } catch (e) { results.sheetsClient = { ok: false, error: e.message } }
   res.json(results)
 })
 
