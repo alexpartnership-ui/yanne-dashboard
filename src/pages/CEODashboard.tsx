@@ -84,6 +84,16 @@ function TargetsModal({ open, onClose, onSaved }: { open: boolean; onClose: () =
     { key: 'qualificationRate', label: 'Qualification Rate', suffix: '%' },
     { key: 'closeRate', label: 'Close Rate', suffix: '%' },
     { key: 'stalledDeals', label: 'Max Stalled Deals' },
+    { key: 'interestedToMeetingRate', label: 'Interested → Meeting %', suffix: '%' },
+    { key: 'meetingsBookedWeek', label: 'Meetings Booked / Week' },
+    { key: 'c1to2Rate', label: 'Call 1 → Call 2 Rate', suffix: '%' },
+    { key: 'c2to3Rate', label: 'Call 2 → Call 3 Rate', suffix: '%' },
+    { key: 'proposalsSent', label: 'Proposals Sent / Month' },
+    { key: 'linkedinMessagesSent', label: 'LinkedIn Messages Sent / Mo' },
+    { key: 'linkedinMessageReplyRate', label: 'LinkedIn Reply Rate', suffix: '%' },
+    { key: 'linkedinConnectionsSent', label: 'LinkedIn Connections / Mo' },
+    { key: 'linkedinConnectionAcceptRate', label: 'LinkedIn Accept Rate', suffix: '%' },
+    { key: 'linkedinMeetingsBooked', label: 'LinkedIn Meetings / Mo' },
   ]
 
   return (
@@ -410,6 +420,20 @@ export function CEODashboard() {
             <div className={`h-full rounded-full ${revBarColor} transition-all`} style={{ width: `${Math.min(revPct, 100)}%` }} />
           </div>
           <div className="text-xs text-text-muted mt-1.5 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
+        </div>
+        <div className="mt-4 flex justify-center gap-8">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Qualification Rate</div>
+            <div className={`text-xl font-bold tabular-nums ${data.qualificationRate >= 30 ? 'text-emerald-600' : data.qualificationRate >= 20 ? 'text-amber-600' : 'text-red-600'}`}>
+              {data.qualificationRate}%
+            </div>
+            <div className="text-[9px] text-text-faint">showed → progressed</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Working Days</div>
+            <div className="text-xl font-bold tabular-nums text-text-primary">{data.workingDaysSoFar} <span className="text-sm font-normal text-text-muted">/ {data.workingDaysInMonth}</span></div>
+            <div className="text-[9px] text-text-faint">this month (excl. weekends)</div>
+          </div>
         </div>
       </div>
 

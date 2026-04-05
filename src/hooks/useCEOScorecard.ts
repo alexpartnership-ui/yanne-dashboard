@@ -106,6 +106,9 @@ export interface SheetRow {
 export interface CEOScorecardData {
   revenueCollected: number
   revenueTarget: number
+  qualificationRate: number
+  workingDaysSoFar: number
+  workingDaysInMonth: number
   retainers: number
   successFees: number
   outstanding: number
@@ -151,6 +154,19 @@ function daysAgo(n: number): string {
   const d = new Date()
   d.setDate(d.getDate() - n)
   return d.toISOString()
+}
+
+function getWorkingDays(): { soFar: number; inMonth: number } {
+  const now = new Date()
+  const year = now.getFullYear(), month = now.getMonth()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = now.getDate()
+  let total = 0, soFar = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const day = new Date(year, month, d).getDay()
+    if (day !== 0 && day !== 6) { total++; if (d <= today) soFar++ }
+  }
+  return { soFar, inMonth: total }
 }
 
 function metric(name: string, owner: string, target: string, actual: string, rawActual: number, rawTarget: number, inverted = false, prevActual?: number): ScorecardMetric {
@@ -282,6 +298,15 @@ export function useCEOScorecard() {
       const totalInterested = slackEmail.interested
       const _avgReplyRate = slackEmail.replyRate // kept for reference; we compute monthlyReplyRate from totals
       void _avgReplyRate
+
+      // ── Rep check-in forms — qualification rate ──
+      const repCheckins = (raw.repCheckins?.checkins || []) as Array<{ rep: string; date: string; scheduled: number; completed: number; progressed: number }>
+      const monthCheckins = repCheckins.filter(c => c.date >= firstOfMonth)
+      const totalCompleted = monthCheckins.reduce((s, c) => s + c.completed, 0)
+      const totalProgressed = monthCheckins.reduce((s, c) => s + c.progressed, 0)
+      const checkinQualRate = totalCompleted > 0 ? Math.round((totalProgressed / totalCompleted) * 100) : 0
+
+      const workingDays = getWorkingDays()
 
       // Count active campaigns from Bison (still useful for that metric)
       let activeCampaigns = 0
@@ -528,18 +553,27 @@ export function useCEOScorecard() {
         metric('Burnt Senders', 'Outreachify', `<${t.burntSenders || 10}`, String(burntSenders), burntSenders, t.burntSenders || 10, true, prevValue(prevOutbound, 'Burnt Senders')),
       ]
 
-      // LinkedIn outbound section
+      // LinkedIn outbound section — targets from Edit Targets modal
+      const tLiMsgSent = t.linkedinMessagesSent || 500
+      const tLiMsgReplyRate = t.linkedinMessageReplyRate || 10
+      const tLiConnSent = t.linkedinConnectionsSent || 1000
+      const tLiConnAcceptRate = t.linkedinConnectionAcceptRate || 25
+      const tLiMeetings = t.linkedinMeetingsBooked || 5
+
       const linkedin: ScorecardMetric[] = [
-        metric('Messages Sent', 'Outreachify', '500', String(liAgg.messagesSent), liAgg.messagesSent, 500),
-        metric('Message Reply Rate', 'Outreachify', '10%', `${liAgg.messageReplyRate.toFixed(1)}%`, liAgg.messageReplyRate, 10),
-        metric('Connections Sent', 'Outreachify', '1000', String(liAgg.connectionsSent), liAgg.connectionsSent, 1000),
-        metric('Connection Accept Rate', 'Outreachify', '25%', `${liAgg.connectionAcceptanceRate.toFixed(1)}%`, liAgg.connectionAcceptanceRate, 25),
-        metric('LinkedIn Meetings Booked', 'Outreachify', '5', String(liAgg.meetingsBooked), liAgg.meetingsBooked, 5),
+        metric('Messages Sent', 'Outreachify', String(tLiMsgSent), String(liAgg.messagesSent), liAgg.messagesSent, tLiMsgSent),
+        metric('Message Reply Rate', 'Outreachify', `${tLiMsgReplyRate}%`, `${liAgg.messageReplyRate.toFixed(1)}%`, liAgg.messageReplyRate, tLiMsgReplyRate),
+        metric('Connections Sent', 'Outreachify', String(tLiConnSent), String(liAgg.connectionsSent), liAgg.connectionsSent, tLiConnSent),
+        metric('Connection Accept Rate', 'Outreachify', `${tLiConnAcceptRate}%`, `${liAgg.connectionAcceptanceRate.toFixed(1)}%`, liAgg.connectionAcceptanceRate, tLiConnAcceptRate),
+        metric('LinkedIn Meetings Booked', 'Outreachify', String(tLiMeetings), String(liAgg.meetingsBooked), liAgg.meetingsBooked, tLiMeetings),
       ]
 
+      const tIntToMeeting = t.interestedToMeetingRate || 60
+      const tMeetingsWeek = t.meetingsBookedWeek || 15
+
       const setters: ScorecardMetric[] = [
-        metric('Interested → Meeting %', 'Alex', '60%', `${interestedToMeeting}%`, interestedToMeeting, 60),
-        metric('Meetings Booked / Week', 'Alex', '15', String(totalMeetingsBooked), totalMeetingsBooked, 15),
+        metric('Interested → Meeting %', 'Alex', `${tIntToMeeting}%`, `${interestedToMeeting}%`, interestedToMeeting, tIntToMeeting),
+        metric('Meetings Booked / Week', 'Alex', String(tMeetingsWeek), String(totalMeetingsBooked), totalMeetingsBooked, tMeetingsWeek),
       ]
 
       const setterBreakdown: SetterRow[] = Object.entries(setterMap)
@@ -552,24 +586,27 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
-      // Qualification Rate — use Google Sheet if available, otherwise use deal progression
-      const sheetQualRate = sheetData.get('Qualification Rate (Call 1 → Call 2)')
-      let qualRate = c1to2Rate
-      if (sheetQualRate && Number(sheetQualRate.monthlyActual) > 0) {
-        const sheetVal = Number(sheetQualRate.monthlyActual)
-        // Sheet might store as 0.30 (decimal) or 30 (percentage) — normalize
-        qualRate = sheetVal <= 1 ? Math.round(sheetVal * 100) : Math.round(sheetVal)
-      }
+      // Qualification Rate — from rep check-in forms: progressed / completed
+      const qualRate = checkinQualRate
+
+      const tCallsScoredWeek = t.callsScoredWeek || 40
+      const tTeamAvgScore = t.teamAvgScore || 70
+      const tQualificationRate = t.qualificationRate || 30
+      const tC1to2Rate = t.c1to2Rate || 35
+      const tC2to3Rate = t.c2to3Rate || 50
+      const tProposalsSent = t.proposalsSent || 5
+      const tCloseRate = t.closeRate || 15
+      const tStalledDeals = t.stalledDeals || 5
 
       const sales: ScorecardMetric[] = [
-        metric('Calls Scored / Week', 'VACANT', '40', String(weekCallCount), weekCallCount, 40, false, prevValue(prevSales, 'Calls Scored / Week')),
-        metric('Team Avg Score', 'VACANT', '70%', `${weekAvgScore}%`, weekAvgScore, 70, false, prevValue(prevSales, 'Team Avg Score')),
-        metric('Qualification Rate', 'VACANT', '30%', `${qualRate}%`, qualRate, 30, false, prevValue(prevSales, 'Qualification Rate')),
-        metric('Call 1 → Call 2 Rate', 'VACANT', '35%', `${c1to2Rate}%`, c1to2Rate, 35, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
-        metric('Call 2 → Call 3 Rate', 'VACANT', '50%', `${c2to3Rate}%`, c2to3Rate, 50, false, prevValue(prevSales, 'Call 2 → Call 3 Rate')),
-        metric('Proposals Sent', 'VACANT', '5', String(proposalDeals.length), proposalDeals.length, 5),
-        metric('Close Rate', 'VACANT', '15%', `${closeRate}%`, closeRate, 15),
-        metric('Stalled Deals (14d+)', 'VACANT', '<5', String(stalledDeals.length), stalledDeals.length, 5, true),
+        metric('Calls Scored / Week', 'VACANT', String(tCallsScoredWeek), String(weekCallCount), weekCallCount, tCallsScoredWeek, false, prevValue(prevSales, 'Calls Scored / Week')),
+        metric('Team Avg Score', 'VACANT', `${tTeamAvgScore}%`, `${weekAvgScore}%`, weekAvgScore, tTeamAvgScore, false, prevValue(prevSales, 'Team Avg Score')),
+        metric('Qualification Rate', 'VACANT', `${tQualificationRate}%`, `${qualRate}%`, qualRate, tQualificationRate, false, prevValue(prevSales, 'Qualification Rate')),
+        metric('Call 1 → Call 2 Rate', 'VACANT', `${tC1to2Rate}%`, `${c1to2Rate}%`, c1to2Rate, tC1to2Rate, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
+        metric('Call 2 → Call 3 Rate', 'VACANT', `${tC2to3Rate}%`, `${c2to3Rate}%`, c2to3Rate, tC2to3Rate, false, prevValue(prevSales, 'Call 2 → Call 3 Rate')),
+        metric('Proposals Sent', 'VACANT', String(tProposalsSent), String(proposalDeals.length), proposalDeals.length, tProposalsSent),
+        metric('Close Rate', 'VACANT', `${tCloseRate}%`, `${closeRate}%`, closeRate, tCloseRate),
+        metric('Stalled Deals (14d+)', 'VACANT', `<${tStalledDeals}`, String(stalledDeals.length), stalledDeals.length, tStalledDeals, true),
         metric('Pipeline Inflation', 'VACANT', '0', String(inflationCount), inflationCount, 0, true),
       ]
 
@@ -665,6 +702,9 @@ export function useCEOScorecard() {
       setData({
         revenueCollected,
         revenueTarget: fRevenueTarget,
+        qualificationRate: qualRate,
+        workingDaysSoFar: workingDays.soFar,
+        workingDaysInMonth: workingDays.inMonth,
         retainers: sheetRetainers || 0,
         successFees: sheetSuccessFees || 0,
         outstanding: 0,
