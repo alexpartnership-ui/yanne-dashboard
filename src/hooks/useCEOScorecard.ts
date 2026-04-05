@@ -594,12 +594,14 @@ export function useCEOScorecard() {
       const fSignedTarget = t.signedMonth || 3
       const fRevenueTarget = t.revenueTarget || 833000
 
-      // Get proposals/signed from Google Sheet if available (editable fields)
+      // Proposals = ELs Sent from weekly sales form (source of truth), fallback to Google Sheet
       const sheetProposals = sheetData.get('Proposals Sent') || sheetData.get('Proposals')
       const sheetSigned = sheetData.get('Mandates Signed') || sheetData.get('Signed')
-      const proposalsCount = sheetProposals && Number(sheetProposals.monthlyActual) > 0
-        ? Number(sheetProposals.monthlyActual)
-        : proposalDeals.length
+      const proposalsCount = teamSalesForm.elsSent > 0
+        ? teamSalesForm.elsSent
+        : sheetProposals && Number(sheetProposals.monthlyActual) > 0
+          ? Number(sheetProposals.monthlyActual)
+          : 0
       const signedCount = sheetSigned && Number(sheetSigned.monthlyActual) > 0
         ? Number(sheetSigned.monthlyActual)
         : signedDeals.length
@@ -678,7 +680,7 @@ export function useCEOScorecard() {
         metric('Qualification Rate', 'VACANT', `${tQualificationRate}%`, `${qualRate}%`, qualRate, tQualificationRate, false, prevValue(prevSales, 'Qualification Rate')),
         metric('Call 1 → Call 2 Rate', 'VACANT', `${tC1to2Rate}%`, `${c1to2Rate}%`, c1to2Rate, tC1to2Rate, false, prevValue(prevSales, 'Call 1 → Call 2 Rate')),
         metric('Call 2 → Call 3 Rate', 'VACANT', `${tC2to3Rate}%`, `${c2to3Rate}%`, c2to3Rate, tC2to3Rate, false, prevValue(prevSales, 'Call 2 → Call 3 Rate')),
-        metric('Proposals Sent', 'VACANT', String(tProposalsSent), String(proposalDeals.length), proposalDeals.length, tProposalsSent),
+        metric('Proposals Sent', 'VACANT', String(tProposalsSent), String(proposalsCount), proposalsCount, tProposalsSent),
         metric('Close Rate', 'VACANT', `${tCloseRate}%`, `${closeRate}%`, closeRate, tCloseRate),
         metric('Stalled Deals (14d+)', 'VACANT', `<${tStalledDeals}`, String(stalledDeals.length), stalledDeals.length, tStalledDeals, true),
         metric('Pipeline Inflation', 'VACANT', '0', String(inflationCount), inflationCount, 0, true),
