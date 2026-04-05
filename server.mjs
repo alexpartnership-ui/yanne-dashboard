@@ -2739,8 +2739,9 @@ app.post('/api/scorecard/sync', async (req, res) => {
       return 'F' // remainder
     }
 
-    // Aggregate daily email reports by week
-    const emailByWeek = { B: { sent: 0, replies: 0, interested: 0, bounced: 0 }, C: { sent: 0, replies: 0, interested: 0, bounced: 0 }, D: { sent: 0, replies: 0, interested: 0, bounced: 0 }, E: { sent: 0, replies: 0, interested: 0, bounced: 0 } }
+    // Aggregate daily email reports by week (including F=remainder)
+    const emptyWeekBucket = () => ({ sent: 0, replies: 0, interested: 0, bounced: 0 })
+    const emailByWeek = { B: emptyWeekBucket(), C: emptyWeekBucket(), D: emptyWeekBucket(), E: emptyWeekBucket(), F: emptyWeekBucket() }
     for (const dr of (emailReports.dailyReports || [])) {
       const wk = dayInWeek(dr.date)
       if (wk && emailByWeek[wk]) {
@@ -2752,14 +2753,15 @@ app.post('/api/scorecard/sync', async (req, res) => {
     }
 
     // Aggregate daily meeting reports by week
-    const meetingsByWeek = { B: 0, C: 0, D: 0, E: 0 }
+    const meetingsByWeek = { B: 0, C: 0, D: 0, E: 0, F: 0 }
     for (const mr of (meetingsRes.dailyReports || [])) {
       const wk = dayInWeek(mr.date)
       if (wk && meetingsByWeek[wk] !== undefined) meetingsByWeek[wk] += mr.count || 0
     }
 
     // Aggregate weekly sales form by week (using week ending date)
-    const salesByWeek = { B: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, C: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, D: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }, E: { showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 } }
+    const emptySalesBucket = () => ({ showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 })
+    const salesByWeek = { B: emptySalesBucket(), C: emptySalesBucket(), D: emptySalesBucket(), E: emptySalesBucket(), F: emptySalesBucket() }
     for (let i = 1; i < sfRows.length; i++) {
       const r = sfRows[i]
       if (!r || r.length < 6) continue
@@ -2771,7 +2773,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
       // Map the week ending day to the correct week column
       let wkCol = null
       for (const w of weekRanges) { if (d >= w.start && d <= w.end) wkCol = w.col }
-      if (!wkCol) wkCol = 'E' // if ends 28+, put in W4 or remainder
+      if (!wkCol) wkCol = 'F' // remainder (28+)
       if (salesByWeek[wkCol]) {
         salesByWeek[wkCol].showed += parseInt(r[4]) || 0
         salesByWeek[wkCol].progressed += parseInt(r[5]) || 0
@@ -2781,13 +2783,28 @@ app.post('/api/scorecard/sync', async (req, res) => {
       }
     }
 
-    // Build updates — write column H (Monthly Actual) + weekly columns B-E
+    // Build updates — write column H (Monthly Actual) + weekly columns B-F
+    // 2-WAY SYNC: only write to cells that are currently empty.
+    // If someone manually edited a cell in Google Sheets, their value stays.
     const updates = []
     const rowMap = {}
+    const colIndex = { B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7, I: 8, J: 9, K: 10 }
     sheetRows.forEach((row, i) => { if (row[0]) rowMap[String(row[0]).trim()] = rowMap[String(row[0]).trim()] || []; rowMap[String(row[0]).trim()]?.push(i + 1) })
+
+    // Check if a cell in the sheet currently has a value
+    function cellHasValue(rowNum, column) {
+      const sheetRowIdx = rowNum - 1 // sheetRows is 0-indexed, rowNum is 1-indexed
+      const colIdx = colIndex[column]
+      if (!sheetRows[sheetRowIdx] || colIdx === undefined) return false
+      const val = sheetRows[sheetRowIdx][colIdx]
+      return val !== undefined && val !== null && String(val).trim() !== ''
+    }
 
     function writeRow(rowNum, column, value) {
       if (!rowNum || value === undefined) return
+      // 2-way: skip if cell already has a manual value (preserve edits)
+      // Exception: column H (Monthly Actual) always gets overwritten with API data
+      if (column !== 'H' && cellHasValue(rowNum, column)) return
       updates.push({ cell: `${column}${rowNum}`, value })
     }
 
@@ -2803,17 +2820,15 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // ── Email metrics (from Slack daily reports) ──
     const monthlyReplyRate = totalSent > 0 ? Math.round((totalReplies / totalSent) * 10000) / 100 : 0
-    writeMetricWeekly('Emails Sent', totalSent, { B: emailByWeek.B.sent, C: emailByWeek.C.sent, D: emailByWeek.D.sent, E: emailByWeek.E.sent })
-    writeMetricWeekly('Total Replies', totalReplies, { B: emailByWeek.B.replies, C: emailByWeek.C.replies, D: emailByWeek.D.replies, E: emailByWeek.E.replies })
-    writeMetricWeekly('Reply Rate', `${monthlyReplyRate.toFixed(2)}%`, {
-      B: emailByWeek.B.sent > 0 ? `${((emailByWeek.B.replies / emailByWeek.B.sent) * 100).toFixed(2)}%` : '',
-      C: emailByWeek.C.sent > 0 ? `${((emailByWeek.C.replies / emailByWeek.C.sent) * 100).toFixed(2)}%` : '',
-      D: emailByWeek.D.sent > 0 ? `${((emailByWeek.D.replies / emailByWeek.D.sent) * 100).toFixed(2)}%` : '',
-      E: emailByWeek.E.sent > 0 ? `${((emailByWeek.E.replies / emailByWeek.E.sent) * 100).toFixed(2)}%` : '',
-    })
-    writeMetricWeekly('Interested Leads', emailReports.interested || 0, { B: emailByWeek.B.interested, C: emailByWeek.C.interested, D: emailByWeek.D.interested, E: emailByWeek.E.interested })
-    const intRateW = (w) => emailByWeek[w].replies > 0 ? `${Math.round((emailByWeek[w].interested / emailByWeek[w].replies) * 100)}%` : ''
-    writeMetricWeekly('Interested Reply Rate (% of replies)', `${interestedReplyRate}%`, { B: intRateW('B'), C: intRateW('C'), D: intRateW('D'), E: intRateW('E') })
+    const wkCols = ['B', 'C', 'D', 'E', 'F']
+    const emailWk = (col, field) => emailByWeek[col]?.[field] || 0
+    writeMetricWeekly('Emails Sent', totalSent, Object.fromEntries(wkCols.map(c => [c, emailWk(c, 'sent')])))
+    writeMetricWeekly('Total Replies', totalReplies, Object.fromEntries(wkCols.map(c => [c, emailWk(c, 'replies')])))
+    const rateW = (c) => emailWk(c, 'sent') > 0 ? `${((emailWk(c, 'replies') / emailWk(c, 'sent')) * 100).toFixed(2)}%` : ''
+    writeMetricWeekly('Reply Rate', `${monthlyReplyRate.toFixed(2)}%`, Object.fromEntries(wkCols.map(c => [c, rateW(c)])))
+    writeMetricWeekly('Interested Leads', emailReports.interested || 0, Object.fromEntries(wkCols.map(c => [c, emailWk(c, 'interested')])))
+    const intRateW = (c) => emailWk(c, 'replies') > 0 ? `${Math.round((emailWk(c, 'interested') / emailWk(c, 'replies')) * 100)}%` : ''
+    writeMetricWeekly('Interested Reply Rate (% of replies)', `${interestedReplyRate}%`, Object.fromEntries(wkCols.map(c => [c, intRateW(c)])))
 
     // ── LinkedIn metrics (cumulative snapshots — monthly only, no weekly breakdown) ──
     writeRow(rowMap['LinkedIn Messages Sent']?.[0], 'H', liAgg.messagesSent)
@@ -2824,12 +2839,12 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // ── Meetings (from Slack daily reports) ──
     writeMetricWeekly('Total Meetings Booked (Email + LinkedIn)', totalMeetingsMonth, meetingsByWeek)
-    const intToMeetW = (w) => emailByWeek[w].interested > 0 ? `${Math.round((meetingsByWeek[w] / emailByWeek[w].interested) * 100)}%` : ''
-    writeMetricWeekly('Interested Leads → Meetings Conversion', `${interestedToMeeting}%`, { B: intToMeetW('B'), C: intToMeetW('C'), D: intToMeetW('D'), E: intToMeetW('E') })
+    const intToMeetW = (c) => emailWk(c, 'interested') > 0 ? `${Math.round(((meetingsByWeek[c] || 0) / emailWk(c, 'interested')) * 100)}%` : ''
+    writeMetricWeekly('Interested Leads → Meetings Conversion', `${interestedToMeeting}%`, Object.fromEntries(wkCols.map(c => [c, intToMeetW(c)])))
 
     // ── Qualification Rate (from weekly sales form) ──
-    const qualW = (w) => salesByWeek[w].showed > 0 ? `${Math.round((salesByWeek[w].progressed / salesByWeek[w].showed) * 100)}%` : ''
-    writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, { B: qualW('B'), C: qualW('C'), D: qualW('D'), E: qualW('E') })
+    const qualW = (c) => salesByWeek[c]?.showed > 0 ? `${Math.round((salesByWeek[c].progressed / salesByWeek[c].showed) * 100)}%` : ''
+    writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, Object.fromEntries(wkCols.map(c => [c, qualW(c)])))
 
     // ── Per-closer: Calls Booked, Progressed to Qualified, Mandates ──
     const closerStartRows = { Stanley: 31, Thomas: 38, Tahawar: 45, Jake: 52 }
