@@ -2891,8 +2891,30 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const qualW = (c) => salesByWeek[c]?.showed > 0 ? `${Math.round((salesByWeek[c].progressed / salesByWeek[c].showed) * 100)}%` : ''
     writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, Object.fromEntries(wkCols.map(c => [c, qualW(c)])))
 
-    // ── Per-closer: from weekly sales form (source of truth) ──
-    // Aggregate sales form data per rep for current month
+    // ── Per-closer: from DAILY check-in form (source of truth for calls/progressed) ──
+    // + weekly sales form for ELs Sent and Deals Closed (only in weekly form)
+    const dailyCheckins = await fetchRepCheckins(45).catch(() => ({ checkins: [] }))
+    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const monthCheckins = dailyCheckins.checkins.filter(c => c.date >= firstOfMonth)
+
+    // Aggregate daily data per rep — monthly totals AND per-week
+    const dailyByRep = {}
+    for (const c of monthCheckins) {
+      if (!dailyByRep[c.rep]) dailyByRep[c.rep] = { scheduled: 0, completed: 0, progressed: 0, byWeek: {} }
+      dailyByRep[c.rep].scheduled += c.scheduled
+      dailyByRep[c.rep].completed += c.completed
+      dailyByRep[c.rep].progressed += c.progressed
+      // Also bucket by week
+      const wk = dayInWeek(c.date)
+      if (wk) {
+        if (!dailyByRep[c.rep].byWeek[wk]) dailyByRep[c.rep].byWeek[wk] = { scheduled: 0, completed: 0, progressed: 0 }
+        dailyByRep[c.rep].byWeek[wk].scheduled += c.scheduled
+        dailyByRep[c.rep].byWeek[wk].completed += c.completed
+        dailyByRep[c.rep].byWeek[wk].progressed += c.progressed
+      }
+    }
+
+    // ELs Sent + Deals Closed come from weekly sales form (not in daily form)
     const sfByRep = {}
     for (let i = 1; i < sfRows.length; i++) {
       const r = sfRows[i]
@@ -2903,47 +2925,50 @@ app.post('/api/scorecard/sync', async (req, res) => {
       if (parts.length !== 3) continue
       const m = parseInt(parts[0]), y = parseInt(parts[2])
       if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
-      if (!sfByRep[rep]) sfByRep[rep] = { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
-      sfByRep[rep].callsOnCalendar += parseInt(r[3]) || 0
-      sfByRep[rep].showed += parseInt(r[4]) || 0
-      sfByRep[rep].progressed += parseInt(r[5]) || 0
+      if (!sfByRep[rep]) sfByRep[rep] = { elsSent: 0, dealsClosed: 0 }
       sfByRep[rep].elsSent += parseInt(r[6]) || 0
       const parseCash = (v) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
       sfByRep[rep].dealsClosed += parseCash(r[7])
     }
 
-    // Find per-closer rows dynamically (look for rep name as subheader)
+    // Find per-closer rows dynamically and write monthly + weekly
     const repNames = ['Stanley', 'Thomas', 'Tahawar', 'Jake']
     for (const rep of repNames) {
-      // Find the subheader row for this rep
       let subRow = null
       for (let i = 0; i < sheetRows.length; i++) {
         const cell = String(sheetRows[i]?.[0] || '').trim()
-        if (cell.includes(rep)) { subRow = i + 1; break } // 1-indexed
+        if (cell.includes(rep)) { subRow = i + 1; break }
       }
       if (!subRow) continue
-      const rd = sfByRep[rep] || { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
-      // Write to rows below the subheader: +1=Calls Booked, +2=Show Rate, +3=Progressed, +4=ELs Sent, +5=Deals Closed, +6=Mandates
-      writeRow(subRow + 1, 'H', rd.callsOnCalendar)  // Calls on Calendar / Booked
-      writeRow(subRow + 2, 'H', rd.showed > 0 && rd.callsOnCalendar > 0 ? `${Math.round((rd.showed / rd.callsOnCalendar) * 100)}%` : '') // Show Rate
-      writeRow(subRow + 3, 'H', rd.progressed)        // Progressed to 2nd stage
-      writeRow(subRow + 4, 'H', rd.elsSent)           // ELs Sent
-      writeRow(subRow + 5, 'H', rd.dealsClosed > 0 ? `$${rd.dealsClosed.toLocaleString()}` : '0') // Deals Closed
+      const daily = dailyByRep[rep] || { scheduled: 0, completed: 0, progressed: 0, byWeek: {} }
+      const sf = sfByRep[rep] || { elsSent: 0, dealsClosed: 0 }
+      const showRate = daily.scheduled > 0 ? Math.round((daily.completed / daily.scheduled) * 100) : 0
+
+      // Monthly actuals (col H)
+      writeRow(subRow + 1, 'H', daily.scheduled)   // Calls Scheduled/Booked
+      writeRow(subRow + 2, 'H', `${showRate}%`)    // Show Rate
+      writeRow(subRow + 3, 'H', daily.progressed)   // Progressed to 2nd stage
+
+      // Weekly columns (B-F) from daily data
+      for (const col of wkCols) {
+        const wk = daily.byWeek[col] || { scheduled: 0, completed: 0, progressed: 0 }
+        writeRow(subRow + 1, col, wk.scheduled || '')
+        writeRow(subRow + 2, col, wk.scheduled > 0 ? `${Math.round((wk.completed / wk.scheduled) * 100)}%` : '')
+        writeRow(subRow + 3, col, wk.progressed || '')
+      }
     }
 
-    // ── Team aggregate (from weekly sales form) ──
-    const teamSF = { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
-    for (const rd of Object.values(sfByRep)) {
-      teamSF.callsOnCalendar += rd.callsOnCalendar
-      teamSF.showed += rd.showed
-      teamSF.progressed += rd.progressed
-      teamSF.elsSent += rd.elsSent
-      teamSF.dealsClosed += rd.dealsClosed
+    // ── Team aggregate ──
+    const teamDaily = { scheduled: 0, completed: 0, progressed: 0 }
+    for (const rd of Object.values(dailyByRep)) {
+      teamDaily.scheduled += rd.scheduled
+      teamDaily.completed += rd.completed
+      teamDaily.progressed += rd.progressed
     }
-    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamSF.callsOnCalendar)
-    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', teamSF.progressed)
+    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamDaily.scheduled)
+    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', teamDaily.progressed)
     writeRow(rowMap['Total Mandates Signed']?.[0], 'H', teamMandates)
-    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', teamSF.showed > 0 ? `${Math.round((teamSF.progressed / teamSF.showed) * 100)}%` : '')
+    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', teamDaily.completed > 0 ? `${Math.round((teamDaily.progressed / teamDaily.completed) * 100)}%` : '')
 
     // ── Fulfillment ──
     writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
