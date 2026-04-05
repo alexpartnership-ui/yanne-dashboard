@@ -2913,10 +2913,10 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const qualW = (c) => salesByWeek[c]?.showed > 0 ? `${Math.round((salesByWeek[c].progressed / salesByWeek[c].showed) * 100)}%` : ''
     writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, Object.fromEntries(wkCols.map(c => [c, qualW(c)])))
 
-    // ��─ Per-closer: WEEKLY sales form = primary, DAILY check-in = weekly columns ──
-    // Weekly form: calls on calendar, showed, progressed, ELs sent, deals closed (monthly totals)
-    // Daily form: exact dates for weekly column breakdown (W1-W4)
+    // -- Per-closer: WEEKLY form = primary (monthly + weekly), DAILY = backup --
+    // Aggregate weekly form per rep: monthly totals AND per-week
     const sfByRep = {}
+    const sfByRepByWeek = {}
     for (let i = 1; i < sfRows.length; i++) {
       const r = sfRows[i]
       if (!r || r.length < 6) continue
@@ -2924,30 +2924,42 @@ app.post('/api/scorecard/sync', async (req, res) => {
       const weekEnd = (r[2] || '').trim()
       const parts = weekEnd.split('/')
       if (parts.length !== 3) continue
-      const m = parseInt(parts[0]), y = parseInt(parts[2])
+      const m = parseInt(parts[0]), d = parseInt(parts[1]), y = parseInt(parts[2])
       if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
-      if (!sfByRep[rep]) sfByRep[rep] = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
-      sfByRep[rep].scheduled += parseInt(r[3]) || 0
-      sfByRep[rep].showed += parseInt(r[4]) || 0
-      sfByRep[rep].progressed += parseInt(r[5]) || 0
-      sfByRep[rep].elsSent += parseInt(r[6]) || 0
+      const scheduled = parseInt(r[3]) || 0, showed = parseInt(r[4]) || 0, progressed = parseInt(r[5]) || 0, elsSent = parseInt(r[6]) || 0
       const parseCash = (v) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
+      // Monthly totals
+      if (!sfByRep[rep]) sfByRep[rep] = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+      sfByRep[rep].scheduled += scheduled
+      sfByRep[rep].showed += showed
+      sfByRep[rep].progressed += progressed
+      sfByRep[rep].elsSent += elsSent
       sfByRep[rep].dealsClosed += parseCash(r[7])
+      // Map to week column using week ending day
+      let wkCol = null
+      for (const w of weekRanges) { if (d >= w.start && d <= w.end) wkCol = w.col }
+      if (!wkCol) wkCol = weekRanges[weekRanges.length - 1]?.col || 'F'
+      if (!sfByRepByWeek[rep]) sfByRepByWeek[rep] = {}
+      if (!sfByRepByWeek[rep][wkCol]) sfByRepByWeek[rep][wkCol] = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0 }
+      sfByRepByWeek[rep][wkCol].scheduled += scheduled
+      sfByRepByWeek[rep][wkCol].showed += showed
+      sfByRepByWeek[rep][wkCol].progressed += progressed
+      sfByRepByWeek[rep][wkCol].elsSent += elsSent
     }
 
-    // Daily check-in for weekly column breakdown
+    // Daily check-in as backup for weekly columns
     const dailyCheckins = await fetchRepCheckins(45).catch(() => ({ checkins: [] }))
     const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
     const monthCheckins = dailyCheckins.checkins.filter(c => c.date >= firstOfMonth)
     const dailyByRep = {}
     for (const c of monthCheckins) {
-      if (!dailyByRep[c.rep]) dailyByRep[c.rep] = { byWeek: {} }
+      if (!dailyByRep[c.rep]) dailyByRep[c.rep] = {}
       const wk = dayInWeek(c.date)
       if (wk) {
-        if (!dailyByRep[c.rep].byWeek[wk]) dailyByRep[c.rep].byWeek[wk] = { scheduled: 0, completed: 0, progressed: 0 }
-        dailyByRep[c.rep].byWeek[wk].scheduled += c.scheduled
-        dailyByRep[c.rep].byWeek[wk].completed += c.completed
-        dailyByRep[c.rep].byWeek[wk].progressed += c.progressed
+        if (!dailyByRep[c.rep][wk]) dailyByRep[c.rep][wk] = { scheduled: 0, completed: 0, progressed: 0 }
+        dailyByRep[c.rep][wk].scheduled += c.scheduled
+        dailyByRep[c.rep][wk].completed += c.completed
+        dailyByRep[c.rep][wk].progressed += c.progressed
       }
     }
 
@@ -2961,7 +2973,6 @@ app.post('/api/scorecard/sync', async (req, res) => {
       }
       if (!subRow) continue
       const sf = sfByRep[rep] || { scheduled: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
-      const daily = dailyByRep[rep] || { byWeek: {} }
       const showRate = sf.scheduled > 0 ? Math.round((sf.showed / sf.scheduled) * 100) : 0
 
       // Monthly actuals from weekly form (col H)
@@ -2971,14 +2982,22 @@ app.post('/api/scorecard/sync', async (req, res) => {
       writeRow(subRow + 4, 'H', sf.elsSent)
       writeRow(subRow + 5, 'H', sf.dealsClosed > 0 ? `$${sf.dealsClosed.toLocaleString()}` : '0')
 
-      // Weekly columns (B-F) from daily check-in data
+      // Weekly columns: prefer weekly form, fallback to daily
       for (const col of wkCols) {
-        const wk = daily.byWeek[col] || { scheduled: 0, completed: 0, progressed: 0 }
-        writeRow(subRow + 1, col, wk.scheduled || '')
-        writeRow(subRow + 2, col, wk.scheduled > 0 ? `${Math.round((wk.completed / wk.scheduled) * 100)}%` : '')
-        writeRow(subRow + 3, col, wk.progressed || '')
+        const sfWk = sfByRepByWeek[rep]?.[col]
+        const dailyWk = dailyByRep[rep]?.[col]
+        if (sfWk && sfWk.scheduled > 0) {
+          writeRow(subRow + 1, col, sfWk.scheduled)
+          writeRow(subRow + 2, col, `${Math.round((sfWk.showed / sfWk.scheduled) * 100)}%`)
+          writeRow(subRow + 3, col, sfWk.progressed)
+        } else if (dailyWk && dailyWk.scheduled > 0) {
+          writeRow(subRow + 1, col, dailyWk.scheduled)
+          writeRow(subRow + 2, col, `${Math.round((dailyWk.completed / dailyWk.scheduled) * 100)}%`)
+          writeRow(subRow + 3, col, dailyWk.progressed)
+        }
       }
     }
+
 
     // ── Team aggregate (from weekly form, fallback to daily) ──
     const teamSF = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0 }

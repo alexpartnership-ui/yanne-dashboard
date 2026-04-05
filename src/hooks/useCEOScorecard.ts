@@ -622,6 +622,7 @@ export function useCEOScorecard() {
 
       const outbound: ScorecardMetric[] = [
         metric('Emails Sent (MTD)', 'Outreachify', `${(fEmailTarget / 1000).toFixed(0)}K`, `${(totalSent / 1000).toFixed(0)}K`, totalSent, fEmailTarget, false, prevValue(prevOutbound, 'Emails Sent (MTD)')),
+        metric('Leads Generated (Replies)', 'Outreachify', String(t.repliesMonth || 2800), String(totalReplies), totalReplies, t.repliesMonth || 2800, false, prevValue(prevOutbound, 'Leads Generated (Replies)')),
         metric('Reply Rate', 'Outreachify', `${t.replyRate || 0.8}%`, `${monthlyReplyRate.toFixed(2)}%`, monthlyReplyRate, t.replyRate || 0.8, false, prevValue(prevOutbound, 'Reply Rate')),
         metric('Bounce Rate', 'Outreachify', `<${t.bounceRate || 1.0}%`, `${monthlyBounceRate.toFixed(2)}%`, monthlyBounceRate, t.bounceRate || 1.0, true, prevValue(prevOutbound, 'Bounce Rate')),
         metric('Interested (MTD)', 'Outreachify', String(fInterestedTarget), String(totalInterested), totalInterested, fInterestedTarget, false, prevValue(prevOutbound, 'Interested (MTD)')),
