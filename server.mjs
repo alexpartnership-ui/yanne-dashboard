@@ -2949,7 +2949,6 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
     // Daily check-in as backup for weekly columns
     const dailyCheckins = await fetchRepCheckins(45).catch(() => ({ checkins: [] }))
-    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
     const monthCheckins = dailyCheckins.checkins.filter(c => c.date >= firstOfMonth)
     const dailyByRep = {}
     for (const c of monthCheckins) {
