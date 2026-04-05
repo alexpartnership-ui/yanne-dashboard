@@ -417,18 +417,32 @@ export function CEODashboard() {
           </div>
           <div className="text-xs text-text-muted mt-1.5 tabular-nums">{revPct}% of target ($10M annual run rate)</div>
         </div>
-        <div className="mt-4 flex justify-center gap-8">
+        <div className="mt-4 grid grid-cols-5 gap-4 text-center">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Calls on Calendar</div>
+            <div className="text-xl font-bold tabular-nums text-text-primary">{data.callsOnCalendar}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Show Rate</div>
+            <div className={`text-xl font-bold tabular-nums ${data.showRate >= 70 ? 'text-emerald-600' : data.showRate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+              {data.showRate}%
+            </div>
+            <div className="text-[9px] text-text-faint">{data.callsShowed} showed</div>
+          </div>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Qualification Rate</div>
             <div className={`text-xl font-bold tabular-nums ${data.qualificationRate >= 30 ? 'text-emerald-600' : data.qualificationRate >= 20 ? 'text-amber-600' : 'text-red-600'}`}>
               {data.qualificationRate}%
             </div>
-            <div className="text-[9px] text-text-faint">showed → progressed</div>
+            <div className="text-[9px] text-text-faint">{data.progressedCount} progressed</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">ELs Sent</div>
+            <div className="text-xl font-bold tabular-nums text-text-primary">{data.elsSent}</div>
           </div>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">Working Days</div>
             <div className="text-xl font-bold tabular-nums text-text-primary">{data.workingDaysSoFar} <span className="text-sm font-normal text-text-muted">/ {data.workingDaysInMonth}</span></div>
-            <div className="text-[9px] text-text-faint">this month (excl. weekends)</div>
           </div>
         </div>
       </div>

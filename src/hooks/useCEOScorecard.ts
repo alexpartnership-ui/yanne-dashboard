@@ -107,8 +107,14 @@ export interface CEOScorecardData {
   revenueCollected: number
   revenueTarget: number
   qualificationRate: number
+  showRate: number
+  callsShowed: number
+  callsOnCalendar: number
+  progressedCount: number
+  elsSent: number
   workingDaysSoFar: number
   workingDaysInMonth: number
+  closerStats: Record<string, { callsOnCalendar: number; callsShowed: number; progressed: number; elsSent: number; dealsClosed: number; showRate: number }>
   retainers: number
   successFees: number
   outstanding: number
@@ -306,6 +312,70 @@ export function useCEOScorecard() {
       const checkinQualRate = totalCompleted > 0 ? Math.round((totalProgressed / totalCompleted) * 100) : 0
 
       const workingDays = getWorkingDays()
+
+      // ── Weekly sales form — per-closer metrics ──
+      interface WeeklySalesEntry { rep: string; weekEnding: string; callsOnCalendar: number; callsShowed: number; progressed: number; elsSent: number; dealsClosed: number; cashMTDForecast: number; sevenDayForecast: number }
+      const weeklySalesRows = (raw.weeklySalesForm?.rows || []) as string[][]
+      const weeklySalesEntries: WeeklySalesEntry[] = []
+      for (let i = 1; i < weeklySalesRows.length; i++) {
+        const row = weeklySalesRows[i]
+        if (!row || row.length < 6) continue
+        const rep = (row[1] || '').trim()
+        const weekEnding = (row[2] || '').trim()
+        if (!rep || !weekEnding) continue
+        // Parse cash amounts — handle "$50,000" or "50000"
+        const parseCash = (v: string) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
+        weeklySalesEntries.push({
+          rep,
+          weekEnding,
+          callsOnCalendar: parseInt(row[3]) || 0,
+          callsShowed: parseInt(row[4]) || 0,
+          progressed: parseInt(row[5]) || 0,
+          elsSent: parseInt(row[6]) || 0,
+          dealsClosed: parseCash(row[7]),
+          cashMTDForecast: parseCash(row[22]),
+          sevenDayForecast: parseCash(row[23]),
+        })
+      }
+
+      // Get this month's entries — weekEnding falls within current month
+      const monthSalesEntries = weeklySalesEntries.filter(e => {
+        // Parse week ending date (M/D/YYYY format)
+        const parts = e.weekEnding.split('/')
+        if (parts.length !== 3) return false
+        const y = parseInt(parts[2]), m = parseInt(parts[0])
+        return y === now.getFullYear() && m === (now.getMonth() + 1)
+      })
+
+      // Aggregate per-closer from weekly sales form
+      const closerMap: Record<string, { callsOnCalendar: number; callsShowed: number; progressed: number; elsSent: number; dealsClosed: number; showRate: number }> = {}
+      for (const e of monthSalesEntries) {
+        if (!closerMap[e.rep]) closerMap[e.rep] = { callsOnCalendar: 0, callsShowed: 0, progressed: 0, elsSent: 0, dealsClosed: 0, showRate: 0 }
+        closerMap[e.rep].callsOnCalendar += e.callsOnCalendar
+        closerMap[e.rep].callsShowed += e.callsShowed
+        closerMap[e.rep].progressed += e.progressed
+        closerMap[e.rep].elsSent += e.elsSent
+        closerMap[e.rep].dealsClosed += e.dealsClosed
+      }
+      for (const rep of Object.keys(closerMap)) {
+        closerMap[rep].showRate = closerMap[rep].callsOnCalendar > 0
+          ? Math.round((closerMap[rep].callsShowed / closerMap[rep].callsOnCalendar) * 100) : 0
+      }
+
+      // Team aggregates from weekly sales form
+      const teamSalesForm = {
+        callsOnCalendar: monthSalesEntries.reduce((s, e) => s + e.callsOnCalendar, 0),
+        callsShowed: monthSalesEntries.reduce((s, e) => s + e.callsShowed, 0),
+        progressed: monthSalesEntries.reduce((s, e) => s + e.progressed, 0),
+        elsSent: monthSalesEntries.reduce((s, e) => s + e.elsSent, 0),
+        dealsClosed: monthSalesEntries.reduce((s, e) => s + e.dealsClosed, 0),
+        showRate: 0,
+        qualRate: 0,
+      }
+      teamSalesForm.showRate = teamSalesForm.callsOnCalendar > 0
+        ? Math.round((teamSalesForm.callsShowed / teamSalesForm.callsOnCalendar) * 100) : 0
+      teamSalesForm.qualRate = teamSalesForm.callsShowed > 0
+        ? Math.round((teamSalesForm.progressed / teamSalesForm.callsShowed) * 100) : 0
 
       // Count active campaigns from Bison (still useful for that metric)
       let activeCampaigns = 0
@@ -576,8 +646,11 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
-      // Qualification Rate — from rep check-in forms: progressed / completed
-      const qualRate = checkinQualRate
+      // Qualification Rate — prefer weekly sales form, fallback to daily check-in
+      // qualRate = progressed to 2nd stage / calls showed (completed)
+      const qualRate = teamSalesForm.callsShowed > 0
+        ? teamSalesForm.qualRate
+        : checkinQualRate
 
       const tTeamAvgScore = t.teamAvgScore || 70
       const tQualificationRate = t.qualificationRate || 30
@@ -691,8 +764,14 @@ export function useCEOScorecard() {
         revenueCollected,
         revenueTarget: fRevenueTarget,
         qualificationRate: qualRate,
+        showRate: teamSalesForm.showRate,
+        callsShowed: teamSalesForm.callsShowed,
+        callsOnCalendar: teamSalesForm.callsOnCalendar,
+        progressedCount: teamSalesForm.progressed,
+        elsSent: teamSalesForm.elsSent,
         workingDaysSoFar: workingDays.soFar,
         workingDaysInMonth: workingDays.inMonth,
+        closerStats: closerMap,
         retainers: sheetRetainers || 0,
         successFees: sheetSuccessFees || 0,
         outstanding: 0,
