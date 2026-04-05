@@ -661,10 +661,8 @@ export function useCEOScorecard() {
         }))
         .sort((a, b) => b.meetings - a.meetings)
 
-      // Qualification Rate — prefer weekly sales form, fallback to daily check-in
-      // qualRate = progressed to 2nd stage / calls showed (completed)
-      // Qualification rate from daily check-in: progressed / completed
-      const qualRate = checkinQualRate
+      // Qualification Rate — weekly form primary, daily backup (consistent with North Star)
+      const qualRate = teamDaily.qualRate || checkinQualRate
 
       const tTeamAvgScore = t.teamAvgScore || 70
       const tQualificationRate = t.qualificationRate || 30
