@@ -2720,23 +2720,36 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const totalMeetingsMonth = meetingsRes.thisMonth || meetingsRes.thisWeek || 0
     const interestedToMeeting = totalInterested > 0 ? Math.round((totalMeetingsMonth / totalInterested) * 100) : 0
 
-    // ── Week boundaries (fixed by day-of-month) ──
-    // W1: 1-6, W2: 7-13, W3: 14-20, W4: 21-27, Remainder: 28+
-    const weekRanges = [
-      { col: 'B', start: 1, end: 6 },   // W1
-      { col: 'C', start: 7, end: 13 },   // W2
-      { col: 'D', start: 14, end: 20 },  // W3
-      { col: 'E', start: 21, end: 27 },  // W4
-      // F = Remainder 28+, not used yet
-    ]
+    // ── Week boundaries: W1 = 1st through first Sunday, then Mon-Sun cycles ──
+    function getMonthWeeks(year, month) {
+      // month is 0-indexed (0=Jan)
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const firstDow = new Date(year, month, 1).getDay() // 0=Sun
+      // W1: day 1 through first Sunday
+      const w1End = firstDow === 0 ? 1 : (7 - firstDow + 1)
+      const cols = ['B', 'C', 'D', 'E', 'F']
+      const weeks = [{ col: 'B', start: 1, end: Math.min(w1End, lastDay) }]
+      let d = w1End + 1
+      let ci = 1
+      while (d <= lastDay && ci < 4) {
+        weeks.push({ col: cols[ci], start: d, end: Math.min(d + 6, lastDay) })
+        d += 7
+        ci++
+      }
+      if (d <= lastDay) {
+        weeks.push({ col: cols[ci] || 'F', start: d, end: lastDay })
+      }
+      return weeks
+    }
+    const weekRanges = getMonthWeeks(now.getFullYear(), now.getMonth())
+
     function dayInWeek(dateStr) {
-      // dateStr = 'YYYY-MM-DD', returns week column letter or null
       const d = parseInt(dateStr.slice(8, 10))
       const m = parseInt(dateStr.slice(5, 7))
       const y = parseInt(dateStr.slice(0, 4))
       if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) return null
       for (const w of weekRanges) { if (d >= w.start && d <= w.end) return w.col }
-      return 'F' // remainder
+      return null
     }
 
     // Aggregate daily email reports by week (including F=remainder)
@@ -2864,16 +2877,13 @@ app.post('/api/scorecard/sync', async (req, res) => {
     // ── Fulfillment ──
     writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
 
-    // ── Update week header labels with date ranges ──
+    // ── Update week header labels with actual date ranges ──
     const mo = now.getMonth() + 1
-    const yr = now.getFullYear()
-    const lastDay = new Date(yr, mo, 0).getDate()
-    const monthAbbr = now.toLocaleString('en-US', { month: 'short' })
-    updates.push({ cell: 'B3', value: `Week 1\n[${mo}/1-${mo}/6]` })
-    updates.push({ cell: 'C3', value: `Week 2\n[${mo}/7-${mo}/13]` })
-    updates.push({ cell: 'D3', value: `Week 3\n[${mo}/14-${mo}/20]` })
-    updates.push({ cell: 'E3', value: `Week 4\n[${mo}/21-${mo}/27]` })
-    if (lastDay > 27) updates.push({ cell: 'F3', value: `Remainder\n[${mo}/28-${mo}/${lastDay}]` })
+    for (let wi = 0; wi < weekRanges.length; wi++) {
+      const w = weekRanges[wi]
+      const label = wi < 4 ? `Week ${wi + 1}` : 'Remainder'
+      updates.push({ cell: `${w.col}3`, value: `${label}\n[${mo}/${w.start}-${mo}/${w.end}]` })
+    }
 
     const written = updates.length > 0 ? await writeSheetCells(tab, updates) : true
     auditLog(req.user?.id, 'sync_scorecard', 'scorecard', { cellsWritten: updates.length }, req.ip)
