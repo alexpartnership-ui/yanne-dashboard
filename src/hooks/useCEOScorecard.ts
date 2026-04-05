@@ -114,7 +114,7 @@ export interface CEOScorecardData {
   elsSent: number
   workingDaysSoFar: number
   workingDaysInMonth: number
-  closerStats: Record<string, { scheduled: number; completed: number; progressed: number; showRate: number }>
+  closerStats: Record<string, { scheduled: number; completed: number; progressed: number; elsSent: number; dealsClosed: number; showRate: number }>
   retainers: number
   successFees: number
   outstanding: number
@@ -326,47 +326,68 @@ export function useCEOScorecard() {
 
       const workingDays = getWorkingDays()
 
-      // ── Per-closer from DAILY check-in form (source of truth for calls) ──
-      const closerMap: Record<string, { scheduled: number; completed: number; progressed: number; showRate: number }> = {}
-      for (const c of monthCheckins) {
-        if (!closerMap[c.rep]) closerMap[c.rep] = { scheduled: 0, completed: 0, progressed: 0, showRate: 0 }
-        closerMap[c.rep].scheduled += c.scheduled
-        closerMap[c.rep].completed += c.completed
-        closerMap[c.rep].progressed += c.progressed
+      // ── Per-closer from WEEKLY sales form (primary source of truth) ──
+      // Weekly form has: calls on calendar, showed, progressed, ELs sent, deals closed
+      // Daily form is backup for weekly column breakdown (has exact dates)
+      const weeklySalesRows = (raw.weeklySalesForm?.rows || []) as string[][]
+      const closerMap: Record<string, { scheduled: number; completed: number; progressed: number; elsSent: number; dealsClosed: number; showRate: number }> = {}
+      for (let i = 1; i < weeklySalesRows.length; i++) {
+        const row = weeklySalesRows[i]
+        if (!row || row.length < 6) continue
+        const rep = (row[1] || '').trim()
+        const weekEnding = (row[2] || '').trim()
+        const parts = weekEnding.split('/')
+        if (parts.length !== 3) continue
+        const y = parseInt(parts[2]), m = parseInt(parts[0])
+        if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
+        if (!closerMap[rep]) closerMap[rep] = { scheduled: 0, completed: 0, progressed: 0, elsSent: 0, dealsClosed: 0, showRate: 0 }
+        closerMap[rep].scheduled += parseInt(row[3]) || 0
+        closerMap[rep].completed += parseInt(row[4]) || 0
+        closerMap[rep].progressed += parseInt(row[5]) || 0
+        closerMap[rep].elsSent += parseInt(row[6]) || 0
+        const parseCash = (v: string) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
+        closerMap[rep].dealsClosed += parseCash(row[7])
       }
       for (const rep of Object.keys(closerMap)) {
         closerMap[rep].showRate = closerMap[rep].scheduled > 0
           ? Math.round((closerMap[rep].completed / closerMap[rep].scheduled) * 100) : 0
       }
 
-      // ELs Sent from weekly sales form (not in daily form)
-      const weeklySalesRows = (raw.weeklySalesForm?.rows || []) as string[][]
-      let totalElsSent = 0
-      for (let i = 1; i < weeklySalesRows.length; i++) {
-        const row = weeklySalesRows[i]
-        if (!row || row.length < 7) continue
-        const weekEnding = (row[2] || '').trim()
-        const parts = weekEnding.split('/')
-        if (parts.length !== 3) continue
-        const y = parseInt(parts[2]), m = parseInt(parts[0])
-        if (y === now.getFullYear() && m === (now.getMonth() + 1)) {
-          totalElsSent += parseInt(row[6]) || 0
+      // If weekly form has no data, fall back to daily check-in
+      if (Object.keys(closerMap).length === 0) {
+        for (const c of monthCheckins) {
+          if (!closerMap[c.rep]) closerMap[c.rep] = { scheduled: 0, completed: 0, progressed: 0, elsSent: 0, dealsClosed: 0, showRate: 0 }
+          closerMap[c.rep].scheduled += c.scheduled
+          closerMap[c.rep].completed += c.completed
+          closerMap[c.rep].progressed += c.progressed
+        }
+        for (const rep of Object.keys(closerMap)) {
+          closerMap[rep].showRate = closerMap[rep].scheduled > 0
+            ? Math.round((closerMap[rep].completed / closerMap[rep].scheduled) * 100) : 0
         }
       }
 
-      // Team aggregates from daily check-in
+      // Team aggregates — prefer weekly form, fallback to daily
+      const hasWeeklyData = Object.values(closerMap).some(r => r.scheduled > 0)
+      const teamScheduled = hasWeeklyData
+        ? Object.values(closerMap).reduce((s, r) => s + r.scheduled, 0)
+        : monthCheckins.reduce((s, c) => s + c.scheduled, 0)
+      const teamCompleted = hasWeeklyData
+        ? Object.values(closerMap).reduce((s, r) => s + r.completed, 0)
+        : totalCompleted
+      const teamProgressed = hasWeeklyData
+        ? Object.values(closerMap).reduce((s, r) => s + r.progressed, 0)
+        : totalProgressed
+      const teamElsSent = Object.values(closerMap).reduce((s, r) => s + r.elsSent, 0)
+
       const teamDaily = {
-        scheduled: monthCheckins.reduce((s, c) => s + c.scheduled, 0),
-        completed: totalCompleted,
-        progressed: totalProgressed,
-        elsSent: totalElsSent,
-        showRate: 0,
-        qualRate: 0,
+        scheduled: teamScheduled,
+        completed: teamCompleted,
+        progressed: teamProgressed,
+        elsSent: teamElsSent,
+        showRate: teamScheduled > 0 ? Math.round((teamCompleted / teamScheduled) * 100) : 0,
+        qualRate: teamCompleted > 0 ? Math.round((teamProgressed / teamCompleted) * 100) : 0,
       }
-      teamDaily.showRate = teamDaily.scheduled > 0
-        ? Math.round((teamDaily.completed / teamDaily.scheduled) * 100) : 0
-      teamDaily.qualRate = teamDaily.completed > 0
-        ? Math.round((teamDaily.progressed / teamDaily.completed) * 100) : 0
 
       // Count active campaigns from Bison (still useful for that metric)
       let activeCampaigns = 0

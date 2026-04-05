@@ -2891,30 +2891,9 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const qualW = (c) => salesByWeek[c]?.showed > 0 ? `${Math.round((salesByWeek[c].progressed / salesByWeek[c].showed) * 100)}%` : ''
     writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, Object.fromEntries(wkCols.map(c => [c, qualW(c)])))
 
-    // ── Per-closer: from DAILY check-in form (source of truth for calls/progressed) ──
-    // + weekly sales form for ELs Sent and Deals Closed (only in weekly form)
-    const dailyCheckins = await fetchRepCheckins(45).catch(() => ({ checkins: [] }))
-    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    const monthCheckins = dailyCheckins.checkins.filter(c => c.date >= firstOfMonth)
-
-    // Aggregate daily data per rep — monthly totals AND per-week
-    const dailyByRep = {}
-    for (const c of monthCheckins) {
-      if (!dailyByRep[c.rep]) dailyByRep[c.rep] = { scheduled: 0, completed: 0, progressed: 0, byWeek: {} }
-      dailyByRep[c.rep].scheduled += c.scheduled
-      dailyByRep[c.rep].completed += c.completed
-      dailyByRep[c.rep].progressed += c.progressed
-      // Also bucket by week
-      const wk = dayInWeek(c.date)
-      if (wk) {
-        if (!dailyByRep[c.rep].byWeek[wk]) dailyByRep[c.rep].byWeek[wk] = { scheduled: 0, completed: 0, progressed: 0 }
-        dailyByRep[c.rep].byWeek[wk].scheduled += c.scheduled
-        dailyByRep[c.rep].byWeek[wk].completed += c.completed
-        dailyByRep[c.rep].byWeek[wk].progressed += c.progressed
-      }
-    }
-
-    // ELs Sent + Deals Closed come from weekly sales form (not in daily form)
+    // ��─ Per-closer: WEEKLY sales form = primary, DAILY check-in = weekly columns ──
+    // Weekly form: calls on calendar, showed, progressed, ELs sent, deals closed (monthly totals)
+    // Daily form: exact dates for weekly column breakdown (W1-W4)
     const sfByRep = {}
     for (let i = 1; i < sfRows.length; i++) {
       const r = sfRows[i]
@@ -2925,13 +2904,32 @@ app.post('/api/scorecard/sync', async (req, res) => {
       if (parts.length !== 3) continue
       const m = parseInt(parts[0]), y = parseInt(parts[2])
       if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
-      if (!sfByRep[rep]) sfByRep[rep] = { elsSent: 0, dealsClosed: 0 }
+      if (!sfByRep[rep]) sfByRep[rep] = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+      sfByRep[rep].scheduled += parseInt(r[3]) || 0
+      sfByRep[rep].showed += parseInt(r[4]) || 0
+      sfByRep[rep].progressed += parseInt(r[5]) || 0
       sfByRep[rep].elsSent += parseInt(r[6]) || 0
       const parseCash = (v) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
       sfByRep[rep].dealsClosed += parseCash(r[7])
     }
 
-    // Find per-closer rows dynamically and write monthly + weekly
+    // Daily check-in for weekly column breakdown
+    const dailyCheckins = await fetchRepCheckins(45).catch(() => ({ checkins: [] }))
+    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const monthCheckins = dailyCheckins.checkins.filter(c => c.date >= firstOfMonth)
+    const dailyByRep = {}
+    for (const c of monthCheckins) {
+      if (!dailyByRep[c.rep]) dailyByRep[c.rep] = { byWeek: {} }
+      const wk = dayInWeek(c.date)
+      if (wk) {
+        if (!dailyByRep[c.rep].byWeek[wk]) dailyByRep[c.rep].byWeek[wk] = { scheduled: 0, completed: 0, progressed: 0 }
+        dailyByRep[c.rep].byWeek[wk].scheduled += c.scheduled
+        dailyByRep[c.rep].byWeek[wk].completed += c.completed
+        dailyByRep[c.rep].byWeek[wk].progressed += c.progressed
+      }
+    }
+
+    // Write per-closer rows
     const repNames = ['Stanley', 'Thomas', 'Tahawar', 'Jake']
     for (const rep of repNames) {
       let subRow = null
@@ -2940,16 +2938,18 @@ app.post('/api/scorecard/sync', async (req, res) => {
         if (cell.includes(rep)) { subRow = i + 1; break }
       }
       if (!subRow) continue
-      const daily = dailyByRep[rep] || { scheduled: 0, completed: 0, progressed: 0, byWeek: {} }
-      const sf = sfByRep[rep] || { elsSent: 0, dealsClosed: 0 }
-      const showRate = daily.scheduled > 0 ? Math.round((daily.completed / daily.scheduled) * 100) : 0
+      const sf = sfByRep[rep] || { scheduled: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+      const daily = dailyByRep[rep] || { byWeek: {} }
+      const showRate = sf.scheduled > 0 ? Math.round((sf.showed / sf.scheduled) * 100) : 0
 
-      // Monthly actuals (col H)
-      writeRow(subRow + 1, 'H', daily.scheduled)   // Calls Scheduled/Booked
-      writeRow(subRow + 2, 'H', `${showRate}%`)    // Show Rate
-      writeRow(subRow + 3, 'H', daily.progressed)   // Progressed to 2nd stage
+      // Monthly actuals from weekly form (col H)
+      writeRow(subRow + 1, 'H', sf.scheduled)
+      writeRow(subRow + 2, 'H', `${showRate}%`)
+      writeRow(subRow + 3, 'H', sf.progressed)
+      writeRow(subRow + 4, 'H', sf.elsSent)
+      writeRow(subRow + 5, 'H', sf.dealsClosed > 0 ? `$${sf.dealsClosed.toLocaleString()}` : '0')
 
-      // Weekly columns (B-F) from daily data
+      // Weekly columns (B-F) from daily check-in data
       for (const col of wkCols) {
         const wk = daily.byWeek[col] || { scheduled: 0, completed: 0, progressed: 0 }
         writeRow(subRow + 1, col, wk.scheduled || '')
@@ -2958,17 +2958,24 @@ app.post('/api/scorecard/sync', async (req, res) => {
       }
     }
 
-    // ── Team aggregate ──
-    const teamDaily = { scheduled: 0, completed: 0, progressed: 0 }
-    for (const rd of Object.values(dailyByRep)) {
-      teamDaily.scheduled += rd.scheduled
-      teamDaily.completed += rd.completed
-      teamDaily.progressed += rd.progressed
+    // ── Team aggregate (from weekly form, fallback to daily) ──
+    const teamSF = { scheduled: 0, showed: 0, progressed: 0, elsSent: 0 }
+    for (const rd of Object.values(sfByRep)) {
+      teamSF.scheduled += rd.scheduled
+      teamSF.showed += rd.showed
+      teamSF.progressed += rd.progressed
+      teamSF.elsSent += rd.elsSent
     }
-    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamDaily.scheduled)
-    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', teamDaily.progressed)
+    // Fallback to daily if weekly form has no data
+    if (teamSF.scheduled === 0 && monthCheckins.length > 0) {
+      teamSF.scheduled = monthCheckins.reduce((s, c) => s + c.scheduled, 0)
+      teamSF.showed = monthCheckins.reduce((s, c) => s + c.completed, 0)
+      teamSF.progressed = monthCheckins.reduce((s, c) => s + c.progressed, 0)
+    }
+    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamSF.scheduled)
+    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', teamSF.progressed)
     writeRow(rowMap['Total Mandates Signed']?.[0], 'H', teamMandates)
-    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', teamDaily.completed > 0 ? `${Math.round((teamDaily.progressed / teamDaily.completed) * 100)}%` : '')
+    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', teamSF.showed > 0 ? `${Math.round((teamSF.progressed / teamSF.showed) * 100)}%` : '')
 
     // ── Fulfillment ──
     writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
