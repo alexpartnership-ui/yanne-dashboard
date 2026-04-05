@@ -273,7 +273,7 @@ app.get('/api/health', (_, res) => res.json({ ok: true }))
 
 // ─── Protect all remaining /api/* routes ────────────────
 // Health check for data sources (no auth required)
-app.get('/api/health/data-sources', async (_req, res) => {
+app.get('/health/data-sources', async (_req, res) => {
   const results = {}
   try { const r = await fetchWeeklySalesForm(); results.weeklySalesForm = { ok: r.rows.length > 0, rows: r.rows.length, tabName: r.tabName } } catch (e) { results.weeklySalesForm = { ok: false, error: e.message } }
   try { const r = await fetchRepCheckins(45); results.repCheckins = { ok: r.checkins.length > 0, count: r.checkins.length } } catch (e) { results.repCheckins = { ok: false, error: e.message } }
