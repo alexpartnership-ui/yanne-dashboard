@@ -272,6 +272,16 @@ app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
 // ─── Protect all remaining /api/* routes ────────────────
+// Health check for data sources (no auth required)
+app.get('/api/health/data-sources', async (_req, res) => {
+  const results = {}
+  try { const r = await fetchWeeklySalesForm(); results.weeklySalesForm = { ok: r.rows.length > 0, rows: r.rows.length, tabName: r.tabName } } catch (e) { results.weeklySalesForm = { ok: false, error: e.message } }
+  try { const r = await fetchRepCheckins(45); results.repCheckins = { ok: r.checkins.length > 0, count: r.checkins.length } } catch (e) { results.repCheckins = { ok: false, error: e.message } }
+  try { const t = await loadTargetsFromSheet(); results.targets = { ok: !!t, keys: t ? Object.keys(t).length : 0 } } catch (e) { results.targets = { ok: false, error: e.message } }
+  try { const s = await getGoogleSheetsClient(); results.sheetsClient = { ok: !!s } } catch (e) { results.sheetsClient = { ok: false, error: e.message } }
+  res.json(results)
+})
+
 app.use('/api/', verifyToken)
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -2901,20 +2911,59 @@ app.post('/api/scorecard/sync', async (req, res) => {
     const qualW = (c) => salesByWeek[c]?.showed > 0 ? `${Math.round((salesByWeek[c].progressed / salesByWeek[c].showed) * 100)}%` : ''
     writeMetricWeekly('Qualification Rate (Call 1 → Call 2)', `${qualRate}%`, Object.fromEntries(wkCols.map(c => [c, qualW(c)])))
 
-    // ── Per-closer: Calls Booked, Progressed to Qualified, Mandates ──
-    const closerStartRows = { Stanley: 31, Thomas: 38, Tahawar: 45, Jake: 52 }
-    for (const [rep, startRow] of Object.entries(closerStartRows)) {
-      const rd = repCalls[rep] || { callsBooked: 0, progressedToQualified: 0, mandatesSigned: 0 }
-      writeRow(startRow, 'H', rd.callsBooked)
-      writeRow(startRow + 2, 'H', rd.progressedToQualified)
-      writeRow(startRow + 5, 'H', rd.mandatesSigned)
+    // ── Per-closer: from weekly sales form (source of truth) ──
+    // Aggregate sales form data per rep for current month
+    const sfByRep = {}
+    for (let i = 1; i < sfRows.length; i++) {
+      const r = sfRows[i]
+      if (!r || r.length < 6) continue
+      const rep = (r[1] || '').trim()
+      const weekEnd = (r[2] || '').trim()
+      const parts = weekEnd.split('/')
+      if (parts.length !== 3) continue
+      const m = parseInt(parts[0]), y = parseInt(parts[2])
+      if (y !== now.getFullYear() || m !== (now.getMonth() + 1)) continue
+      if (!sfByRep[rep]) sfByRep[rep] = { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+      sfByRep[rep].callsOnCalendar += parseInt(r[3]) || 0
+      sfByRep[rep].showed += parseInt(r[4]) || 0
+      sfByRep[rep].progressed += parseInt(r[5]) || 0
+      sfByRep[rep].elsSent += parseInt(r[6]) || 0
+      const parseCash = (v) => parseFloat((v || '0').replace(/[$,]/g, '')) || 0
+      sfByRep[rep].dealsClosed += parseCash(r[7])
     }
 
-    // ── Team aggregate ──
-    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamCalls)
-    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', sfProgressed)
+    // Find per-closer rows dynamically (look for rep name as subheader)
+    const repNames = ['Stanley', 'Thomas', 'Tahawar', 'Jake']
+    for (const rep of repNames) {
+      // Find the subheader row for this rep
+      let subRow = null
+      for (let i = 0; i < sheetRows.length; i++) {
+        const cell = String(sheetRows[i]?.[0] || '').trim()
+        if (cell.includes(rep)) { subRow = i + 1; break } // 1-indexed
+      }
+      if (!subRow) continue
+      const rd = sfByRep[rep] || { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+      // Write to rows below the subheader: +1=Calls Booked, +2=Show Rate, +3=Progressed, +4=ELs Sent, +5=Deals Closed, +6=Mandates
+      writeRow(subRow + 1, 'H', rd.callsOnCalendar)  // Calls on Calendar / Booked
+      writeRow(subRow + 2, 'H', rd.showed > 0 && rd.callsOnCalendar > 0 ? `${Math.round((rd.showed / rd.callsOnCalendar) * 100)}%` : '') // Show Rate
+      writeRow(subRow + 3, 'H', rd.progressed)        // Progressed to 2nd stage
+      writeRow(subRow + 4, 'H', rd.elsSent)           // ELs Sent
+      writeRow(subRow + 5, 'H', rd.dealsClosed > 0 ? `$${rd.dealsClosed.toLocaleString()}` : '0') // Deals Closed
+    }
+
+    // ── Team aggregate (from weekly sales form) ──
+    const teamSF = { callsOnCalendar: 0, showed: 0, progressed: 0, elsSent: 0, dealsClosed: 0 }
+    for (const rd of Object.values(sfByRep)) {
+      teamSF.callsOnCalendar += rd.callsOnCalendar
+      teamSF.showed += rd.showed
+      teamSF.progressed += rd.progressed
+      teamSF.elsSent += rd.elsSent
+      teamSF.dealsClosed += rd.dealsClosed
+    }
+    writeRow(rowMap['Total Calls Booked']?.[0], 'H', teamSF.callsOnCalendar)
+    writeRow(rowMap['Total Progressed to Qualified']?.[0], 'H', teamSF.progressed)
     writeRow(rowMap['Total Mandates Signed']?.[0], 'H', teamMandates)
-    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', `${closeRate}%`)
+    writeRow(rowMap['Closed from Qualified %']?.[0], 'H', teamSF.showed > 0 ? `${Math.round((teamSF.progressed / teamSF.showed) * 100)}%` : '')
 
     // ── Fulfillment ──
     writeRow(rowMap['Active Client Campaigns Running']?.[0], 'H', activeCampaigns)
