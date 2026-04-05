@@ -2666,6 +2666,7 @@ app.post('/api/scorecard/cell', async (req, res) => {
 
 app.post('/api/scorecard/sync', async (req, res) => {
   try {
+    const now = new Date()
     const tab = await findBestSheetTab()
     const sheetRows = await readSheetTab(tab, 'A:M')
     if (!sheetRows) return res.status(503).json({ error: 'Google Sheets not available' })
