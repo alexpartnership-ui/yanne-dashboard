@@ -2719,27 +2719,9 @@ app.post('/api/scorecard/sync', async (req, res) => {
       liAgg.messageReplyRate = Math.round((Number(latest.messageReplyRate) || 0) * 1000) / 10
     }
 
-    // ── Supabase calls per rep ──
-    const calls = callsRes.data || []
+    // ── Supabase deals (for mandates count) ──
     const deals = dealsRes.data || []
-    const repNames = ['Stanley', 'Thomas', 'Tahawar', 'Jake']
-    const repCalls = {}
-    for (const rep of repNames) {
-      const repCallsArr = calls.filter(c => c.rep === rep)
-      const call1s = repCallsArr.filter(c => c.call_type === 'Call 1')
-      const call2plus = deals.filter(d => d.rep_name === rep && d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active')
-      const mandates = deals.filter(d => d.rep_name === rep && d.deal_status === 'signed')
-      repCalls[rep] = {
-        callsBooked: repCallsArr.length,
-        progressedToQualified: call2plus.length,
-        mandatesSigned: mandates.length,
-      }
-    }
-    // Team totals
-    const teamCalls = calls.length
-    const teamQualified = deals.filter(d => d.current_stage && d.current_stage !== 'Call 1' && d.deal_status === 'active').length
     const teamMandates = deals.filter(d => d.deal_status === 'signed').length
-    const activeDeals = deals.filter(d => d.deal_status === 'active')
     // Qualification rate from weekly sales form (progressed / showed)
     const sfRows = salesFormRes?.rows || []
     const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
