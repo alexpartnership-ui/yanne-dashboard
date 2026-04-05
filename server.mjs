@@ -1514,18 +1514,22 @@ app.get('/api/clients/:id/campaigns/:campaignId/sequence', async (req, res) => {
 const WEEKLY_SALES_FORM_SHEET = '1AxGg4hgzutTcBdrKlZ2oUnqrUCHMTiU7kxj-PRzOQcc'
 
 async function fetchWeeklySalesForm() {
-  // Try to get sheet metadata to find the right tab
   const sheets = await getGoogleSheetsClient()
-  if (!sheets) return { rows: [], tabName: null }
+  if (!sheets) { console.warn('fetchWeeklySalesForm: no sheets client'); return { rows: [], tabName: null } }
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: WEEKLY_SALES_FORM_SHEET })
+    const allTabs = meta.data.sheets?.map(s => `${s.properties.title}(gid:${s.properties.sheetId})`) || []
+    console.log('Weekly sales form tabs:', allTabs.join(', '))
     const targetTab = meta.data.sheets?.find(s => s.properties.sheetId === 2041501325)
     const tabName = targetTab?.properties?.title || 'Form Responses 1'
+    console.log('Using tab:', tabName)
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: WEEKLY_SALES_FORM_SHEET,
       range: `${tabName}!A1:Z500`,
     })
-    return { rows: res.data.values || [], tabName }
+    const rows = res.data.values || []
+    console.log(`Weekly sales form: ${rows.length} rows from tab "${tabName}"`)
+    return { rows, tabName }
   } catch (err) {
     console.error('Failed to read weekly sales form:', err.message)
     return { rows: [], tabName: null }
@@ -1856,25 +1860,26 @@ app.get('/api/slack/meetings-booked', async (req, res) => {
 const TARGETS_FILE = join(__dirname, 'scorecard_targets.json')
 
 const DEFAULT_TARGETS = {
+  // Revenue
   revenueTarget: 833000,
-  emailsSentWeek: 350000,
-  activeCampaigns: 30,
+  // Funnel (keys must match TargetsModal + hook)
+  emailsSentMonth: 350000,
+  repliesMonth: 2800,
+  interestedMonth: 980,
+  meetingsMonth: 60,
+  proposalsMonth: 10,
+  signedMonth: 3,
+  // Email outreach
   replyRate: 0.8,
   bounceRate: 1.0,
-  interestedWeek: 50,
-  connectedSenders: 100,
-  burntSenders: 10,
-  unactionedReplies: 10,
-  interestedToMeeting: 60,
-  meetingsBookedWeek: 15,
-  callsScoredWeek: 40,
+  // Sales
   teamAvgScore: 70,
-  c1toC2Rate: 35,
-  c2toC3Rate: 50,
-  qualificationRate: 15,
-  proposalsSent: 5,
+  qualificationRate: 30,
   closeRate: 15,
   stalledDeals: 5,
+  c1to2Rate: 35,
+  c2to3Rate: 50,
+  proposalsSent: 5,
   // LinkedIn
   linkedinMessagesSent: 500,
   linkedinMessageReplyRate: 10,
@@ -1884,10 +1889,58 @@ const DEFAULT_TARGETS = {
   // Setters
   interestedToMeetingRate: 60,
   meetingsBookedWeek: 15,
-  // Sales progression
-  c1to2Rate: 35,
-  c2to3Rate: 50,
-  proposalsSent: 5,
+}
+
+// Targets persistence: Google Sheet "Targets" tab (survives container redeploys)
+// Falls back to local file, then defaults
+async function loadTargetsFromSheet() {
+  try {
+    const rows = await readSheetTab('Targets', 'A:B')
+    if (rows && rows.length > 0) {
+      const targets = {}
+      for (const row of rows) {
+        if (row[0] && row[1] !== undefined && row[1] !== '') {
+          const val = parseFloat(row[1])
+          targets[row[0]] = isNaN(val) ? row[1] : val
+        }
+      }
+      if (Object.keys(targets).length > 0) return targets
+    }
+  } catch { /* fall through */ }
+  return null
+}
+
+async function saveTargetsToSheet(targets) {
+  const sheets = await getGoogleSheetsClient()
+  if (!sheets) return false
+  try {
+    const rows = Object.entries(targets).map(([k, v]) => [k, v])
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: CEO_SCORECARD_SPREADSHEET_ID,
+      range: 'Targets!A1:B' + rows.length,
+      valueInputOption: 'RAW',
+      requestBody: { values: rows },
+    })
+    return true
+  } catch (err) {
+    console.error('Failed to save targets to sheet:', err.message)
+    // Try creating the tab if it doesn't exist
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: CEO_SCORECARD_SPREADSHEET_ID,
+        requestBody: { requests: [{ addSheet: { properties: { title: 'Targets' } } }] },
+      })
+      // Retry write
+      const rows = Object.entries(targets).map(([k, v]) => [k, v])
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: CEO_SCORECARD_SPREADSHEET_ID,
+        range: 'Targets!A1:B' + rows.length,
+        valueInputOption: 'RAW',
+        requestBody: { values: rows },
+      })
+      return true
+    } catch { return false }
+  }
 }
 
 function loadTargets() {
@@ -1898,32 +1951,20 @@ function loadTargets() {
 }
 
 app.get('/api/scorecard/targets', async (_req, res) => {
-  // Try reading targets from Google Sheet column I first
-  try {
-    const tab = await findBestSheetTab()
-    const sheetRows = await readSheetTab(tab, 'A:I')
-    if (sheetRows && sheetRows.length > 3) {
-      const sheetTargets = {}
-      for (const row of sheetRows) {
-        const metricName = row[0]
-        const target = row[8] // Column I = Monthly Target
-        if (metricName && target !== undefined && target !== '') {
-          sheetTargets[metricName] = target
-        }
-      }
-      if (Object.keys(sheetTargets).length > 0) {
-        const local = loadTargets()
-        return res.json({ ...local, _sheetTargets: sheetTargets })
-      }
-    }
-  } catch { /* fall through to local */ }
+  // Try Google Sheet "Targets" tab first (persistent), then local file, then defaults
+  const sheetTargets = await loadTargetsFromSheet()
+  if (sheetTargets) return res.json({ ...DEFAULT_TARGETS, ...sheetTargets })
   res.json(loadTargets())
 })
 
 app.post('/api/scorecard/targets', async (req, res) => {
   const current = loadTargets()
-  const updated = { ...current, ...req.body }
+  const sheetTargets = await loadTargetsFromSheet()
+  const base = sheetTargets ? { ...DEFAULT_TARGETS, ...sheetTargets } : current
+  const updated = { ...base, ...req.body }
+  // Save to both Google Sheet (persistent) and local file (fast cache)
   writeFileSync(TARGETS_FILE, JSON.stringify(updated, null, 2))
+  await saveTargetsToSheet(updated)
   auditLog(req.user.id, 'update_targets', 'scorecard', { changes: req.body }, req.ip)
   res.json(updated)
 })
@@ -3361,7 +3402,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       supaQuery('deals_with_calls', 'select=*'),
       supaQuery('rep_performance', 'select=*'),
       supaQuery('call_logs', `select=rep,score_percentage,call_type,date,coaching_priority&scored_at=gte.${daysAgo(14)}`),
-      Promise.resolve(loadTargets()),
+      loadTargetsFromSheet().then(st => st ? { ...DEFAULT_TARGETS, ...st } : loadTargets()),
       // Google Sheet — best available month tab
       findBestSheetTab().then(tab => readSheetTab(tab)).catch(() => null),
       // HeyReach LinkedIn from Airtable
