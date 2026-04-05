@@ -2726,7 +2726,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
       const lastDay = new Date(year, month + 1, 0).getDate()
       const firstDow = new Date(year, month, 1).getDay() // 0=Sun
       // W1: day 1 through first Sunday
-      const w1End = firstDow === 0 ? 1 : (7 - firstDow + 1)
+      const w1End = firstDow === 0 ? 7 : (7 - firstDow + 1)
       const cols = ['B', 'C', 'D', 'E', 'F']
       const weeks = [{ col: 'B', start: 1, end: Math.min(w1End, lastDay) }]
       let d = w1End + 1
