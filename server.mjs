@@ -272,6 +272,18 @@ app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
 // ─── Protect all remaining /api/* routes ────────────────
+// Temporary diagnostic — remove after verifying sheet access
+app.get('/api/debug-sheets', async (_req, res) => {
+  try {
+    const checkinRows = await readAnySheet('1RQoRjAZIMFi6NenrdynzTPRnuDlZl2ynQJ6qRMCBOhA', 'A1:F5')
+    const salesRows = await readAnySheet('1AxGg4hgzutTcBdrKlZ2oUnqrUCHMTiU7kxj-PRzOQcc', 'A1:Z5')
+    res.json({
+      checkin: { ok: !!checkinRows, rows: checkinRows?.length || 0, sample: checkinRows?.[0] },
+      sales: { ok: !!salesRows, rows: salesRows?.length || 0, sample: salesRows?.[0] },
+    })
+  } catch (err) { res.json({ error: err.message }) }
+})
+
 app.use('/api/', verifyToken)
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
