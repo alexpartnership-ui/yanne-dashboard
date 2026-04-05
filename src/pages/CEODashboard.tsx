@@ -573,33 +573,6 @@ export function CEODashboard() {
         </div>
       )}
 
-      {/* ── SETTER BREAKDOWN ──────────────────────── */}
-      {data.setterBreakdown.length > 0 && (
-        <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-text-primary mb-3">Setter Breakdown</h3>
-          <table className="w-full">
-            <thead>
-              <tr className="text-[10px] font-semibold uppercase tracking-wider text-text-muted border-b border-border">
-                <th className="text-left pb-2">Setter</th>
-                <th className="text-right pb-2">Assigned</th>
-                <th className="text-right pb-2">Meetings</th>
-                <th className="text-right pb-2">Conv %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.setterBreakdown.map(s => (
-                <tr key={s.name} className="border-b border-border-muted">
-                  <td className="py-2 text-xs font-medium text-text-primary">{s.name}</td>
-                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.assigned}</td>
-                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.meetings}</td>
-                  <td className="py-2 text-xs text-text-secondary text-right tabular-nums">{s.conversionRate}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {/* ── BOTTLENECK ─────────────────────────────── */}
       {data.bottleneck && (
         <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-5">

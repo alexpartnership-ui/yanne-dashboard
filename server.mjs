@@ -1509,34 +1509,73 @@ app.get('/api/clients/:id/campaigns/:campaignId/sequence', async (req, res) => {
   }
 })
 
+// ─── Google Sheets — Weekly Sales Form ───────────────────
+
+const WEEKLY_SALES_FORM_SHEET = '1AxGg4hgzutTcBdrKlZ2oUnqrUCHMTiU7kxj-PRzOQcc'
+
+async function fetchWeeklySalesForm() {
+  // Try to get sheet metadata to find the right tab
+  const sheets = await getGoogleSheetsClient()
+  if (!sheets) return { rows: [], tabName: null }
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: WEEKLY_SALES_FORM_SHEET })
+    const targetTab = meta.data.sheets?.find(s => s.properties.sheetId === 2041501325)
+    const tabName = targetTab?.properties?.title || 'Form Responses 1'
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: WEEKLY_SALES_FORM_SHEET,
+      range: `${tabName}!A1:Z500`,
+    })
+    return { rows: res.data.values || [], tabName }
+  } catch (err) {
+    console.error('Failed to read weekly sales form:', err.message)
+    return { rows: [], tabName: null }
+  }
+}
+
 // ─── Google Sheets — Rep Daily Check-ins ────────────────
 
 const REP_CHECKIN_SHEET = '1RQoRjAZIMFi6NenrdynzTPRnuDlZl2ynQJ6qRMCBOhA'
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
 
+// Generic helper to read any Google Sheet via service account
+async function readAnySheet(spreadsheetId, range) {
+  const sheets = await getGoogleSheetsClient()
+  if (!sheets) return null
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range })
+    return res.data.values || []
+  } catch (err) {
+    console.error(`Failed to read sheet ${spreadsheetId}:`, err.message)
+    return null
+  }
+}
+
 async function fetchRepCheckins(days = 45) {
-  const url = GOOGLE_API_KEY
-    ? `https://sheets.googleapis.com/v4/spreadsheets/${REP_CHECKIN_SHEET}/values/A1:F500?key=${GOOGLE_API_KEY}`
-    : `https://docs.google.com/spreadsheets/d/${REP_CHECKIN_SHEET}/gviz/tq?tqx=out:json`
+  // Try service account first, then API key, then gviz fallback
+  let rows = await readAnySheet(REP_CHECKIN_SHEET, 'A1:F500')
 
-  let rows = []
+  if (!rows) {
+    const url = GOOGLE_API_KEY
+      ? `https://sheets.googleapis.com/v4/spreadsheets/${REP_CHECKIN_SHEET}/values/A1:F500?key=${GOOGLE_API_KEY}`
+      : `https://docs.google.com/spreadsheets/d/${REP_CHECKIN_SHEET}/gviz/tq?tqx=out:json`
 
-  if (GOOGLE_API_KEY) {
-    const r = await fetch(url)
-    if (!r.ok) throw new Error('Failed to fetch sheet')
-    const json = await r.json()
-    rows = json.values || []
-  } else {
-    const r = await fetch(url)
-    if (!r.ok) throw new Error('Failed to fetch sheet')
-    const text = await r.text()
-    const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
-    const gviz = JSON.parse(jsonStr)
-    const gRows = gviz.table?.rows || []
-    const gCols = gviz.table?.cols || []
-    rows = [gCols.map(c => c.label || '')]
-    for (const gr of gRows) {
-      rows.push(gr.c.map(cell => cell?.v != null ? String(cell.v) : ''))
+    if (GOOGLE_API_KEY) {
+      const r = await fetch(url)
+      if (!r.ok) throw new Error('Failed to fetch sheet')
+      const json = await r.json()
+      rows = json.values || []
+    } else {
+      const r = await fetch(url)
+      if (!r.ok) throw new Error('Failed to fetch sheet')
+      const text = await r.text()
+      const jsonStr = text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, '')
+      const gviz = JSON.parse(jsonStr)
+      const gRows = gviz.table?.rows || []
+      const gCols = gviz.table?.cols || []
+      rows = [gCols.map(c => c.label || '')]
+      for (const gr of gRows) {
+        rows.push(gr.c.map(cell => cell?.v != null ? String(cell.v) : ''))
+      }
     }
   }
 
@@ -3182,7 +3221,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       mondayRes, hubspotParsed,
       callsWeekRes, callsMonthRes, dealsRes, repsRes, allCallsRes,
       targetsData, googleSheetRes, linkedinRes, snapshotsRes,
-      onboardingTasksRes, slackEmailTotals, repCheckinsRes,
+      onboardingTasksRes, slackEmailTotals, repCheckinsRes, weeklySalesFormRes,
     ] = await Promise.all([
       fetchAllBisonCampaigns(),
       AIRTABLE_KEY ? airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' }).then(r => r.data) : Promise.resolve(null),
@@ -3220,6 +3259,8 @@ app.get('/api/scorecard/data', async (_req, res) => {
       fetchEmailReportsParsed().catch(() => ({ emailsSent: 0, replies: 0, interested: 0, bounced: 0, replyRate: 0, bounceRate: 0, days: 0 })),
       // Rep daily check-in forms (Google Sheet) — for qualification rate
       fetchRepCheckins(45).catch(() => ({ checkins: [], byDate: [], byRep: {} })),
+      // Weekly sales form (Google Sheet) — north star + per-closer data
+      fetchWeeklySalesForm().catch(() => ({ rows: [], tabName: null })),
     ])
 
     // Build data freshness indicators
@@ -3251,6 +3292,7 @@ app.get('/api/scorecard/data', async (_req, res) => {
       onboardingTasks: onboardingTasksRes,
       slackEmailTotals,
       repCheckins: repCheckinsRes,
+      weeklySalesForm: weeklySalesFormRes,
       dataFreshness,
     })
   } catch (err) {
