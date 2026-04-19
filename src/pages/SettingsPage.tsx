@@ -24,6 +24,7 @@ export function SettingsPage() {
   const [name, setName] = useState('')
   const [role, setRole] = useState<'admin' | 'manager' | 'member'>('member')
   const [pillars, setPillars] = useState<string[]>([])
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null)
 
   async function fetchUsers() {
     try {
@@ -55,7 +56,11 @@ export function SettingsPage() {
         body: JSON.stringify({ email, name, role, pillar_access: pillars }),
       })
       if (res.ok) {
-        toast('Invite sent — user will receive password-setup email', 'success')
+        const body = await res.json()
+        toast('User created', 'success')
+        if (body?.temp_password) {
+          setCreatedCreds({ email: body.email, password: body.temp_password })
+        }
         setShowForm(false)
         setEmail(''); setName(''); setRole('member'); setPillars([])
         fetchUsers()
@@ -95,6 +100,41 @@ export function SettingsPage() {
           {showForm ? 'Cancel' : 'Add User'}
         </button>
       </div>
+
+      {createdCreds && (
+        <div className="mb-6 rounded-lg border border-yanne-500/40 bg-yanne-50 p-5">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-text-primary">User created — share these credentials</h3>
+              <p className="text-xs text-text-muted mt-1">
+                Copy before closing — this is the only time the password is shown. Send via Slack / 1Password / anything secure.
+              </p>
+            </div>
+            <button
+              onClick={() => setCreatedCreds(null)}
+              className="text-text-faint hover:text-text-primary text-sm"
+            >Dismiss</button>
+          </div>
+          <div className="space-y-2 font-mono text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-text-muted w-20">Email:</span>
+              <code className="flex-1 rounded bg-surface px-3 py-1.5 select-all">{createdCreds.email}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(createdCreds.email)}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-surface"
+              >Copy</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-text-muted w-20">Password:</span>
+              <code className="flex-1 rounded bg-surface px-3 py-1.5 select-all">{createdCreds.password}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(createdCreds.password)}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-surface"
+              >Copy</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 rounded-lg border border-border bg-surface-raised p-5 space-y-4">

@@ -167,14 +167,28 @@ app.post('/api/users', verifySupabaseJWT, requireRole('admin'), async (req, res)
     return res.status(400).json({ error: 'email, name, role, pillar_access required' })
   }
   if (!['admin', 'manager', 'member'].includes(role)) return res.status(400).json({ error: 'invalid role' })
-  const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { data: { name } })
+
+  // Generate a random temporary password — avoids Supabase's 2/hour email rate limit.
+  // Admin shares the password out-of-band (Slack/SMS/whatever). User logs in and changes it.
+  const tempPassword = `${crypto.randomBytes(9).toString('base64url')}-${Math.floor(Math.random() * 100)}`
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: { name },
+  })
   if (error) return res.status(400).json({ error: error.message })
+
   const { error: profErr } = await supabaseAdmin
     .from('user_profiles')
     .insert({ id: data.user.id, name, role, pillar_access })
-  if (profErr) return res.status(500).json({ error: profErr.message })
+  if (profErr) {
+    try { await supabaseAdmin.auth.admin.deleteUser(data.user.id) } catch { /* best effort */ }
+    return res.status(500).json({ error: profErr.message })
+  }
   auditLog(req.user.id, 'create_user', 'users', { email, role, pillar_access }, req.ip)
-  res.json({ id: data.user.id, email, name, role, pillar_access })
+  res.json({ id: data.user.id, email, name, role, pillar_access, temp_password: tempPassword })
 })
 
 app.patch('/api/users/:id', verifySupabaseJWT, requireRole('admin'), async (req, res) => {
