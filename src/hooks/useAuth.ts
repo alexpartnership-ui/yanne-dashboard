@@ -42,9 +42,16 @@ export function useAuth() {
 
   useEffect(() => {
     let mounted = true
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+      ])
+
     ;(async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session } } = await withTimeout(supabase.auth.getSession(), 5000)
         if (!mounted) return
         setState({ user: session ? await fetchProfile() : null, loading: false })
       } catch {
