@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { apiFetch } from './useAuth'
 
 export interface FunnelCounts {
@@ -51,17 +51,27 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Fix 2: unmount safety ref for triggerSync polling
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
+      // Fix 1: AbortController to prevent stale-setter race on cohort change
+      const controller = new AbortController()
+      const { signal } = controller
+
       const [countsRes, dwellRes, outcomesRes, syncRes] = await Promise.all([
-        apiFetch(`/api/funnel-health/counts?${params}`),
-        apiFetch(`/api/funnel-health/dwell?${params}`),
-        apiFetch(`/api/funnel-health/outcomes?${params}`),
-        apiFetch('/api/funnel-health/last-sync'),
+        apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
+        apiFetch(`/api/funnel-health/dwell?${params}`, { signal }),
+        apiFetch(`/api/funnel-health/outcomes?${params}`, { signal }),
+        apiFetch('/api/funnel-health/last-sync', { signal }),
       ])
+
+      if (signal.aborted) return
 
       if (!countsRes.ok) throw new Error(`Counts fetch failed: ${countsRes.status}`)
       if (!dwellRes.ok) throw new Error(`Dwell fetch failed: ${dwellRes.status}`)
@@ -75,6 +85,8 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
         syncRes.json(),
       ])
 
+      if (signal.aborted) return
+
       setCounts(countsData ?? null)
       setDwell(Array.isArray(dwellData) ? dwellData : [])
       setOutcomes(outcomesData ?? null)
@@ -87,29 +99,35 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   }, [cohortStart, cohortEnd])
 
   useEffect(() => {
+    const controller = new AbortController()
     load()
+    return () => controller.abort()
   }, [load])
 
   const triggerSync = useCallback(async () => {
+    if (!mountedRef.current) return
     setSyncing(true)
     const prevSync = lastSync
     try {
       const res = await apiFetch('/api/funnel-health/refresh', { method: 'POST' })
       if (!res.ok) {
-        setError(`Sync failed: ${res.status}`)
+        if (mountedRef.current) setError(`Sync failed: ${res.status}`)
         return
       }
 
       // Poll for last-sync change (up to 90s, every 5s)
       const maxAttempts = 18
       for (let i = 0; i < maxAttempts; i++) {
+        if (!mountedRef.current) return
         await new Promise(resolve => setTimeout(resolve, 5000))
+        if (!mountedRef.current) return
         try {
           const syncRes = await apiFetch('/api/funnel-health/last-sync')
           if (syncRes.ok) {
             const syncData = await syncRes.json()
             const newSync = syncData?.last_sync ?? null
             if (newSync && newSync !== prevSync) {
+              if (!mountedRef.current) return
               await load()
               return
             }
@@ -119,9 +137,9 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
         }
       }
       // Timed out — still refetch to get latest state
-      await load()
+      if (mountedRef.current) await load()
     } finally {
-      setSyncing(false)
+      if (mountedRef.current) setSyncing(false)
     }
   }, [lastSync, load])
 

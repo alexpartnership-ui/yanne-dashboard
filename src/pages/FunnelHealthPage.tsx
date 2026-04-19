@@ -16,7 +16,7 @@ interface CohortValue {
 
 function msToDays(ms: number | null): string {
   if (ms == null) return '—'
-  return (ms / 86_400_000).toFixed(1)
+  return (ms / 86_400_000).toFixed(1) + 'd'
 }
 
 function formatLastSync(lastSync: string | null): string {
@@ -84,12 +84,12 @@ export function FunnelHealthPage() {
       : '—'
 
   // Longest median stage (for warning highlight)
-  const longestMedianStageId = dwell.reduce<string | null>((acc, row) => {
-    if (row.median_ms == null) return acc
-    const current = dwell.find(r => r.stage_id === acc)
-    if (!current || current.median_ms == null) return row.stage_id
-    return row.median_ms > current.median_ms ? row.stage_id : acc
-  }, null)
+  const longestMedianStageId = dwell
+    .filter(r => r.median_ms != null)
+    .reduce<{ id: string | null; ms: number }>(
+      (acc, r) => (r.median_ms! > acc.ms ? { id: r.stage_id, ms: r.median_ms! } : acc),
+      { id: null, ms: -1 }
+    ).id
 
   // Median total cycle (MQ → 3rd, exclude Won/NDA)
   const cycleStageIds = ['mq', 'first_call', 'second_call', 'third_call']
@@ -129,12 +129,12 @@ export function FunnelHealthPage() {
             className="flex items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-yanne-800/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             {syncing ? (
-              <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <svg aria-hidden="true" className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             ) : (
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
               </svg>
             )}
@@ -196,9 +196,9 @@ export function FunnelHealthPage() {
                     >
                       <td className="px-4 py-2.5 text-text-secondary font-medium">{row.stage_label}</td>
                       <td className="px-4 py-2.5 text-right text-text-muted font-data">{row.sample_count}</td>
-                      <td className="px-4 py-2.5 text-right text-text-secondary font-data">{msToDays(row.median_ms)}d</td>
-                      <td className="px-4 py-2.5 text-right text-text-muted font-data">{msToDays(row.mean_ms)}d</td>
-                      <td className="px-4 py-2.5 text-right text-text-muted font-data">{msToDays(row.p75_ms)}d</td>
+                      <td className="px-4 py-2.5 text-right text-text-secondary font-data">{msToDays(row.median_ms)}</td>
+                      <td className="px-4 py-2.5 text-right text-text-muted font-data">{msToDays(row.mean_ms)}</td>
+                      <td className="px-4 py-2.5 text-right text-text-muted font-data">{msToDays(row.p75_ms)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -206,9 +206,9 @@ export function FunnelHealthPage() {
             </div>
             <div className="grid grid-cols-3 gap-4">
               <MetricCard
-                label="Median Total Cycle (MQ→3rd)"
+                label="Est. Cycle Time (MQ→3rd)"
                 value={medianCycleDays > 0 ? medianCycleDays.toFixed(1) + 'd' : '—'}
-                subtitle="Sum of median dwell across MQ, 1st, 2nd, 3rd stages"
+                subtitle="Sum of stage medians"
               />
             </div>
           </section>
