@@ -90,7 +90,7 @@ export function SettingsPage() {
         <h1 className="text-xl font-bold text-text-primary">User Management</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="rounded-lg bg-yanne px-4 py-2 text-sm font-medium text-white hover:bg-yanne/90"
+          className="rounded-lg bg-yanne-500 px-4 py-2 text-sm font-medium text-white hover:bg-yanne-400"
         >
           {showForm ? 'Cancel' : 'Add User'}
         </button>
@@ -101,15 +101,15 @@ export function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text-secondary">Name</label>
-              <input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne focus:outline-none" />
+              <input type="text" required value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne-500 focus:outline-none" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary">Email</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne focus:outline-none" />
+              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne-500 focus:outline-none" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary">Role</label>
-              <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'manager' | 'member')} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne focus:outline-none">
+              <select value={role} onChange={e => setRole(e.target.value as 'admin' | 'manager' | 'member')} className="mt-1 block w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-yanne-500 focus:outline-none">
                 <option value="member">Member</option>
                 <option value="manager">Manager</option>
                 <option value="admin">Admin</option>
@@ -131,7 +131,7 @@ export function SettingsPage() {
               </label>
             </div>
           </div>
-          <button type="submit" className="rounded-lg bg-yanne px-4 py-2 text-sm font-medium text-white hover:bg-yanne/90">Create User</button>
+          <button type="submit" className="rounded-lg bg-yanne-500 px-4 py-2 text-sm font-medium text-white hover:bg-yanne-400">Create User</button>
         </form>
       )}
 
