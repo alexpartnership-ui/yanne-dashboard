@@ -1,5 +1,19 @@
 -- Funnel Health snapshots + RPCs
 
+-- HubSpot stage IDs referenced in this file:
+--   appointmentscheduled  = Meeting Qualified (MQ)
+--   qualifiedtobuy        = NDA (side branch)
+--   presentationscheduled = 1st Closing Call
+--   decisionmakerboughtin = 2nd Closing Call
+--   1066193534            = 3rd Closing Call / Contract Sent
+--   contractsent          = Long Term Lead
+--   closedwon             = Closed Won
+--   closedlost            = Closed Lost
+--   1066871403            = Disqualified
+-- Cohort filter across all functions anchors on date_entered_appointmentscheduled
+-- (deal's MQ entry date), not per-stage entry dates — so dwell-row sample counts
+-- may not equal reach counts in funnel_counts for the same window. Intentional.
+
 create table public.funnel_snapshots (
   id bigserial primary key,
   snapshot_date date not null,
@@ -126,7 +140,7 @@ as $func$
       current_stage_id != 'appointmentscheduled'
       and cumulative_time_in_appointmentscheduled is not null
       and cumulative_time_in_appointmentscheduled > 0
-      and cumulative_time_in_appointmentscheduled < 34560000000
+      and cumulative_time_in_appointmentscheduled < 34560000000 -- cap: < 400 days in ms (400 * 86400000)
       and date_entered_appointmentscheduled is not null
       and date_entered_appointmentscheduled::date between cohort_start and cohort_end
     )::bigint as sample_count,
