@@ -2254,7 +2254,7 @@ async function gatherContext(question, pillarAccess = []) {
         dwell: dwell.data ?? [],
         outcomes: outcomes.data?.[0] ?? null,
       }
-    })().catch(() => {}))
+    })().catch(err => { console.error('[gatherContext/funnel]', err?.message || err) }))
   }
 
   if (has('campaigns') && intents.includes('campaigns')) {
@@ -2642,7 +2642,11 @@ app.post('/api/funnel-health/refresh', async (_req, res) => {
     const webhookUrl = process.env.N8N_FUNNEL_WEBHOOK_URL
     if (!webhookUrl) return res.status(503).json({ error: 'refresh webhook not configured' })
     const r = await fetch(webhookUrl, { method: 'POST' })
-    if (!r.ok) return res.status(502).json({ error: `n8n returned ${r.status}`, body: await r.text() })
+    if (!r.ok) {
+      const body = await r.text()
+      console.error('[funnel-health/refresh] n8n error', r.status, body)
+      return res.status(502).json({ error: `n8n refresh failed (${r.status})` })
+    }
     res.json({ triggered: true })
   } catch (err) { serverError(res, err) }
 })
