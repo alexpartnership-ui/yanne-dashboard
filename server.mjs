@@ -2244,15 +2244,17 @@ async function gatherContext(question, pillarAccess = []) {
 
   if (has('sales') && intents.includes('funnel')) {
     promises.push((async () => {
-      const [counts, dwell, outcomes] = await Promise.all([
+      const [counts, dwell, outcomes, cycles] = await Promise.all([
         supaRpc('funnel_counts', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
         supaRpc('funnel_dwell_times', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
         supaRpc('funnel_third_call_outcomes', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
+        supaRpc('funnel_cycle_times', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
       ])
       context.funnel = {
         counts: counts.data?.[0] ?? null,
         dwell: dwell.data ?? [],
         outcomes: outcomes.data?.[0] ?? null,
+        cycles: cycles.data ?? [],
       }
     })().catch(err => { console.error('[gatherContext/funnel]', err?.message || err) }))
   }
@@ -2626,6 +2628,15 @@ app.get('/api/funnel-health/outcomes', async (req, res) => {
     const { data, error } = await supaRpc('funnel_third_call_outcomes', { cohort_start, cohort_end })
     if (error) return serverError(res, error)
     res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/cycles', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_cycle_times', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
   } catch (err) { serverError(res, err) }
 })
 

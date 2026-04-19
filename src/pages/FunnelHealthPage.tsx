@@ -44,7 +44,7 @@ export function FunnelHealthPage() {
     end: TODAY,
   })
 
-  const { counts, dwell, outcomes, lastSync, loading, syncing, error, refetch, triggerSync } = useFunnelHealth({
+  const { counts, dwell, outcomes, cycles, lastSync, loading, syncing, error, refetch, triggerSync } = useFunnelHealth({
     cohortStart: cohort.start,
     cohortEnd: cohort.end,
   })
@@ -90,12 +90,6 @@ export function FunnelHealthPage() {
       (acc, r) => (r.median_ms! > acc.ms ? { id: r.stage_id, ms: r.median_ms! } : acc),
       { id: null, ms: -1 }
     ).id
-
-  // Median total cycle (MQ → 3rd, exclude Won/NDA)
-  const cycleStageIds = ['appointmentscheduled', 'presentationscheduled', 'decisionmakerboughtin', '1066193534']
-  const medianCycleDays = dwell
-    .filter(r => cycleStageIds.includes(r.stage_id) && r.median_ms != null)
-    .reduce((sum, r) => sum + (r.median_ms ?? 0) / 86_400_000, 0)
 
   // Outcomes
   const outcomesTotal = outcomes
@@ -204,13 +198,40 @@ export function FunnelHealthPage() {
                 </tbody>
               </table>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <MetricCard
-                label="Est. Cycle Time (MQ→3rd)"
-                value={medianCycleDays > 0 ? medianCycleDays.toFixed(1) + 'd' : '—'}
-                subtitle="Sum of stage medians"
-              />
-            </div>
+          </section>
+
+          {/* Section 2b — End-to-end Cycle Times */}
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
+              End-to-end Cycle Times
+            </h3>
+            {cycles.length === 0 ? (
+              <p className="text-sm text-text-muted">No cycle data for this cohort.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                {cycles.map(c => (
+                  <div
+                    key={c.segment_id}
+                    className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm"
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
+                      {c.segment_label}
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="font-data text-2xl font-bold text-text-primary">
+                        {c.median_days != null ? c.median_days.toFixed(1) : '—'}
+                      </span>
+                      <span className="text-xs text-text-muted">days median</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-[10px] text-text-muted font-data">
+                      <span>mean {c.mean_days != null ? c.mean_days.toFixed(1) + 'd' : '—'}</span>
+                      <span>p75 {c.p75_days != null ? c.p75_days.toFixed(1) + 'd' : '—'}</span>
+                      <span className="ml-auto">n={c.sample_count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Section 3 — 3rd Call Outcomes */}

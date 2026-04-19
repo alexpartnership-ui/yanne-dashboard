@@ -27,6 +27,15 @@ export interface FunnelOutcomes {
   dq: number
 }
 
+export interface FunnelCycleRow {
+  segment_id: string
+  segment_label: string
+  sample_count: number
+  median_days: number | null
+  mean_days: number | null
+  p75_days: number | null
+}
+
 export interface UseFunnelHealthArgs {
   cohortStart: string // 'YYYY-MM-DD'
   cohortEnd: string   // 'YYYY-MM-DD'
@@ -36,6 +45,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   counts: FunnelCounts | null
   dwell: FunnelDwellRow[]
   outcomes: FunnelOutcomes | null
+  cycles: FunnelCycleRow[]
   lastSync: string | null
   loading: boolean
   syncing: boolean
@@ -46,6 +56,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const [counts, setCounts] = useState<FunnelCounts | null>(null)
   const [dwell, setDwell] = useState<FunnelDwellRow[]>([])
   const [outcomes, setOutcomes] = useState<FunnelOutcomes | null>(null)
+  const [cycles, setCycles] = useState<FunnelCycleRow[]>([])
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -61,10 +72,11 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
 
-      const [countsRes, dwellRes, outcomesRes, syncRes] = await Promise.all([
+      const [countsRes, dwellRes, outcomesRes, cyclesRes, syncRes] = await Promise.all([
         apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
         apiFetch(`/api/funnel-health/dwell?${params}`, { signal }),
         apiFetch(`/api/funnel-health/outcomes?${params}`, { signal }),
+        apiFetch(`/api/funnel-health/cycles?${params}`, { signal }),
         apiFetch('/api/funnel-health/last-sync', { signal }),
       ])
 
@@ -73,12 +85,14 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       if (!countsRes.ok) throw new Error(`Counts fetch failed: ${countsRes.status}`)
       if (!dwellRes.ok) throw new Error(`Dwell fetch failed: ${dwellRes.status}`)
       if (!outcomesRes.ok) throw new Error(`Outcomes fetch failed: ${outcomesRes.status}`)
+      if (!cyclesRes.ok) throw new Error(`Cycles fetch failed: ${cyclesRes.status}`)
       if (!syncRes.ok) throw new Error(`Last-sync fetch failed: ${syncRes.status}`)
 
-      const [countsData, dwellData, outcomesData, syncData] = await Promise.all([
+      const [countsData, dwellData, outcomesData, cyclesData, syncData] = await Promise.all([
         countsRes.json(),
         dwellRes.json(),
         outcomesRes.json(),
+        cyclesRes.json(),
         syncRes.json(),
       ])
 
@@ -87,6 +101,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       setCounts(countsData ?? null)
       setDwell(Array.isArray(dwellData) ? dwellData : [])
       setOutcomes(outcomesData ?? null)
+      setCycles(Array.isArray(cyclesData) ? cyclesData : [])
       setLastSync(syncData?.last_sync ?? null)
     } catch (err) {
       if (signal.aborted) return
@@ -146,5 +161,5 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     load(c.signal)
   }, [load])
 
-  return { counts, dwell, outcomes, lastSync, loading, syncing, error, refetch, triggerSync }
+  return { counts, dwell, outcomes, cycles, lastSync, loading, syncing, error, refetch, triggerSync }
 }
