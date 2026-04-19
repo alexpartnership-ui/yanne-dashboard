@@ -3,10 +3,11 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export function LoginPage() {
-  const { authed, login } = useAuth()
+  const { authed, login, resetPassword } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
 
   if (authed) return <Navigate to="/dashboard" replace />
@@ -14,6 +15,7 @@ export function LoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setNotice('')
     setLoading(true)
     try {
       await login(email, password)
@@ -21,6 +23,18 @@ export function LoginPage() {
       setError(err instanceof Error ? err.message : 'Invalid credentials')
     }
     setLoading(false)
+  }
+
+  async function handleForgot() {
+    setError('')
+    setNotice('')
+    if (!email) { setError('Enter your email first'); return }
+    try {
+      await resetPassword(email)
+      setNotice('Password reset email sent — check your inbox.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send reset email')
+    }
   }
 
   return (
@@ -66,6 +80,11 @@ export function LoginPage() {
               <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
+          {notice && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+              <p className="text-sm text-green-700">{notice}</p>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -73,6 +92,14 @@ export function LoginPage() {
             className="w-full rounded-lg bg-yanne-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-yanne-400 transition-colors disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleForgot}
+            className="block w-full text-center text-xs text-text-faint hover:text-text-primary mt-1 transition-colors"
+          >
+            Forgot password?
           </button>
         </form>
       </div>
