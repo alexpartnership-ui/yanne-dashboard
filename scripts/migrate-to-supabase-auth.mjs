@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
 const USERS_FILE = join(ROOT, 'users.json')
-const ADMIN_EMAIL = 'alex@yannetr.net'
+const ADMIN_EMAIL = 'alex.partnership@yannetr.net'
 const ADMIN_NAME = 'Alex Ozdemir'
 
 // Minimal .env loader — no external dep
