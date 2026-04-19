@@ -2166,9 +2166,10 @@ function detectIntent(question) {
   return { intents: [...new Set(intents)], mentionedReps, dateFilter }
 }
 
-async function gatherContext(question) {
+async function gatherContext(question, pillarAccess = []) {
   const { intents, mentionedReps, dateFilter } = detectIntent(question)
   const context = {}
+  const has = (p) => pillarAccess.includes(p) || pillarAccess.includes('*')
 
   const repFilter = mentionedReps.length > 0
     ? `rep=in.(${mentionedReps.join(',')})`
@@ -2176,7 +2177,7 @@ async function gatherContext(question) {
 
   const promises = []
 
-  if (intents.includes('rep_performance')) {
+  if (has('sales') && intents.includes('rep_performance')) {
     const params = repFilter
       ? `${repFilter}&order=rep`
       : 'order=rep'
@@ -2185,7 +2186,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('rep_calls')) {
+  if (has('sales') && intents.includes('rep_calls')) {
     const parts = ['order=scored_at.desc', 'limit=25']
     if (repFilter) parts.push(repFilter)
     if (dateFilter) parts.push(dateFilter)
@@ -2194,7 +2195,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('deals')) {
+  if (has('sales') && intents.includes('deals')) {
     const params = repFilter
       ? `${repFilter.replace('rep=', 'rep_name=')}&order=updated_at.desc&limit=50`
       : 'deal_status=eq.active&order=updated_at.desc&limit=50'
@@ -2203,13 +2204,13 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('flagged_calls')) {
+  if (has('sales') && intents.includes('flagged_calls')) {
     promises.push(
       supaQuery('call_logs', 'select=id,rep,prospect_company,date,score_percentage,grade,pipeline_inflation,next_step_flag,coaching_priority&or=(pipeline_inflation.eq.true,next_step_flag.neq.NONE)&order=scored_at.desc&limit=30').then(r => { context.flagged_calls = r.data })
     )
   }
 
-  if (intents.includes('campaigns')) {
+  if (has('campaigns') && intents.includes('campaigns')) {
     promises.push(
       bisonFetch('/campaigns', { per_page: 50 }).then(r => {
         const campaigns = r.data?.data || (Array.isArray(r.data) ? r.data : [])
@@ -2222,7 +2223,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('clients')) {
+  if (has('fulfillment') && intents.includes('clients')) {
     if (MONDAY_KEY) {
       promises.push(
         mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { name column_values { id type text value column { title } } } } } }`)
@@ -2254,7 +2255,7 @@ async function gatherContext(question) {
     }
   }
 
-  if (intents.includes('setters')) {
+  if (has('campaigns') && intents.includes('setters')) {
     if (AIRTABLE_KEY) {
       promises.push(
         airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' })
@@ -2279,7 +2280,7 @@ async function gatherContext(question) {
     }
   }
 
-  if (intents.includes('hubspot')) {
+  if (has('sales') && intents.includes('hubspot')) {
     if (HUBSPOT_KEY) {
       promises.push(
         (async () => {
@@ -2364,7 +2365,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
     if (!lastUserMsg) return res.status(400).json({ error: 'no user message' })
 
-    const context = await gatherContext(lastUserMsg.content)
+    const pillarAccess = req.user?.pillar_access || []
+    const context = await gatherContext(lastUserMsg.content, pillarAccess)
 
     let contextStr = JSON.stringify(context, null, 2)
     // Safety: truncate context to prevent token limit errors
@@ -2385,10 +2387,13 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
 
+    const pillarLine = `The user has access to the following pillars: ${pillarAccess.join(', ') || 'none'}. Refuse to answer questions that require data from pillars the user does not have.`
+    const systemForThisRequest = `${pillarLine}\n\n${SYSTEM_PROMPT}`
+
     const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: systemForThisRequest,
       messages: enrichedMessages,
     })
 
