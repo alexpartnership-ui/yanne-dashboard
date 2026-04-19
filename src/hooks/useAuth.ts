@@ -1,50 +1,26 @@
-import { useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
-interface User {
+export interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'manager' | 'rep' | 'finance'
+  role: 'admin' | 'manager' | 'member'
+  pillar_access: string[]
 }
 
-interface AuthState {
-  user: User | null
-  loading: boolean
-}
-
-const STORAGE_KEY = 'yanne_user'
-let authState: AuthState = {
-  user: (() => {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY)
-      return stored ? JSON.parse(stored) : null
-    } catch { return null }
-  })(),
-  loading: false,
-}
-
-const listeners = new Set<() => void>()
-function subscribe(cb: () => void) {
-  listeners.add(cb)
-  return () => listeners.delete(cb)
-}
-function getSnapshot() {
-  return authState
-}
-function notify() {
-  listeners.forEach(cb => cb())
-}
+interface AuthState { user: User | null; loading: boolean }
 
 async function apiFetch(url: string, opts: RequestInit = {}) {
-  const res = await fetch(url, {
-    ...opts,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...opts.headers },
-  })
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(opts.headers as Record<string, string> || {}),
+  }
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+  const res = await fetch(url, { ...opts, headers })
   if (res.status === 401) {
-    authState = { user: null, loading: false }
-    sessionStorage.removeItem(STORAGE_KEY)
-    notify()
+    await supabase.auth.signOut()
     throw new Error('Session expired')
   }
   return res
@@ -52,38 +28,45 @@ async function apiFetch(url: string, opts: RequestInit = {}) {
 
 export { apiFetch }
 
+async function fetchProfile(): Promise<User | null> {
+  try {
+    const res = await apiFetch('/api/auth/me')
+    if (!res.ok) return null
+    const { user } = await res.json()
+    return user
+  } catch { return null }
+}
+
 export function useAuth() {
-  const state = useSyncExternalStore(subscribe, getSnapshot)
+  const [state, setState] = useState<AuthState>({ user: null, loading: true })
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      setState({ user: session ? await fetchProfile() : null, loading: false })
+    })()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_e, session) => {
+      if (!mounted) return
+      setState({ user: session ? await fetchProfile() : null, loading: false })
+    })
+    return () => { mounted = false; subscription.unsubscribe() }
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
+  }, [])
+
+  const logout = useCallback(async () => { await supabase.auth.signOut() }, [])
+
+  const resetPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     })
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.error || 'Invalid credentials')
-    }
-    const data = await res.json()
-    authState = { user: data.user, loading: false }
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.user))
-    notify()
+    if (error) throw new Error(error.message)
   }, [])
 
-  const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
-    authState = { user: null, loading: false }
-    sessionStorage.removeItem(STORAGE_KEY)
-    notify()
-  }, [])
-
-  return {
-    authed: !!state.user,
-    user: state.user,
-    loading: state.loading,
-    login,
-    logout,
-  }
+  return { authed: !!state.user, user: state.user, loading: state.loading, login, logout, resetPassword }
 }

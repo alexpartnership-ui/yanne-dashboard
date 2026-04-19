@@ -4,8 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { readFileSync, existsSync, writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import jwt from 'jsonwebtoken'
-import bcrypt from 'bcryptjs'
+import { createClient } from '@supabase/supabase-js'
 import rateLimit from 'express-rate-limit'
 import crypto from 'crypto'
 import { google } from 'googleapis'
@@ -44,13 +43,17 @@ const chatLimiter = rateLimit({
 })
 app.use('/api/', globalLimiter)
 
-// ─── Phase 1.1: JWT Auth ───────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
-  console.error('FATAL: Missing JWT_SECRET environment variable')
+// ─── Supabase admin client ─────────────────────────────
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error('FATAL: SUPABASE_URL and SUPABASE_SERVICE_KEY are required')
   process.exit(1)
 }
-const JWT_EXPIRES = '24h'
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+)
 
 // ─── Phase 1.8: Client API key encryption ──────────────
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY
@@ -81,30 +84,6 @@ function decrypt(text) {
   }
 }
 
-// ─── Phase 2: User store ───────────────────────────────
-const USERS_FILE = join(__dirname, 'users.json')
-
-function loadUsers() {
-  try {
-    if (existsSync(USERS_FILE)) return JSON.parse(readFileSync(USERS_FILE, 'utf-8'))
-  } catch { /* use defaults */ }
-  // Default admin user — password MUST come from env var
-  const adminPass = process.env.ADMIN_INITIAL_PASSWORD
-  if (!adminPass) {
-    console.error('FATAL: No users.json found and ADMIN_INITIAL_PASSWORD not set')
-    process.exit(1)
-  }
-  const defaults = [
-    { id: '1', email: 'alex@yannetr.net', name: 'Alex Ozdemir', role: 'admin', password_hash: bcrypt.hashSync(adminPass, 12), created_at: new Date().toISOString() },
-  ]
-  writeFileSync(USERS_FILE, JSON.stringify(defaults, null, 2))
-  return defaults
-}
-
-function saveUsers(users) {
-  writeFileSync(USERS_FILE, JSON.stringify(users, null, 2))
-}
-
 // ─── Phase 5.1: Audit logging ──────────────────────────
 const AUDIT_FILE = join(__dirname, 'audit_log.json')
 
@@ -123,146 +102,110 @@ function auditLog(userId, action, resource, details = {}, ip = '') {
   writeFileSync(AUDIT_FILE, JSON.stringify(logs, null, 2))
 }
 
-// ─── JWT middleware ─────────────────────────────────────
-function verifyToken(req, res, next) {
-  // Check cookie first, then Authorization header
-  const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '')
+// ─── Supabase Auth middleware ──────────────────────────
+async function verifySupabaseJWT(req, res, next) {
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '')
   if (!token) return res.status(401).json({ error: 'Authentication required' })
-  try {
-    req.user = jwt.verify(token, JWT_SECRET)
+  const { data, error } = await supabaseAdmin.auth.getUser(token)
+  if (error || !data?.user) return res.status(401).json({ error: 'Invalid or expired token' })
+  const { data: profile, error: profErr } = await supabaseAdmin
+    .from('user_profiles')
+    .select('name, role, pillar_access')
+    .eq('id', data.user.id)
+    .single()
+  if (profErr || !profile) return res.status(403).json({ error: 'No profile — contact admin' })
+  req.user = {
+    id: data.user.id,
+    email: data.user.email,
+    name: profile.name,
+    role: profile.role,
+    pillar_access: profile.pillar_access,
+  }
+  next()
+}
+
+function requirePillar(pillar) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' })
+    const ok = req.user.pillar_access.includes(pillar) || req.user.pillar_access.includes('*')
+    if (!ok) return res.status(403).json({ error: 'Insufficient pillar access' })
     next()
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' })
   }
 }
 
-// Role-based access
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Insufficient permissions' })
+      return res.status(403).json({ error: 'Insufficient role' })
     }
     next()
   }
 }
 
-// Cookie parser (simple — just reads token cookie)
-app.use((req, _res, next) => {
-  req.cookies = {}
-  const cookieHeader = req.headers.cookie
-  if (cookieHeader) {
-    for (const pair of cookieHeader.split(';')) {
-      const [name, ...rest] = pair.trim().split('=')
-      req.cookies[name] = rest.join('=')
-    }
-  }
-  next()
-})
+export { verifySupabaseJWT, requirePillar, requireRole }
 
-// ─── Auth routes (no JWT required) ─────────────────────
+// ─── Current-user + admin user management ──────────────
 
-app.post('/api/auth/login', loginLimiter, (req, res) => {
-  const { email, password } = req.body
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
-
-  const users = loadUsers()
-  const user = users.find(u => u.email === email)
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    auditLog(user?.id || 'unknown', 'login_failed', 'auth', { email }, req.ip)
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
-
-  const token = jwt.sign(
-    { id: user.id, email: user.email, name: user.name, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES }
-  )
-
-  auditLog(user.id, 'login', 'auth', { email: user.email }, req.ip)
-
-  res.setHeader('Set-Cookie', `token=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400${process.env.NODE_ENV !== 'development' ? '; Secure' : ''}`)
-  res.json({
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
-  })
-})
-
-app.post('/api/auth/logout', (req, res) => {
-  const token = req.cookies?.token
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET)
-      auditLog(decoded.id, 'logout', 'auth', {}, req.ip)
-    } catch { /* expired token, fine */ }
-  }
-  res.setHeader('Set-Cookie', `token=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`)
-  res.json({ ok: true })
-})
-
-app.get('/api/auth/me', verifyToken, (req, res) => {
+app.get('/api/auth/me', verifySupabaseJWT, (req, res) => {
   res.json({ user: req.user })
 })
 
-// ─── Phase 2.3: User management (admin only) ──────────
-
-app.get('/api/users', verifyToken, requireRole('admin'), (_req, res) => {
-  const users = loadUsers()
-  res.json(users.map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role, created_at: u.created_at })))
+app.get('/api/users', verifySupabaseJWT, requireRole('admin'), async (_req, res) => {
+  const { data: profiles, error } = await supabaseAdmin
+    .from('user_profiles')
+    .select('id, name, role, pillar_access, created_at')
+  if (error) return res.status(500).json({ error: error.message })
+  const { data: listData, error: authErr } = await supabaseAdmin.auth.admin.listUsers()
+  if (authErr) return res.status(500).json({ error: authErr.message })
+  const byId = Object.fromEntries((listData?.users || []).map(u => [u.id, u.email]))
+  res.json(profiles.map(p => ({ ...p, email: byId[p.id] || null })))
 })
 
-app.post('/api/users', verifyToken, requireRole('admin'), (req, res) => {
-  const { email, name, role, password } = req.body
-  if (!email || !name || !password) return res.status(400).json({ error: 'email, name, and password required' })
-  if (typeof password !== 'string' || password.length < 12) return res.status(400).json({ error: 'Password must be at least 12 characters' })
-  if (!['admin', 'manager', 'rep', 'finance'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
-
-  const users = loadUsers()
-  if (users.find(u => u.email === email)) return res.status(409).json({ error: 'User already exists' })
-
-  const newUser = {
-    id: Date.now().toString(),
-    email,
-    name,
-    role,
-    password_hash: bcrypt.hashSync(password, 12),
-    created_at: new Date().toISOString(),
+app.post('/api/users', verifySupabaseJWT, requireRole('admin'), async (req, res) => {
+  const { email, name, role, pillar_access } = req.body
+  if (!email || !name || !role || !Array.isArray(pillar_access)) {
+    return res.status(400).json({ error: 'email, name, role, pillar_access required' })
   }
-  users.push(newUser)
-  saveUsers(users)
-  auditLog(req.user.id, 'create_user', 'users', { email, role }, req.ip)
-  res.json({ id: newUser.id, email, name, role })
+  if (!['admin', 'manager', 'member'].includes(role)) return res.status(400).json({ error: 'invalid role' })
+  const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, { data: { name } })
+  if (error) return res.status(400).json({ error: error.message })
+  const { error: profErr } = await supabaseAdmin
+    .from('user_profiles')
+    .insert({ id: data.user.id, name, role, pillar_access })
+  if (profErr) return res.status(500).json({ error: profErr.message })
+  auditLog(req.user.id, 'create_user', 'users', { email, role, pillar_access }, req.ip)
+  res.json({ id: data.user.id, email, name, role, pillar_access })
 })
 
-app.delete('/api/users/:id', verifyToken, requireRole('admin'), (req, res) => {
-  if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete yourself' })
-  let users = loadUsers()
-  const target = users.find(u => u.id === req.params.id)
-  if (!target) return res.status(404).json({ error: 'User not found' })
-  users = users.filter(u => u.id !== req.params.id)
-  saveUsers(users)
-  auditLog(req.user.id, 'delete_user', 'users', { email: target.email }, req.ip)
+app.patch('/api/users/:id', verifySupabaseJWT, requireRole('admin'), async (req, res) => {
+  const { name, role, pillar_access } = req.body
+  const patch = {}
+  if (name !== undefined) patch.name = name
+  if (role !== undefined) {
+    if (!['admin', 'manager', 'member'].includes(role)) return res.status(400).json({ error: 'invalid role' })
+    patch.role = role
+  }
+  if (pillar_access !== undefined) {
+    if (!Array.isArray(pillar_access)) return res.status(400).json({ error: 'pillar_access must be array' })
+    patch.pillar_access = pillar_access
+  }
+  const { error } = await supabaseAdmin.from('user_profiles').update(patch).eq('id', req.params.id)
+  if (error) return res.status(500).json({ error: error.message })
+  auditLog(req.user.id, 'update_user', 'users', { id: req.params.id, patch }, req.ip)
   res.json({ ok: true })
 })
 
-// ─── Password change ────────────────────────────────────
-app.post('/api/auth/change-password', verifyToken, (req, res) => {
-  const { currentPassword, newPassword } = req.body
-  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword required' })
-  if (typeof newPassword !== 'string' || newPassword.length < 12) return res.status(400).json({ error: 'New password must be at least 12 characters' })
-
-  const users = loadUsers()
-  const user = users.find(u => u.id === req.user.id)
-  if (!user) return res.status(404).json({ error: 'User not found' })
-  if (!bcrypt.compareSync(currentPassword, user.password_hash)) return res.status(401).json({ error: 'Current password is incorrect' })
-
-  user.password_hash = bcrypt.hashSync(newPassword, 12)
-  saveUsers(users)
-  auditLog(req.user.id, 'change_password', 'auth', {}, req.ip)
+app.delete('/api/users/:id', verifySupabaseJWT, requireRole('admin'), async (req, res) => {
+  if (req.params.id === req.user.id) return res.status(400).json({ error: 'cannot delete self' })
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(req.params.id)
+  if (error) return res.status(500).json({ error: error.message })
+  auditLog(req.user.id, 'delete_user', 'users', { id: req.params.id }, req.ip)
   res.json({ ok: true })
 })
 
 // ─── Phase 5.1: Audit log endpoint ─────────────────────
 
-app.get('/api/audit-log', verifyToken, requireRole('admin'), (req, res) => {
+app.get('/api/audit-log', verifySupabaseJWT, requireRole('admin'), (req, res) => {
   const logs = loadAuditLog()
   const limit = parseInt(req.query.limit) || 100
   res.json(logs.slice(-limit).reverse())
@@ -302,7 +245,27 @@ app.get('/api/health/data-sources', async (_req, res) => {
 })
 
 // ─── Protect all remaining /api/* routes ────────────────
-app.use('/api/', verifyToken)
+app.use('/api', verifySupabaseJWT)
+
+const pillarMap = [
+  { prefix: ['/api/calls', '/api/reps', '/api/deals', '/api/trackers',
+             '/api/call-search', '/api/benchmarks', '/api/scorecard',
+             '/api/coaching-adherence', '/api/dashboard-stats',
+             '/api/forecast', '/api/rep-call-history', '/api/rep-checkins',
+             '/api/setter-checkins', '/api/export',
+             '/api/deal-staleness'], pillar: 'sales' },
+  { prefix: ['/api/bison', '/api/copy-library', '/api/airtable/senders',
+             '/api/heyreach'], pillar: 'campaigns' },
+  { prefix: ['/api/monday', '/api/clients', '/api/airtable/meetings'],
+    pillar: 'fulfillment' },
+  { prefix: ['/api/airtable/inbox', '/api/digest'], pillar: 'operations' },
+  { prefix: ['/api/investors'], pillar: 'investor-relations' },
+  { prefix: ['/api/ceo-stats', '/api/slack/email-reports',
+             '/api/slack/meetings-booked'], pillar: 'goals' },
+]
+for (const { prefix, pillar } of pillarMap) {
+  for (const p of prefix) app.use(p, requirePillar(pillar))
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY
@@ -1291,7 +1254,7 @@ app.get('/api/monday/overdue', async (_req, res) => {
   }
 })
 
-app.post('/api/monday/overdue/notify', verifyToken, requireRole('admin'), async (req, res) => {
+app.post('/api/monday/overdue/notify', requireRole('admin'), async (req, res) => {
   if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
   if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
   try {
@@ -1351,7 +1314,7 @@ app.post('/api/monday/overdue/notify', verifyToken, requireRole('admin'), async 
 
 const ONBOARDING_TEMPLATE_BOARD_ID = PROJECT_TASK_IDS[0] // Use Project AIR as template
 
-app.post('/api/monday/create-onboarding', verifyToken, requireRole('admin'), async (req, res) => {
+app.post('/api/monday/create-onboarding', requireRole('admin'), async (req, res) => {
   if (!MONDAY_KEY) return res.status(503).json({ error: 'Monday.com not configured' })
   const { companyName } = req.body || {}
   if (!companyName || typeof companyName !== 'string' || companyName.length > 100) {
@@ -2203,9 +2166,10 @@ function detectIntent(question) {
   return { intents: [...new Set(intents)], mentionedReps, dateFilter }
 }
 
-async function gatherContext(question) {
+async function gatherContext(question, pillarAccess = []) {
   const { intents, mentionedReps, dateFilter } = detectIntent(question)
   const context = {}
+  const has = (p) => pillarAccess.includes(p) || pillarAccess.includes('*')
 
   const repFilter = mentionedReps.length > 0
     ? `rep=in.(${mentionedReps.join(',')})`
@@ -2213,7 +2177,7 @@ async function gatherContext(question) {
 
   const promises = []
 
-  if (intents.includes('rep_performance')) {
+  if (has('sales') && intents.includes('rep_performance')) {
     const params = repFilter
       ? `${repFilter}&order=rep`
       : 'order=rep'
@@ -2222,7 +2186,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('rep_calls')) {
+  if (has('sales') && intents.includes('rep_calls')) {
     const parts = ['order=scored_at.desc', 'limit=25']
     if (repFilter) parts.push(repFilter)
     if (dateFilter) parts.push(dateFilter)
@@ -2231,7 +2195,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('deals')) {
+  if (has('sales') && intents.includes('deals')) {
     const params = repFilter
       ? `${repFilter.replace('rep=', 'rep_name=')}&order=updated_at.desc&limit=50`
       : 'deal_status=eq.active&order=updated_at.desc&limit=50'
@@ -2240,13 +2204,13 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('flagged_calls')) {
+  if (has('sales') && intents.includes('flagged_calls')) {
     promises.push(
       supaQuery('call_logs', 'select=id,rep,prospect_company,date,score_percentage,grade,pipeline_inflation,next_step_flag,coaching_priority&or=(pipeline_inflation.eq.true,next_step_flag.neq.NONE)&order=scored_at.desc&limit=30').then(r => { context.flagged_calls = r.data })
     )
   }
 
-  if (intents.includes('campaigns')) {
+  if (has('campaigns') && intents.includes('campaigns')) {
     promises.push(
       bisonFetch('/campaigns', { per_page: 50 }).then(r => {
         const campaigns = r.data?.data || (Array.isArray(r.data) ? r.data : [])
@@ -2259,7 +2223,7 @@ async function gatherContext(question) {
     )
   }
 
-  if (intents.includes('clients')) {
+  if (has('fulfillment') && intents.includes('clients')) {
     if (MONDAY_KEY) {
       promises.push(
         mondayQuery(`{ boards(ids: [${PROJECT_PORTFOLIO_IDS.join(',')}]) { id name items_page(limit: 5) { items { name column_values { id type text value column { title } } } } } }`)
@@ -2291,7 +2255,7 @@ async function gatherContext(question) {
     }
   }
 
-  if (intents.includes('setters')) {
+  if (has('campaigns') && intents.includes('setters')) {
     if (AIRTABLE_KEY) {
       promises.push(
         airtableFetch('appoCoN4yDrzKNRPe', 'tbl7Opo9spWMGMXKp', { pageSize: '100' })
@@ -2316,7 +2280,7 @@ async function gatherContext(question) {
     }
   }
 
-  if (intents.includes('hubspot')) {
+  if (has('sales') && intents.includes('hubspot')) {
     if (HUBSPOT_KEY) {
       promises.push(
         (async () => {
@@ -2401,7 +2365,8 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')
     if (!lastUserMsg) return res.status(400).json({ error: 'no user message' })
 
-    const context = await gatherContext(lastUserMsg.content)
+    const pillarAccess = req.user?.pillar_access || []
+    const context = await gatherContext(lastUserMsg.content, pillarAccess)
 
     let contextStr = JSON.stringify(context, null, 2)
     // Safety: truncate context to prevent token limit errors
@@ -2422,10 +2387,13 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
 
+    const pillarLine = `The user has access to the following pillars: ${pillarAccess.join(', ') || 'none'}. Refuse to answer questions that require data from pillars the user does not have.`
+    const systemForThisRequest = `${pillarLine}\n\n${SYSTEM_PROMPT}`
+
     const stream = anthropic.messages.stream({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: systemForThisRequest,
       messages: enrichedMessages,
     })
 
@@ -3038,7 +3006,7 @@ app.post('/api/scorecard/sync', async (req, res) => {
 
 // ─── Weekly CEO Digest (Slack) ──────────────────────────
 
-app.post('/api/digest/send', verifyToken, requireRole('admin'), async (req, res) => {
+app.post('/api/digest/send', requireRole('admin'), async (req, res) => {
   if (!SLACK_TOKEN) return res.status(503).json({ error: 'Slack not configured' })
   try {
     const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString() }
@@ -3647,4 +3615,6 @@ app.get('/api/investors/:name', async (req, res) => {
 })
 
 const PORT = process.env.API_PORT || 3001
-app.listen(PORT, () => console.log(`API server on port ${PORT}`))
+if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+  app.listen(PORT, () => console.log(`API server on port ${PORT}`))
+}

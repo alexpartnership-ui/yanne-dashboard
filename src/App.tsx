@@ -33,6 +33,7 @@ const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ defaul
 const LinkedInOutboundPage = lazy(() => import('./pages/LinkedInOutboundPage').then(m => ({ default: m.LinkedInOutboundPage })))
 const InvestorDatabasePage = lazy(() => import('./pages/InvestorDatabasePage').then(m => ({ default: m.InvestorDatabasePage })))
 const InvestorCadencePage = lazy(() => import('./pages/InvestorCadencePage').then(m => ({ default: m.InvestorCadencePage })))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })))
 
 function PageLoader() {
   return (
@@ -52,9 +53,11 @@ export default function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route element={<AuthGuard />}>
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+            {/* Client Acquisition (sales) */}
+            <Route element={<AuthGuard allowedPillars={['sales']} />}>
               <Route element={<Layout />}>
-                {/* Client Acquisition */}
                 <Route path="/dashboard" element={<AcquisitionDashboard />} />
                 <Route path="/calls" element={<CallsPage />} />
                 <Route path="/calls/:id" element={<CallDetailPage />} />
@@ -65,37 +68,50 @@ export default function App() {
                 <Route path="/call-search" element={<CallSearchPage />} />
                 <Route path="/benchmarks" element={<BenchmarksPage />} />
                 <Route path="/chat" element={<ChatPage />} />
+              </Route>
+            </Route>
 
-                {/* Clients */}
-                <Route path="/clients/overview" element={<ClientOverviewPage />} />
-                <Route path="/clients/campaigns" element={<CampaignDashboardsPage />} />
-                <Route path="/clients/onboarding" element={<OnboardingTrackerPage />} />
-                <Route path="/clients/deals" element={<PlaceholderPage title="Client Deal Pipeline" source="Airtable" previews={['Deal stages', 'Expected close dates', 'Deal values']} />} />
-                <Route path="/clients/reporting" element={<ReportingPage />} />
-
-                {/* Outbound / GTM */}
+            {/* Outbound (campaigns) */}
+            <Route element={<AuthGuard allowedPillars={['campaigns']} />}>
+              <Route element={<Layout />}>
                 <Route path="/outbound/email" element={<EmailIntelligencePage />} />
                 <Route path="/outbound/campaigns" element={<ActiveCampaignsPage />} />
                 <Route path="/outbound/copy" element={<CopyLibraryPage />} />
                 <Route path="/outbound/setters" element={<SetterPerformancePage />} />
                 <Route path="/outbound/leads" element={<LeadQualityPage />} />
                 <Route path="/outbound/linkedin" element={<LinkedInOutboundPage />} />
+              </Route>
+            </Route>
 
-                {/* Relationships */}
+            {/* Clients (fulfillment) */}
+            <Route element={<AuthGuard allowedPillars={['fulfillment']} />}>
+              <Route element={<Layout />}>
+                <Route path="/clients/overview" element={<ClientOverviewPage />} />
+                <Route path="/clients/campaigns" element={<CampaignDashboardsPage />} />
+                <Route path="/clients/onboarding" element={<OnboardingTrackerPage />} />
+                <Route path="/clients/deals" element={<PlaceholderPage title="Client Deal Pipeline" source="Airtable" previews={['Deal stages', 'Expected close dates', 'Deal values']} />} />
+                <Route path="/clients/reporting" element={<ReportingPage />} />
+              </Route>
+            </Route>
+
+            {/* Relationships (investor-relations) */}
+            <Route element={<AuthGuard allowedPillars={['investor-relations']} />}>
+              <Route element={<Layout />}>
                 <Route path="/relationships/investors" element={<InvestorDatabasePage />} />
                 <Route path="/relationships/cadence" element={<InvestorCadencePage />} />
+              </Route>
+            </Route>
 
-                {/* CEO Dashboard */}
+            {/* CEO / Finance / Settings (admin only) */}
+            <Route element={<AuthGuard allowedRoles={['admin']} />}>
+              <Route element={<Layout />}>
                 <Route path="/ceo" element={<CEODashboard />} />
-
-                {/* Finance */}
                 <Route path="/finance" element={<PlaceholderPage title="Finance" source="accounting system" previews={['Revenue tracking', 'Expense breakdown', 'Cash flow projections']} />} />
-
-                {/* Settings (admin only) */}
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/audit" element={<AuditLogPage />} />
               </Route>
             </Route>
+
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Suspense>
