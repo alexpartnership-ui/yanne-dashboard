@@ -10,6 +10,7 @@ interface NavItem {
 
 interface NavSection {
   title: string
+  pillar: 'sales' | 'campaigns' | 'fulfillment' | 'investor-relations' | 'goals' | 'admin'
   items: NavItem[]
 }
 
@@ -17,6 +18,7 @@ const lockIcon = <svg className="w-3 h-3 text-text-faint" fill="none" stroke="cu
 
 const settingsSection: NavSection = {
   title: 'Settings',
+  pillar: 'admin',
   items: [
     {
       to: '/settings', label: 'User Management',
@@ -32,6 +34,7 @@ const settingsSection: NavSection = {
 const sections: NavSection[] = [
   {
     title: 'Client Acquisition',
+    pillar: 'sales',
     items: [
       {
         to: '/dashboard', label: 'Dashboard',
@@ -73,6 +76,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'Clients',
+    pillar: 'fulfillment',
     items: [
       {
         to: '/clients/overview', label: 'Client Overview',
@@ -98,6 +102,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'Outbound / GTM',
+    pillar: 'campaigns',
     items: [
       {
         to: '/outbound/email', label: 'Email Intelligence',
@@ -127,6 +132,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'Relationships',
+    pillar: 'investor-relations',
     items: [
       {
         to: '/relationships/investors', label: 'Investor Database',
@@ -140,6 +146,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'CEO Dashboard',
+    pillar: 'goals',
     items: [
       {
         to: '/ceo', label: 'Growth Scorecard',
@@ -149,6 +156,7 @@ const sections: NavSection[] = [
   },
   {
     title: 'Finance',
+    pillar: 'goals',
     items: [
       {
         to: '/finance', label: 'Finance', locked: true,
@@ -161,7 +169,13 @@ const sections: NavSection[] = [
 export function Sidebar() {
   const { logout, user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const allSections = isAdmin ? [...sections, settingsSection] : sections
+  const pillarAccess = user?.pillar_access || []
+  const hasPillar = (p: string) => pillarAccess.includes(p) || pillarAccess.includes('*')
+  const visibleSections = sections.filter(s => {
+    if (s.pillar === 'admin') return isAdmin
+    return hasPillar(s.pillar)
+  })
+  const allSections = isAdmin ? [...visibleSections, settingsSection] : visibleSections
 
   return (
     <aside className="flex h-screen w-[232px] flex-col bg-yanne-950 border-r border-yanne-800/50 relative">
