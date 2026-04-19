@@ -267,7 +267,7 @@ const pillarMap = [
              '/api/coaching-adherence', '/api/dashboard-stats',
              '/api/forecast', '/api/rep-call-history', '/api/rep-checkins',
              '/api/setter-checkins', '/api/export',
-             '/api/deal-staleness'], pillar: 'sales' },
+             '/api/deal-staleness', '/api/funnel-health'], pillar: 'sales' },
   { prefix: ['/api/bison', '/api/copy-library', '/api/airtable/senders',
              '/api/heyreach'], pillar: 'campaigns' },
   { prefix: ['/api/monday', '/api/clients', '/api/airtable/meetings'],
@@ -346,6 +346,20 @@ async function supaQuery(table, params = '') {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
     },
+  })
+  if (!res.ok) return { error: await res.text(), data: null }
+  return { data: await res.json(), error: null }
+}
+
+async function supaRpc(fnName, body = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
   })
   if (!res.ok) return { error: await res.text(), data: null }
   return { data: await res.json(), error: null }
@@ -2172,6 +2186,10 @@ function detectIntent(question) {
     intents.push('hubspot')
   }
 
+  if (q.includes('funnel') || q.includes('conversion') || q.includes('dwell') || q.includes('cohort')) {
+    intents.push('funnel')
+  }
+
   // Default: lightweight context (not everything)
   if (intents.length === 0) {
     intents.push('rep_calls', 'rep_performance', 'deals')
@@ -2222,6 +2240,21 @@ async function gatherContext(question, pillarAccess = []) {
     promises.push(
       supaQuery('call_logs', 'select=id,rep,prospect_company,date,score_percentage,grade,pipeline_inflation,next_step_flag,coaching_priority&or=(pipeline_inflation.eq.true,next_step_flag.neq.NONE)&order=scored_at.desc&limit=30').then(r => { context.flagged_calls = r.data })
     )
+  }
+
+  if (has('sales') && intents.includes('funnel')) {
+    promises.push((async () => {
+      const [counts, dwell, outcomes] = await Promise.all([
+        supaRpc('funnel_counts', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
+        supaRpc('funnel_dwell_times', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
+        supaRpc('funnel_third_call_outcomes', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
+      ])
+      context.funnel = {
+        counts: counts.data?.[0] ?? null,
+        dwell: dwell.data ?? [],
+        outcomes: outcomes.data?.[0] ?? null,
+      }
+    })().catch(err => { console.error('[gatherContext/funnel]', err?.message || err) }))
   }
 
   if (has('campaigns') && intents.includes('campaigns')) {
@@ -2351,6 +2384,7 @@ You can answer questions about:
 - **Outbound / Campaigns**: EmailBison campaign stats (emails sent, reply rates, bounce rates, interested replies), active vs paused campaigns
 - **Clients / Fulfillment**: client onboarding status (Monday.com), project health, task completion, which clients are active
 - **Setters**: unactioned replies, meetings booked, setter-by-setter performance, interested-to-meeting conversion
+- **Funnel Health**: skip-adjusted MQ→Won conversion, stage-to-stage drop-off, time-in-stage medians, 3rd-Call outcomes, cohort comparison (2025 vs 2026)
 - **HubSpot Deals**: Sales Pipeline deal stages, amounts, close dates, won/lost counts, revenue
 - **Revenue**: cash collected, retainers, success fees
 
@@ -2363,6 +2397,7 @@ Rules:
 - Grades: A+/A/A- (excellent), B+/B/B- (good), C+/C/C- (average), D+/D/D- (below average), F (failing)
 - Scoring: 75%+ green, 55-74% yellow, <55% red
 - Sales pipeline stages: Meeting Qualified → NDA → 1st Closing Call → 2nd Closing Call → 3rd Call / Contract → Closed Won
+- Funnel counts are *skip-adjusted* — "1st Call+ Reach" = deals that ever reached 1st Call OR any later stage. Don't compare to HubSpot's literal stage counts.
 - qualification_result: QUALIFIED, BORDERLINE, NOT_QUALIFIED
 - pipeline_inflation: true = unqualified prospect advanced (judgment issue)
 - next_step_flag: DEAD_END = qualified but rep didn't advance (skill gap)
@@ -2563,6 +2598,57 @@ app.get('/api/forecast', async (_req, res) => {
   } catch (err) {
     serverError(res, err)
   }
+})
+
+// ─── Funnel Health routes ──────────────────────────────────
+
+app.get('/api/funnel-health/counts', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_counts', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/dwell', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_dwell_times', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/outcomes', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_third_call_outcomes', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/last-sync', async (_req, res) => {
+  try {
+    const { data, error } = await supaQuery('funnel_snapshots', 'select=snapshot_date&order=snapshot_date.desc&limit=1')
+    if (error) return serverError(res, error)
+    res.json({ last_sync: data?.[0]?.snapshot_date ?? null })
+  } catch (err) { serverError(res, err) }
+})
+
+app.post('/api/funnel-health/refresh', requireRole('admin', 'manager'), async (_req, res) => {
+  try {
+    const webhookUrl = process.env.N8N_FUNNEL_WEBHOOK_URL
+    if (!webhookUrl) return res.status(503).json({ error: 'refresh webhook not configured' })
+    const r = await fetch(webhookUrl, { method: 'POST' })
+    if (!r.ok) {
+      const body = await r.text()
+      console.error('[funnel-health/refresh] n8n error', r.status, body)
+      return res.status(502).json({ error: `n8n refresh failed (${r.status})` })
+    }
+    res.json({ triggered: true })
+  } catch (err) { serverError(res, err) }
 })
 
 // ─── Coaching Adherence ─────────────────────────────────
