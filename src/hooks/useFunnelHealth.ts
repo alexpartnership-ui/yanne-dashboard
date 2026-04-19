@@ -55,14 +55,11 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const mountedRef = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
-      // Fix 1: AbortController to prevent stale-setter race on cohort change
-      const controller = new AbortController()
-      const { signal } = controller
 
       const [countsRes, dwellRes, outcomesRes, syncRes] = await Promise.all([
         apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
@@ -92,15 +89,16 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       setOutcomes(outcomesData ?? null)
       setLastSync(syncData?.last_sync ?? null)
     } catch (err) {
+      if (signal.aborted) return
       setError(err instanceof Error ? err.message : 'Failed to load funnel data')
     } finally {
-      setLoading(false)
+      if (!signal.aborted) setLoading(false)
     }
   }, [cohortStart, cohortEnd])
 
   useEffect(() => {
     const controller = new AbortController()
-    load()
+    load(controller.signal)
     return () => controller.abort()
   }, [load])
 
@@ -128,7 +126,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
             const newSync = syncData?.last_sync ?? null
             if (newSync && newSync !== prevSync) {
               if (!mountedRef.current) return
-              await load()
+              await load(new AbortController().signal)
               return
             }
           }
@@ -137,11 +135,16 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
         }
       }
       // Timed out — still refetch to get latest state
-      if (mountedRef.current) await load()
+      if (mountedRef.current) await load(new AbortController().signal)
     } finally {
       if (mountedRef.current) setSyncing(false)
     }
   }, [lastSync, load])
 
-  return { counts, dwell, outcomes, lastSync, loading, syncing, error, refetch: load, triggerSync }
+  const refetch = useCallback(() => {
+    const c = new AbortController()
+    load(c.signal)
+  }, [load])
+
+  return { counts, dwell, outcomes, lastSync, loading, syncing, error, refetch, triggerSync }
 }

@@ -2637,7 +2637,7 @@ app.get('/api/funnel-health/last-sync', async (_req, res) => {
   } catch (err) { serverError(res, err) }
 })
 
-app.post('/api/funnel-health/refresh', async (_req, res) => {
+app.post('/api/funnel-health/refresh', requireRole('admin', 'manager'), async (_req, res) => {
   try {
     const webhookUrl = process.env.N8N_FUNNEL_WEBHOOK_URL
     if (!webhookUrl) return res.status(503).json({ error: 'refresh webhook not configured' })

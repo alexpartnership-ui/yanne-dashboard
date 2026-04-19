@@ -92,7 +92,7 @@ export function FunnelHealthPage() {
     ).id
 
   // Median total cycle (MQ → 3rd, exclude Won/NDA)
-  const cycleStageIds = ['mq', 'first_call', 'second_call', 'third_call']
+  const cycleStageIds = ['appointmentscheduled', 'presentationscheduled', 'decisionmakerboughtin', '1066193534']
   const medianCycleDays = dwell
     .filter(r => cycleStageIds.includes(r.stage_id) && r.median_ms != null)
     .reduce((sum, r) => sum + (r.median_ms ?? 0) / 86_400_000, 0)
