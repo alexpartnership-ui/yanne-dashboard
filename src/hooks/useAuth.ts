@@ -43,13 +43,22 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!mounted) return
-      setState({ user: session ? await fetchProfile() : null, loading: false })
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!mounted) return
+        setState({ user: session ? await fetchProfile() : null, loading: false })
+      } catch {
+        if (!mounted) return
+        setState({ user: null, loading: false })
+      }
     })()
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_e, session) => {
       if (!mounted) return
-      setState({ user: session ? await fetchProfile() : null, loading: false })
+      try {
+        setState({ user: session ? await fetchProfile() : null, loading: false })
+      } catch {
+        setState({ user: null, loading: false })
+      }
     })
     return () => { mounted = false; subscription.unsubscribe() }
   }, [])
