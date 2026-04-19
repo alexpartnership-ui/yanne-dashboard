@@ -29,6 +29,7 @@ const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ defa
 const TrackersPage = lazy(() => import('./pages/TrackersPage').then(m => ({ default: m.TrackersPage })))
 const CallSearchPage = lazy(() => import('./pages/CallSearchPage').then(m => ({ default: m.CallSearchPage })))
 const BenchmarksPage = lazy(() => import('./pages/BenchmarksPage').then(m => ({ default: m.BenchmarksPage })))
+const FunnelHealthPage = lazy(() => import('./pages/FunnelHealthPage').then(m => ({ default: m.FunnelHealthPage })))
 const DealsAIPage = lazy(() => import('./pages/DealsAIPage').then(m => ({ default: m.DealsAIPage })))
 const LinkedInOutboundPage = lazy(() => import('./pages/LinkedInOutboundPage').then(m => ({ default: m.LinkedInOutboundPage })))
 const InvestorDatabasePage = lazy(() => import('./pages/InvestorDatabasePage').then(m => ({ default: m.InvestorDatabasePage })))
@@ -67,6 +68,7 @@ export default function App() {
                 <Route path="/trackers" element={<TrackersPage />} />
                 <Route path="/call-search" element={<CallSearchPage />} />
                 <Route path="/benchmarks" element={<BenchmarksPage />} />
+                <Route path="/funnel-health" element={<FunnelHealthPage />} />
                 <Route path="/chat" element={<ChatPage />} />
               </Route>
             </Route>
