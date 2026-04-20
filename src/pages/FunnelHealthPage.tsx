@@ -22,15 +22,22 @@ function msToDays(ms: number | null): string {
   return (ms / 86_400_000).toFixed(1) + 'd'
 }
 
-function formatLastSync(lastSync: string | null): string {
-  if (!lastSync) return 'Never synced'
+function formatLastSync(lastSync: string | null): { text: string; colorClass: string } {
+  if (!lastSync) return { text: 'Never synced', colorClass: 'text-red-500' }
   const diffMs = Date.now() - new Date(lastSync).getTime()
-  const hours = Math.floor(diffMs / 3_600_000)
+  const hours = diffMs / 3_600_000
+  let text: string
   if (hours < 1) {
     const mins = Math.floor(diffMs / 60_000)
-    return `Last synced: ${mins < 1 ? '<1' : mins}m ago`
+    text = `Last synced: ${mins < 1 ? '<1' : mins}m ago`
+  } else {
+    text = `Last synced: ${Math.floor(hours)}h ago`
   }
-  return `Last synced: ${hours}h ago`
+  const colorClass =
+    hours < 24 ? 'text-emerald-500'
+    : hours < 48 ? 'text-amber-500'
+    : 'text-red-500'
+  return { text, colorClass }
 }
 
 function cohortLabel(cohort: CohortValue): string {
@@ -48,7 +55,7 @@ export function FunnelHealthPage() {
   })
 
   const {
-    counts, dwell, outcomes, cycles, byCloser, monthlyCohorts,
+    counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome,
     lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals,
   } = useFunnelHealth({
     cohortStart: cohort.start,
@@ -120,7 +127,7 @@ export function FunnelHealthPage() {
         <div>
           <h2 className="text-2xl font-bold text-text-primary">Funnel Health — Sales Pipeline</h2>
           <p className="mt-1 text-sm text-text-secondary">{cohortLabel(cohort)}</p>
-          <p className="mt-0.5 text-xs text-text-muted">{formatLastSync(lastSync)}</p>
+          <p className={`mt-0.5 text-xs font-medium ${formatLastSync(lastSync).colorClass}`}>{formatLastSync(lastSync).text}</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <CohortSelector value={cohort} onChange={setCohort} />
@@ -308,6 +315,46 @@ export function FunnelHealthPage() {
             )}
           </section>
         </>
+      )}
+
+      {!loading && counts && counts.mq_reach > 0 && dwellByOutcome.length > 0 && (
+        <section className="mb-8">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-widest text-text-muted">
+            3rd Call Dwell — by Exit Outcome
+          </h3>
+          <p className="mb-3 text-[11px] text-text-faint">
+            How long deals sit in 3rd Call before each outcome. Short dwell before Won = closing fast; long dwell before Lost/LTL = drifting deals — candidates for an alert.
+          </p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {dwellByOutcome.map(r => {
+              const drift = (r.median_days ?? 0) >= 14
+              const accent =
+                r.outcome === 'won'  ? 'text-emerald-500'
+                : r.outcome === 'lost' ? 'text-red-500'
+                : r.outcome === 'ltl'  ? 'text-amber-500'
+                : r.outcome === 'dq'   ? 'text-red-700'
+                : 'text-text-muted'
+              return (
+                <div key={r.outcome} className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm">
+                  <div className={`text-[10px] font-semibold uppercase tracking-[0.1em] ${accent}`}>
+                    {r.outcome_label}
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className={`font-data text-2xl font-bold ${drift ? 'text-amber-500' : 'text-text-primary'}`}>
+                      {r.median_days != null ? r.median_days.toFixed(1) : '—'}
+                    </span>
+                    <span className="text-xs text-text-muted">days median</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-3 text-[10px] text-text-muted font-data">
+                    <span>mean {r.mean_days != null ? r.mean_days.toFixed(1) + 'd' : '—'}</span>
+                    <span>p75 {r.p75_days != null ? r.p75_days.toFixed(1) + 'd' : '—'}</span>
+                    <span className="ml-auto">n={r.sample_count}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       <ThirdCallDealsDrawer

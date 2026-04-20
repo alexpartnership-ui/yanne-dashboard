@@ -70,6 +70,15 @@ export interface FunnelThirdCallDeal {
 
 export type ThirdCallOutcome = 'all' | 'still' | 'won' | 'lost' | 'ltl' | 'dq'
 
+export interface FunnelDwellByOutcomeRow {
+  outcome: string
+  outcome_label: string
+  sample_count: number
+  median_days: number | null
+  mean_days: number | null
+  p75_days: number | null
+}
+
 export interface UseFunnelHealthArgs {
   cohortStart: string // 'YYYY-MM-DD'
   cohortEnd: string   // 'YYYY-MM-DD'
@@ -82,6 +91,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   cycles: FunnelCycleRow[]
   byCloser: FunnelCloserRow[]
   monthlyCohorts: FunnelMonthlyCohort[]
+  dwellByOutcome: FunnelDwellByOutcomeRow[]
   lastSync: string | null
   loading: boolean
   syncing: boolean
@@ -96,6 +106,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const [cycles, setCycles] = useState<FunnelCycleRow[]>([])
   const [byCloser, setByCloser] = useState<FunnelCloserRow[]>([])
   const [monthlyCohorts, setMonthlyCohorts] = useState<FunnelMonthlyCohort[]>([])
+  const [dwellByOutcome, setDwellByOutcome] = useState<FunnelDwellByOutcomeRow[]>([])
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -111,13 +122,14 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
 
-      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, syncRes] = await Promise.all([
+      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, dwellByOutRes, syncRes] = await Promise.all([
         apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
         apiFetch(`/api/funnel-health/dwell?${params}`, { signal }),
         apiFetch(`/api/funnel-health/outcomes?${params}`, { signal }),
         apiFetch(`/api/funnel-health/cycles?${params}`, { signal }),
         apiFetch(`/api/funnel-health/by-closer?${params}`, { signal }),
         apiFetch(`/api/funnel-health/monthly-cohorts?months_back=12`, { signal }),
+        apiFetch(`/api/funnel-health/dwell-by-outcome?${params}`, { signal }),
         apiFetch('/api/funnel-health/last-sync', { signal }),
       ])
 
@@ -129,15 +141,17 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       if (!cyclesRes.ok) throw new Error(`Cycles fetch failed: ${cyclesRes.status}`)
       if (!closerRes.ok) throw new Error(`By-closer fetch failed: ${closerRes.status}`)
       if (!monthlyRes.ok) throw new Error(`Monthly-cohorts fetch failed: ${monthlyRes.status}`)
+      if (!dwellByOutRes.ok) throw new Error(`Dwell-by-outcome fetch failed: ${dwellByOutRes.status}`)
       if (!syncRes.ok) throw new Error(`Last-sync fetch failed: ${syncRes.status}`)
 
-      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, syncData] = await Promise.all([
+      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, dwellByOutData, syncData] = await Promise.all([
         countsRes.json(),
         dwellRes.json(),
         outcomesRes.json(),
         cyclesRes.json(),
         closerRes.json(),
         monthlyRes.json(),
+        dwellByOutRes.json(),
         syncRes.json(),
       ])
 
@@ -149,6 +163,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       setCycles(Array.isArray(cyclesData) ? cyclesData : [])
       setByCloser(Array.isArray(closerData) ? closerData : [])
       setMonthlyCohorts(Array.isArray(monthlyData) ? monthlyData : [])
+      setDwellByOutcome(Array.isArray(dwellByOutData) ? dwellByOutData : [])
       setLastSync(syncData?.last_sync ?? null)
     } catch (err) {
       if (signal.aborted) return
@@ -216,5 +231,5 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     return Array.isArray(data) ? data : []
   }, [cohortStart, cohortEnd])
 
-  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
+  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
 }

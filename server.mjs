@@ -2673,6 +2673,15 @@ app.get('/api/funnel-health/monthly-cohorts', async (req, res) => {
   } catch (err) { serverError(res, err) }
 })
 
+app.get('/api/funnel-health/dwell-by-outcome', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_third_call_dwell_by_outcome', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
+  } catch (err) { serverError(res, err) }
+})
+
 app.get('/api/funnel-health/third-call-deals', async (req, res) => {
   try {
     const { cohort_start = '1900-01-01', cohort_end = '2099-12-31', outcome = 'all' } = req.query
