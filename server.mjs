@@ -2648,6 +2648,7 @@ const CLOSER_NAMES = {
   '87153155':  'Jake',
   '84775749':  'Mukul',
   '90795708':  'Vivek',
+  '87153224':  'Lucas (archived)',
   '1207651278': 'Alex',
   unassigned:  'Unassigned',
 }
