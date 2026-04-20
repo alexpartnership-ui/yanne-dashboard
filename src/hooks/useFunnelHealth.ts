@@ -110,6 +110,16 @@ export interface AtRiskDeal {
   risk_score: number | null
 }
 
+export interface CallScoreOutcomeRow {
+  call_slot: number
+  score_bucket: string
+  sample_count: number
+  signed_count: number
+  lost_count: number
+  won_pct: number
+  avg_score: number | null
+}
+
 export interface WalkingDeadDeal {
   hubspot_deal_id: string
   dealname: string | null
@@ -139,6 +149,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   retainerByStage: FunnelRetainerByStage | null
   atRisk: AtRiskDeal[]
   walkingDead: WalkingDeadDeal[]
+  callScoreOutcome: CallScoreOutcomeRow[]
   lastSync: string | null
   loading: boolean
   syncing: boolean
@@ -158,6 +169,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const [retainerByStage, setRetainerByStage] = useState<FunnelRetainerByStage | null>(null)
   const [atRisk, setAtRisk] = useState<AtRiskDeal[]>([])
   const [walkingDead, setWalkingDead] = useState<WalkingDeadDeal[]>([])
+  const [callScoreOutcome, setCallScoreOutcome] = useState<CallScoreOutcomeRow[]>([])
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -173,7 +185,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
 
-      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, dwellByOutRes, scoreRes, retStageRes, atRiskRes, deadRes, syncRes] = await Promise.all([
+      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, dwellByOutRes, scoreRes, retStageRes, atRiskRes, deadRes, corrRes, syncRes] = await Promise.all([
         apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
         apiFetch(`/api/funnel-health/dwell?${params}`, { signal }),
         apiFetch(`/api/funnel-health/outcomes?${params}`, { signal }),
@@ -185,6 +197,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
         apiFetch(`/api/funnel-health/retainer-by-stage?${params}`, { signal }),
         apiFetch(`/api/funnel-health/at-risk?threshold_days=15`, { signal }),
         apiFetch(`/api/funnel-health/walking-dead?stale_days=30`, { signal }),
+        apiFetch(`/api/funnel-health/callscore-outcome`, { signal }),
         apiFetch('/api/funnel-health/last-sync', { signal }),
       ])
 
@@ -201,13 +214,14 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       if (!retStageRes.ok) throw new Error(`Retainer-by-stage fetch failed: ${retStageRes.status}`)
       if (!atRiskRes.ok) throw new Error(`At-risk fetch failed: ${atRiskRes.status}`)
       if (!deadRes.ok) throw new Error(`Walking-dead fetch failed: ${deadRes.status}`)
+      if (!corrRes.ok) throw new Error(`Callscore-outcome fetch failed: ${corrRes.status}`)
       if (!syncRes.ok) throw new Error(`Last-sync fetch failed: ${syncRes.status}`)
 
-      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, dwellByOutData, scoreData, retStageData, atRiskData, deadData, syncData] = await Promise.all([
+      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, dwellByOutData, scoreData, retStageData, atRiskData, deadData, corrData, syncData] = await Promise.all([
         countsRes.json(), dwellRes.json(), outcomesRes.json(), cyclesRes.json(),
         closerRes.json(), monthlyRes.json(), dwellByOutRes.json(),
         scoreRes.json(), retStageRes.json(), atRiskRes.json(), deadRes.json(),
-        syncRes.json(),
+        corrRes.json(), syncRes.json(),
       ])
 
       if (signal.aborted) return
@@ -223,6 +237,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       setRetainerByStage(retStageData ?? null)
       setAtRisk(Array.isArray(atRiskData) ? atRiskData : [])
       setWalkingDead(Array.isArray(deadData) ? deadData : [])
+      setCallScoreOutcome(Array.isArray(corrData) ? corrData : [])
       setLastSync(syncData?.last_sync ?? null)
     } catch (err) {
       if (signal.aborted) return
@@ -290,5 +305,5 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     return Array.isArray(data) ? data : []
   }, [cohortStart, cohortEnd])
 
-  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome, retainerScoreboard, retainerByStage, atRisk, walkingDead, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
+  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome, retainerScoreboard, retainerByStage, atRisk, walkingDead, callScoreOutcome, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
 }

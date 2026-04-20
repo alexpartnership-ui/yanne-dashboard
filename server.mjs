@@ -2673,6 +2673,14 @@ app.get('/api/funnel-health/monthly-cohorts', async (req, res) => {
   } catch (err) { serverError(res, err) }
 })
 
+app.get('/api/funnel-health/callscore-outcome', async (_req, res) => {
+  try {
+    const { data, error } = await supaRpc('funnel_callscore_outcome', {})
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
+  } catch (err) { serverError(res, err) }
+})
+
 app.get('/api/funnel-health/retainer-scoreboard', async (_req, res) => {
   try {
     const { data, error } = await supaRpc('funnel_retainer_scoreboard', {})

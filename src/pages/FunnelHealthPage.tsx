@@ -10,6 +10,7 @@ import { CloserFunnelTable } from '../components/CloserFunnelTable'
 import { ThirdCallDealsDrawer } from '../components/ThirdCallDealsDrawer'
 import { RetainerScoreboard } from '../components/RetainerScoreboard'
 import { DealActionList } from '../components/DealActionList'
+import { CallScoreOutcomeTable } from '../components/CallScoreOutcomeTable'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -58,7 +59,7 @@ export function FunnelHealthPage() {
 
   const {
     counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome,
-    retainerScoreboard, retainerByStage, atRisk, walkingDead,
+    retainerScoreboard, retainerByStage, atRisk, walkingDead, callScoreOutcome,
     lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals,
   } = useFunnelHealth({
     cohortStart: cohort.start,
@@ -405,6 +406,18 @@ export function FunnelHealthPage() {
               )
             })}
           </div>
+        </section>
+      )}
+
+      {!loading && counts && counts.mq_reach > 0 && (
+        <section className="mb-8">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-widest text-text-muted">
+            Call Score × Outcome — Is the Rubric Predictive?
+          </h3>
+          <p className="mb-3 text-[11px] text-text-faint">
+            For each call slot, win rate (signed / signed+lost) by score band. If higher bands win more often, the rubric is calibrated. Flat rates mean the scoring isn't discriminating.
+          </p>
+          <CallScoreOutcomeTable rows={callScoreOutcome} />
         </section>
       )}
 
