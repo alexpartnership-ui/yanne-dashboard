@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import { useFunnelHealth } from '../hooks/useFunnelHealth'
+import { useFunnelHealth, type ThirdCallOutcome } from '../hooks/useFunnelHealth'
 import { FunnelBars } from '../components/FunnelBars'
 import { CohortSelector } from '../components/CohortSelector'
 import { MetricCard } from '../components/MetricCard'
 import { Spinner } from '../components/Spinner'
 import { EmptyState } from '../components/EmptyState'
+import { MonthlyCohortTrend } from '../components/MonthlyCohortTrend'
+import { CloserFunnelTable } from '../components/CloserFunnelTable'
+import { ThirdCallDealsDrawer } from '../components/ThirdCallDealsDrawer'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -44,10 +47,14 @@ export function FunnelHealthPage() {
     end: TODAY,
   })
 
-  const { counts, dwell, outcomes, lastSync, loading, syncing, error, refetch, triggerSync } = useFunnelHealth({
+  const {
+    counts, dwell, outcomes, cycles, byCloser, monthlyCohorts,
+    lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals,
+  } = useFunnelHealth({
     cohortStart: cohort.start,
     cohortEnd: cohort.end,
   })
+  const [drillOutcome, setDrillOutcome] = useState<ThirdCallOutcome | null>(null)
 
   // --- Derived metrics ---
   const mqToWonPct =
@@ -90,12 +97,6 @@ export function FunnelHealthPage() {
       (acc, r) => (r.median_ms! > acc.ms ? { id: r.stage_id, ms: r.median_ms! } : acc),
       { id: null, ms: -1 }
     ).id
-
-  // Median total cycle (MQ → 3rd, exclude Won/NDA)
-  const cycleStageIds = ['appointmentscheduled', 'presentationscheduled', 'decisionmakerboughtin', '1066193534']
-  const medianCycleDays = dwell
-    .filter(r => cycleStageIds.includes(r.stage_id) && r.median_ms != null)
-    .reduce((sum, r) => sum + (r.median_ms ?? 0) / 86_400_000, 0)
 
   // Outcomes
   const outcomesTotal = outcomes
@@ -161,6 +162,14 @@ export function FunnelHealthPage() {
         />
       ) : (
         <>
+          {/* Section 0 — Monthly cohort trend (selectivity over time) */}
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
+              MQ → Won by Cohort Month — last 12 months
+            </h3>
+            <MonthlyCohortTrend rows={monthlyCohorts} />
+          </section>
+
           {/* Section 1 — Funnel */}
           <section className="mb-8">
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">Funnel</h3>
@@ -172,6 +181,14 @@ export function FunnelHealthPage() {
               <MetricCard label={`Biggest Leak: ${biggestLeak.label}`} value={biggestLeak.value} subtitle="Largest drop between stages" />
               <MetricCard label="NDA Usage" value={ndaUsage} subtitle="% of deals that ever entered NDA" />
             </div>
+          </section>
+
+          {/* Section 1b — Per-closer breakdown */}
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
+              By Closer
+            </h3>
+            <CloserFunnelTable rows={byCloser} />
           </section>
 
           {/* Section 2 — Dwell */}
@@ -204,13 +221,40 @@ export function FunnelHealthPage() {
                 </tbody>
               </table>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <MetricCard
-                label="Est. Cycle Time (MQ→3rd)"
-                value={medianCycleDays > 0 ? medianCycleDays.toFixed(1) + 'd' : '—'}
-                subtitle="Sum of stage medians"
-              />
-            </div>
+          </section>
+
+          {/* Section 2b — End-to-end Cycle Times */}
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
+              End-to-end Cycle Times
+            </h3>
+            {cycles.length === 0 ? (
+              <p className="text-sm text-text-muted">No cycle data for this cohort.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                {cycles.map(c => (
+                  <div
+                    key={c.segment_id}
+                    className="rounded-lg border border-border bg-surface-raised p-4 shadow-sm"
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">
+                      {c.segment_label}
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="font-data text-2xl font-bold text-text-primary">
+                        {c.median_days != null ? c.median_days.toFixed(1) : '—'}
+                      </span>
+                      <span className="text-xs text-text-muted">days median</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-[10px] text-text-muted font-data">
+                      <span>mean {c.mean_days != null ? c.mean_days.toFixed(1) + 'd' : '—'}</span>
+                      <span>p75 {c.p75_days != null ? c.p75_days.toFixed(1) + 'd' : '—'}</span>
+                      <span className="ml-auto">n={c.sample_count}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Section 3 — 3rd Call Outcomes */}
@@ -218,35 +262,44 @@ export function FunnelHealthPage() {
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
               3rd Call Outcomes — Where Deals End Up
             </h3>
+            <p className="mb-3 text-[11px] text-text-faint">Click any segment to audit the underlying deals.</p>
             {outcomes && outcomesTotal > 0 ? (
               <>
-                {/* Stacked strip */}
+                {/* Stacked strip — each segment is a button */}
                 <div className="flex h-10 w-full overflow-hidden rounded-lg border border-border mb-3">
                   {outcomesSegments.map(seg => {
                     const widthPct = (seg.count / outcomesTotal) * 100
+                    if (seg.count === 0) return null
                     return (
-                      <div
+                      <button
                         key={seg.key}
-                        className={`${seg.className} flex items-center justify-center transition-all`}
+                        onClick={() => setDrillOutcome(seg.key as ThirdCallOutcome)}
+                        className={`${seg.className} flex items-center justify-center transition-all hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-surface focus:ring-gold-400`}
                         style={{ width: `${widthPct}%` }}
+                        aria-label={`View ${seg.label} deals (${seg.count})`}
                       >
                         {widthPct > 8 && (
                           <span className="text-[10px] font-semibold text-white drop-shadow">
                             {seg.count}
                           </span>
                         )}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
                 {/* Legend */}
                 <div className="flex flex-wrap gap-4">
                   {outcomesSegments.map(seg => (
-                    <div key={seg.key} className="flex items-center gap-1.5 text-xs">
+                    <button
+                      key={seg.key}
+                      onClick={() => setDrillOutcome(seg.key as ThirdCallOutcome)}
+                      disabled={seg.count === 0}
+                      className="flex items-center gap-1.5 text-xs hover:text-gold-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-text-muted"
+                    >
                       <span className={`h-2.5 w-2.5 rounded-sm ${seg.className}`} />
                       <span className="text-text-muted">{seg.label}</span>
                       <span className="font-semibold text-text-secondary font-data">{seg.count}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </>
@@ -256,6 +309,12 @@ export function FunnelHealthPage() {
           </section>
         </>
       )}
+
+      <ThirdCallDealsDrawer
+        outcome={drillOutcome}
+        onClose={() => setDrillOutcome(null)}
+        load={loadThirdCallDeals}
+      />
     </div>
   )
 }

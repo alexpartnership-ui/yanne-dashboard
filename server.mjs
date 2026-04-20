@@ -2244,15 +2244,17 @@ async function gatherContext(question, pillarAccess = []) {
 
   if (has('sales') && intents.includes('funnel')) {
     promises.push((async () => {
-      const [counts, dwell, outcomes] = await Promise.all([
+      const [counts, dwell, outcomes, cycles] = await Promise.all([
         supaRpc('funnel_counts', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
         supaRpc('funnel_dwell_times', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
         supaRpc('funnel_third_call_outcomes', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
+        supaRpc('funnel_cycle_times', { cohort_start: '1900-01-01', cohort_end: '2099-12-31' }),
       ])
       context.funnel = {
         counts: counts.data?.[0] ?? null,
         dwell: dwell.data ?? [],
         outcomes: outcomes.data?.[0] ?? null,
+        cycles: cycles.data ?? [],
       }
     })().catch(err => { console.error('[gatherContext/funnel]', err?.message || err) }))
   }
@@ -2626,6 +2628,62 @@ app.get('/api/funnel-health/outcomes', async (req, res) => {
     const { data, error } = await supaRpc('funnel_third_call_outcomes', { cohort_start, cohort_end })
     if (error) return serverError(res, error)
     res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/cycles', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_cycle_times', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
+  } catch (err) { serverError(res, err) }
+})
+
+// Owner ID → display name. Values sourced from HubSpot /crm/v3/owners on 2026-04-19.
+const CLOSER_NAMES = {
+  '80372165':  'Tahawar',
+  '82576594':  'Thomas',
+  '84997963':  'Stanley',
+  '87153155':  'Jake',
+  '84775749':  'Mukul',
+  '90795708':  'Vivek',
+  '87153224':  'Lucas (archived)',
+  '1207651278': 'Alex',
+  unassigned:  'Unassigned',
+}
+const closerName = (ownerId) => CLOSER_NAMES[ownerId] || ownerId || 'Unassigned'
+
+app.get('/api/funnel-health/by-closer', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_counts_by_closer', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    const rows = (data ?? []).map(r => ({ ...r, closer_name: closerName(r.owner_id) }))
+    res.json(rows)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/monthly-cohorts', async (req, res) => {
+  try {
+    const months_back = Math.max(1, Math.min(24, parseInt(req.query.months_back ?? '12', 10) || 12))
+    const { data, error } = await supaRpc('funnel_monthly_cohorts', { months_back })
+    if (error) return serverError(res, error)
+    res.json(data ?? [])
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/third-call-deals', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31', outcome = 'all' } = req.query
+    const allowedOutcomes = ['all', 'still', 'won', 'lost', 'ltl', 'dq']
+    if (!allowedOutcomes.includes(outcome)) {
+      return res.status(400).json({ error: `invalid outcome; expected one of ${allowedOutcomes.join(', ')}` })
+    }
+    const { data, error } = await supaRpc('funnel_third_call_deals', { cohort_start, cohort_end, outcome })
+    if (error) return serverError(res, error)
+    const rows = (data ?? []).map(r => ({ ...r, closer_name: closerName(r.owner_id) }))
+    res.json(rows)
   } catch (err) { serverError(res, err) }
 })
 
