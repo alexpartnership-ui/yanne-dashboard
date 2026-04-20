@@ -4,9 +4,12 @@ interface Props {
   rows: FunnelCloserRow[]
 }
 
-function pct(a: number, b: number): string {
+const LOW_SAMPLE_THRESHOLD = 10
+
+function pct(a: number, b: number, lowSample = false): string {
   if (!b) return '—'
-  return ((a / b) * 100).toFixed(1) + '%'
+  const v = ((a / b) * 100).toFixed(1) + '%'
+  return lowSample ? `${v} (n=${b})` : v
 }
 
 export function CloserFunnelTable({ rows }: Props) {
@@ -30,10 +33,16 @@ export function CloserFunnelTable({ rows }: Props) {
 
   const renderRow = (r: FunnelCloserRow | null, isTotal = false) => {
     const d = r ?? { closer_name: 'All', owner_id: 'all', ...totals }
+    const isArchived = d.closer_name?.includes('archived')
+    const lowMq = !isTotal && d.mq_reach < LOW_SAMPLE_THRESHOLD
+    const lowThird = !isTotal && d.third_call_reach < LOW_SAMPLE_THRESHOLD
+    const rowClass = isTotal
+      ? 'bg-yanne-800/10 font-semibold'
+      : isArchived ? 'opacity-50' : ''
     return (
       <tr
         key={d.owner_id}
-        className={`border-b border-border last:border-0 ${isTotal ? 'bg-yanne-800/10 font-semibold' : ''}`}
+        className={`border-b border-border last:border-0 ${rowClass}`}
       >
         <td className="px-3 py-2 text-text-secondary">{d.closer_name}</td>
         <td className="px-3 py-2 text-right font-data text-text-primary">{d.mq_reach}</td>
@@ -41,8 +50,8 @@ export function CloserFunnelTable({ rows }: Props) {
         <td className="px-3 py-2 text-right font-data text-text-muted">{d.second_call_reach}</td>
         <td className="px-3 py-2 text-right font-data text-text-muted">{d.third_call_reach}</td>
         <td className="px-3 py-2 text-right font-data text-gold-400">{d.won}</td>
-        <td className="px-3 py-2 text-right font-data text-text-secondary">{pct(d.won, d.mq_reach)}</td>
-        <td className="px-3 py-2 text-right font-data text-text-muted">{pct(d.won, d.third_call_reach)}</td>
+        <td className="px-3 py-2 text-right font-data text-text-secondary">{pct(d.won, d.mq_reach, lowMq)}</td>
+        <td className="px-3 py-2 text-right font-data text-text-muted">{pct(d.won, d.third_call_reach, lowThird)}</td>
       </tr>
     )
   }

@@ -31,7 +31,12 @@ export function MonthlyCohortTrend({ rows }: Props) {
           <ComposedChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A3F3A" opacity={0.3} />
             <XAxis dataKey="month" tick={{ fill: '#9CA6A1', fontSize: 11 }} />
-            <YAxis yAxisId="left" tick={{ fill: '#9CA6A1', fontSize: 11 }} label={{ value: 'MQ count', angle: -90, position: 'insideLeft', fill: '#9CA6A1', fontSize: 10 }} />
+            <YAxis
+              yAxisId="left"
+              tick={{ fill: '#9CA6A1', fontSize: 11 }}
+              domain={[0, (dataMax: number) => Math.ceil((dataMax * 1.15) / 10) * 10]}
+              label={{ value: 'MQ count', angle: -90, position: 'insideLeft', fill: '#9CA6A1', fontSize: 10 }}
+            />
             <YAxis yAxisId="right" orientation="right" tick={{ fill: '#D4AF63', fontSize: 11 }} unit="%" label={{ value: 'Won %', angle: 90, position: 'insideRight', fill: '#D4AF63', fontSize: 10 }} />
             <Tooltip
               contentStyle={{ background: '#0D1F1B', border: '1px solid #2A3F3A', borderRadius: 8, fontSize: 11 }}
