@@ -8,6 +8,8 @@ import { EmptyState } from '../components/EmptyState'
 import { MonthlyCohortTrend } from '../components/MonthlyCohortTrend'
 import { CloserFunnelTable } from '../components/CloserFunnelTable'
 import { ThirdCallDealsDrawer } from '../components/ThirdCallDealsDrawer'
+import { RetainerScoreboard } from '../components/RetainerScoreboard'
+import { DealActionList } from '../components/DealActionList'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -56,6 +58,7 @@ export function FunnelHealthPage() {
 
   const {
     counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome,
+    retainerScoreboard, retainerByStage, atRisk, walkingDead,
     lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals,
   } = useFunnelHealth({
     cohortStart: cohort.start,
@@ -151,6 +154,11 @@ export function FunnelHealthPage() {
         </div>
       </div>
 
+      {/* Retainer Scoreboard — always visible, not cohort-bound */}
+      <section className="mb-8">
+        <RetainerScoreboard data={retainerScoreboard} />
+      </section>
+
       {/* Error */}
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center justify-between">
@@ -169,6 +177,23 @@ export function FunnelHealthPage() {
         />
       ) : (
         <>
+          {/* Section — At-Risk 3rd Call deals (intervention window) */}
+          <section className="mb-8">
+            <div className="mb-3 flex items-baseline justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-widest text-text-muted">
+                At-Risk — 3rd Call past 15d
+              </h3>
+              <span className="text-[11px] text-text-faint">
+                {atRisk.length} {atRisk.length === 1 ? 'deal needs' : 'deals need'} attention · sorted by risk (retainer × days over)
+              </span>
+            </div>
+            <DealActionList
+              kind="at-risk"
+              rows={atRisk.map(d => ({ kind: 'at-risk' as const, ...d }))}
+              emptyMessage="No 3rd Call deals past the 15-day threshold. Clean slate."
+            />
+          </section>
+
           {/* Section 0 — Monthly cohort trend (selectivity over time) */}
           <section className="mb-8">
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-widest text-text-muted">
@@ -183,8 +208,16 @@ export function FunnelHealthPage() {
             <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-sm mb-4">
               <FunnelBars counts={counts} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <MetricCard label="MQ → Won %" value={mqToWonPct} subtitle="End-to-end conversion" />
+              <MetricCard
+                label="Won Retainer ($)"
+                value={retainerByStage?.won_retainer != null
+                  ? '$' + (retainerByStage.won_retainer / 1000).toFixed(0) + 'K'
+                  : '—'}
+                subtitle="This cohort, retainer collected"
+                accent="gold"
+              />
               <MetricCard label={`Biggest Leak: ${biggestLeak.label}`} value={biggestLeak.value} subtitle="Largest drop between stages" />
               <MetricCard label="NDA Usage" value={ndaUsage} subtitle="% of deals that ever entered NDA" />
             </div>
@@ -315,6 +348,24 @@ export function FunnelHealthPage() {
             )}
           </section>
         </>
+      )}
+
+      {!loading && counts && counts.mq_reach > 0 && walkingDead.length > 0 && (
+        <section className="mb-8">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-widest text-text-muted">
+              Walking Dead — no activity 30+ days
+            </h3>
+            <span className="text-[11px] text-text-faint">
+              {walkingDead.length} zombie {walkingDead.length === 1 ? 'deal' : 'deals'} · kill or revive
+            </span>
+          </div>
+          <DealActionList
+            kind="walking-dead"
+            rows={walkingDead.map(d => ({ kind: 'walking-dead' as const, ...d }))}
+            emptyMessage="No zombie deals. Everything is either moving or closed."
+          />
+        </section>
       )}
 
       {!loading && counts && counts.mq_reach > 0 && dwellByOutcome.length > 0 && (

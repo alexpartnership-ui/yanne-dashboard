@@ -2673,6 +2673,43 @@ app.get('/api/funnel-health/monthly-cohorts', async (req, res) => {
   } catch (err) { serverError(res, err) }
 })
 
+app.get('/api/funnel-health/retainer-scoreboard', async (_req, res) => {
+  try {
+    const { data, error } = await supaRpc('funnel_retainer_scoreboard', {})
+    if (error) return serverError(res, error)
+    res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/retainer-by-stage', async (req, res) => {
+  try {
+    const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
+    const { data, error } = await supaRpc('funnel_retainer_by_stage', { cohort_start, cohort_end })
+    if (error) return serverError(res, error)
+    res.json(data?.[0] ?? null)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/at-risk', async (req, res) => {
+  try {
+    const threshold_days = Math.max(1, Math.min(90, parseInt(req.query.threshold_days ?? '15', 10) || 15))
+    const { data, error } = await supaRpc('funnel_at_risk_third_call', { threshold_days })
+    if (error) return serverError(res, error)
+    const rows = (data ?? []).map(r => ({ ...r, closer_name: closerName(r.owner_id) }))
+    res.json(rows)
+  } catch (err) { serverError(res, err) }
+})
+
+app.get('/api/funnel-health/walking-dead', async (req, res) => {
+  try {
+    const stale_days = Math.max(7, Math.min(180, parseInt(req.query.stale_days ?? '30', 10) || 30))
+    const { data, error } = await supaRpc('funnel_walking_dead', { stale_days })
+    if (error) return serverError(res, error)
+    const rows = (data ?? []).map(r => ({ ...r, closer_name: closerName(r.owner_id) }))
+    res.json(rows)
+  } catch (err) { serverError(res, err) }
+})
+
 app.get('/api/funnel-health/dwell-by-outcome', async (req, res) => {
   try {
     const { cohort_start = '1900-01-01', cohort_end = '2099-12-31' } = req.query
