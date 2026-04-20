@@ -79,6 +79,49 @@ export interface FunnelDwellByOutcomeRow {
   p75_days: number | null
 }
 
+export interface FunnelRetainerScoreboard {
+  mtd_retainer: number
+  qtd_retainer: number
+  ytd_retainer: number
+  prev_mtd_retainer: number
+  prev_qtd_retainer: number
+  prev_ytd_retainer: number
+}
+
+export interface FunnelRetainerByStage {
+  mq_retainer: number
+  first_call_retainer: number
+  second_call_retainer: number
+  third_call_retainer: number
+  won_retainer: number
+  nda_ever_retainer: number
+}
+
+export interface AtRiskDeal {
+  hubspot_deal_id: string
+  dealname: string | null
+  owner_id: string | null
+  closer_name: string
+  amount: number | null
+  date_entered_third: string | null
+  dwell_days: number | null
+  last_activity_at: string | null
+  days_over_threshold: number | null
+  risk_score: number | null
+}
+
+export interface WalkingDeadDeal {
+  hubspot_deal_id: string
+  dealname: string | null
+  owner_id: string | null
+  closer_name: string
+  current_stage_id: string
+  current_stage_label: string | null
+  amount: number | null
+  last_activity_at: string | null
+  days_since_activity: number | null
+}
+
 export interface UseFunnelHealthArgs {
   cohortStart: string // 'YYYY-MM-DD'
   cohortEnd: string   // 'YYYY-MM-DD'
@@ -92,6 +135,10 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   byCloser: FunnelCloserRow[]
   monthlyCohorts: FunnelMonthlyCohort[]
   dwellByOutcome: FunnelDwellByOutcomeRow[]
+  retainerScoreboard: FunnelRetainerScoreboard | null
+  retainerByStage: FunnelRetainerByStage | null
+  atRisk: AtRiskDeal[]
+  walkingDead: WalkingDeadDeal[]
   lastSync: string | null
   loading: boolean
   syncing: boolean
@@ -107,6 +154,10 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
   const [byCloser, setByCloser] = useState<FunnelCloserRow[]>([])
   const [monthlyCohorts, setMonthlyCohorts] = useState<FunnelMonthlyCohort[]>([])
   const [dwellByOutcome, setDwellByOutcome] = useState<FunnelDwellByOutcomeRow[]>([])
+  const [retainerScoreboard, setRetainerScoreboard] = useState<FunnelRetainerScoreboard | null>(null)
+  const [retainerByStage, setRetainerByStage] = useState<FunnelRetainerByStage | null>(null)
+  const [atRisk, setAtRisk] = useState<AtRiskDeal[]>([])
+  const [walkingDead, setWalkingDead] = useState<WalkingDeadDeal[]>([])
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -122,7 +173,7 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     try {
       const params = new URLSearchParams({ cohort_start: cohortStart, cohort_end: cohortEnd })
 
-      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, dwellByOutRes, syncRes] = await Promise.all([
+      const [countsRes, dwellRes, outcomesRes, cyclesRes, closerRes, monthlyRes, dwellByOutRes, scoreRes, retStageRes, atRiskRes, deadRes, syncRes] = await Promise.all([
         apiFetch(`/api/funnel-health/counts?${params}`, { signal }),
         apiFetch(`/api/funnel-health/dwell?${params}`, { signal }),
         apiFetch(`/api/funnel-health/outcomes?${params}`, { signal }),
@@ -130,6 +181,10 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
         apiFetch(`/api/funnel-health/by-closer?${params}`, { signal }),
         apiFetch(`/api/funnel-health/monthly-cohorts?months_back=12`, { signal }),
         apiFetch(`/api/funnel-health/dwell-by-outcome?${params}`, { signal }),
+        apiFetch(`/api/funnel-health/retainer-scoreboard`, { signal }),
+        apiFetch(`/api/funnel-health/retainer-by-stage?${params}`, { signal }),
+        apiFetch(`/api/funnel-health/at-risk?threshold_days=15`, { signal }),
+        apiFetch(`/api/funnel-health/walking-dead?stale_days=30`, { signal }),
         apiFetch('/api/funnel-health/last-sync', { signal }),
       ])
 
@@ -142,16 +197,16 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       if (!closerRes.ok) throw new Error(`By-closer fetch failed: ${closerRes.status}`)
       if (!monthlyRes.ok) throw new Error(`Monthly-cohorts fetch failed: ${monthlyRes.status}`)
       if (!dwellByOutRes.ok) throw new Error(`Dwell-by-outcome fetch failed: ${dwellByOutRes.status}`)
+      if (!scoreRes.ok) throw new Error(`Retainer scoreboard fetch failed: ${scoreRes.status}`)
+      if (!retStageRes.ok) throw new Error(`Retainer-by-stage fetch failed: ${retStageRes.status}`)
+      if (!atRiskRes.ok) throw new Error(`At-risk fetch failed: ${atRiskRes.status}`)
+      if (!deadRes.ok) throw new Error(`Walking-dead fetch failed: ${deadRes.status}`)
       if (!syncRes.ok) throw new Error(`Last-sync fetch failed: ${syncRes.status}`)
 
-      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, dwellByOutData, syncData] = await Promise.all([
-        countsRes.json(),
-        dwellRes.json(),
-        outcomesRes.json(),
-        cyclesRes.json(),
-        closerRes.json(),
-        monthlyRes.json(),
-        dwellByOutRes.json(),
+      const [countsData, dwellData, outcomesData, cyclesData, closerData, monthlyData, dwellByOutData, scoreData, retStageData, atRiskData, deadData, syncData] = await Promise.all([
+        countsRes.json(), dwellRes.json(), outcomesRes.json(), cyclesRes.json(),
+        closerRes.json(), monthlyRes.json(), dwellByOutRes.json(),
+        scoreRes.json(), retStageRes.json(), atRiskRes.json(), deadRes.json(),
         syncRes.json(),
       ])
 
@@ -164,6 +219,10 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
       setByCloser(Array.isArray(closerData) ? closerData : [])
       setMonthlyCohorts(Array.isArray(monthlyData) ? monthlyData : [])
       setDwellByOutcome(Array.isArray(dwellByOutData) ? dwellByOutData : [])
+      setRetainerScoreboard(scoreData ?? null)
+      setRetainerByStage(retStageData ?? null)
+      setAtRisk(Array.isArray(atRiskData) ? atRiskData : [])
+      setWalkingDead(Array.isArray(deadData) ? deadData : [])
       setLastSync(syncData?.last_sync ?? null)
     } catch (err) {
       if (signal.aborted) return
@@ -231,5 +290,5 @@ export function useFunnelHealth({ cohortStart, cohortEnd }: UseFunnelHealthArgs)
     return Array.isArray(data) ? data : []
   }, [cohortStart, cohortEnd])
 
-  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
+  return { counts, dwell, outcomes, cycles, byCloser, monthlyCohorts, dwellByOutcome, retainerScoreboard, retainerByStage, atRisk, walkingDead, lastSync, loading, syncing, error, refetch, triggerSync, loadThirdCallDeals }
 }
